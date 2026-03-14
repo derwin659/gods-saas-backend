@@ -2,6 +2,7 @@
 <project version="4">
   <component name="ProjectModuleManager">
     <modules>
+      <module fileurl="file://$PROJECT_DIR$/.idea/modules/gods-saas.iml" filepath="$PROJECT_DIR$/.idea/modules/gods-saas.iml" />
       <module fileurl="file://$PROJECT_DIR$/.idea/modules/gods-saas.main.iml" filepath="$PROJECT_DIR$/.idea/modules/gods-saas.main.iml" />
     </modules>
   </component>

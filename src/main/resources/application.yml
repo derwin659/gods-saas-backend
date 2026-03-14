@@ -1,8 +1,8 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/godsdb
-    username: gods
-    password: admin
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
   jpa:
     hibernate:
       ddl-auto: none
@@ -31,4 +31,4 @@ jwt:
   expiration-ms: 86400000      # 24 horas
 
 server:
-  port: 8081
+  port: ${PORT:8080}
