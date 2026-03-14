@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>TV GODS – Asesoría IA</title>
+
+    <style>
+        html, body {
+          height: 100%;
+          margin: 0;
+          overflow: hidden;
+        }
+
+        body {
+          background: radial-gradient(#000, #050505);
+          color: #00ff99;
+          font-family: 'Segoe UI', Arial, sans-serif;
+        }
+
+        /* =========================
+           HEADER TV
+        ========================= */
+        .header {
+          height: 110px;
+          padding: 16px 40px;
+          box-sizing: border-box;
+
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+
+          text-align: center;
+        }
+
+        .header h1 {
+          margin: 0;
+          font-size: 42px;            /* 🔥 MÁS GRANDE */
+          font-weight: 700;
+          color: #00ffcc;
+          letter-spacing: 1px;
+        }
+
+        .header h2 {
+          margin: 6px 0 0 0;
+          font-size: 26px;
+          font-weight: 500;
+          color: #00ff99;
+          opacity: 0.95;
+        }
+
+        /* =========================
+           PANTALLA
+        ========================= */
+        .pantalla {
+          height: calc(100vh - 110px);
+        }
+
+        /* =========================
+           GRID PRINCIPAL
+        ========================= */
+        .resultado-grid {
+          display: grid;
+          grid-template-columns: 1fr 1.6fr;
+          gap: 32px;
+
+          height: 100%;
+          padding: 20px 40px;
+          box-sizing: border-box;
+        }
+
+        /* =========================
+           BLOQUES
+        ========================= */
+        .bloque {
+          border: 1px solid #00ff99;
+          border-radius: 16px;
+          padding: 16px;
+          background: rgba(0,255,150,0.05);
+
+          display: flex;
+          flex-direction: column;
+          height: 100%;
+          min-height: 0;
+        }
+
+        .bloque h3 {
+          margin: 0;
+          color: #00ffcc;
+        }
+
+        .bloque p {
+          margin: 4px 0 12px;
+          font-size: 14px;
+          opacity: 0.85;
+        }
+
+        /* =========================
+           ANTES
+        ========================= */
+        .antes-grid {
+          display: flex;
+          flex-direction: column;
+          gap: 16px;
+          flex: 1;
+          min-height: 0;
+        }
+
+        /* =========================
+           DESPUÉS
+        ========================= */
+        .despues-grid {
+          display: grid;
+          grid-template-rows: 2fr 1fr;
+          gap: 16px;
+          flex: 1;
+          min-height: 0;
+        }
+
+        .despues-bottom {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 16px;
+          min-height: 0;
+        }
+
+        /* =========================
+           CONTENEDOR IMAGEN
+        ========================= */
+        .img-box {
+          position: relative;
+          border-radius: 14px;
+          overflow: hidden;
+          border: 1px solid rgba(0,255,150,0.4);
+          background: #000;
+          min-height: 0;
+        }
+
+        /* IMÁGENES */
+        .img-box img {
+          width: 100%;
+          height: 100%;
+          background: #000;
+        }
+
+        .bloque.antes img {
+          object-fit: contain;
+        }
+
+        .bloque.despues img {
+          object-fit: cover;
+        }
+
+        /* =========================
+           BADGE
+        ========================= */
+        .badge {
+          position: absolute;
+          bottom: 10px;
+          right: 10px;
+          background: #00ff99;
+          color: #000;
+          padding: 4px 12px;
+          border-radius: 14px;
+          font-size: 13px;
+          font-weight: bold;
+        }
+    </style>
+</head>
+
+<body>
+
+<!-- =========================
+     HEADER
+========================= -->
+<div class="header">
+    <h1>Tu nuevo look recomendado</h1>
+    <h2 id="tipoCorte">—</h2>
+</div>
+
+<!-- =========================
+     RESULTADO
+========================= -->
+<div class="pantalla">
+
+    <div class="resultado-grid">
+
+        <!-- ANTES -->
+        <div class="bloque antes">
+            <h3>ANTES</h3>
+            <p>Fotos reales</p>
+
+            <div class="antes-grid">
+                <div class="img-box">
+                    <img id="imgAntes">
+                    <span class="badge">Frontal</span>
+                </div>
+
+                <div class="img-box">
+                    <img id="imgAnteslateral">
+                    <span class="badge">Lateral</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- RESULTADO IA -->
+        <div class="bloque despues">
+            <h3>RESULTADO IA</h3>
+            <p>Simulación con IA</p>
+
+            <div class="despues-grid">
+                <div class="img-box">
+                    <img id="imgFrontalIA">
+                    <span class="badge">Frontal</span>
+                </div>
+
+                <div class="despues-bottom">
+                    <div class="img-box">
+                        <img id="imgLateralIA">
+                        <span class="badge">Lateral</span>
+                    </div>
+
+                    <div class="img-box">
+                        <img id="imgTraseraIA">
+                        <span class="badge">Trasera</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<script src="./tv.js"></script>
+</body>
+</html>
