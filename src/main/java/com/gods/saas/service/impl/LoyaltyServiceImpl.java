@@ -11,6 +11,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 
@@ -61,7 +62,7 @@ public class LoyaltyServiceImpl implements LoyaltyService {
         mov.setPuntos(puntosGanados);
         mov.setSaldoResultante(disponibles);
         mov.setCreadoPor(user != null ? user.getId() : null);
-        mov.setFechaCreacion(LocalDateTime.now());
+        mov.setFechaCreacion(LocalDateTime.now(ZoneOffset.UTC));
         loyaltyMovementRepository.save(mov);
 
         LoyaltyPointLot lot = LoyaltyPointLot.builder()
@@ -114,7 +115,7 @@ public class LoyaltyServiceImpl implements LoyaltyService {
         mov.setPuntos(BONUS_MIGRATED_APP_ACTIVATION);
         mov.setSaldoResultante(disponibles);
         mov.setCreadoPor(null);
-        mov.setFechaCreacion(LocalDateTime.now());
+        mov.setFechaCreacion(LocalDateTime.now(ZoneOffset.UTC));
         loyaltyMovementRepository.save(mov);
 
         customer.setAppActivated(true);
@@ -156,7 +157,7 @@ public class LoyaltyServiceImpl implements LoyaltyService {
         mov.setPuntos(BONUS_NEW_CUSTOMER);
         mov.setSaldoResultante(disponibles);
         mov.setCreadoPor(null);
-        mov.setFechaCreacion(LocalDateTime.now());
+        mov.setFechaCreacion(LocalDateTime.now(ZoneOffset.UTC));
         loyaltyMovementRepository.save(mov);
 
         customer.setWelcomeBonusGranted(true);
@@ -206,7 +207,7 @@ public class LoyaltyServiceImpl implements LoyaltyService {
             mov.setPuntos(-pointsToExpire);
             mov.setSaldoResultante(nuevoDisponible);
             mov.setCreadoPor(null);
-            mov.setFechaCreacion(LocalDateTime.now());
+            mov.setFechaCreacion(LocalDateTime.now(ZoneOffset.UTC));
             loyaltyMovementRepository.save(mov);
 
             lot.setPointsAvailable(0);

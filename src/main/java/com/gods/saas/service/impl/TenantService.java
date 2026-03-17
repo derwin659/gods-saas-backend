@@ -18,6 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -39,7 +40,7 @@ public class TenantService {
         log.info("Entrada a crear {}", tenant.toString());
 
         tenant.setActive(true); // activar por defecto
-        tenant.setFechaCreacion(LocalDateTime.now());
+        tenant.setFechaCreacion(LocalDateTime.now(ZoneOffset.UTC));
         tenant.setFechaActualizacion(LocalDateTime.now());
 
         Tenant savedTenant = tenantRepo.save(tenant);

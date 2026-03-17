@@ -16,6 +16,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 @Service
 @RequiredArgsConstructor
@@ -111,7 +112,7 @@ public class OwnerLoyaltyServiceImpl implements OwnerLoyaltyService {
         movement.setDescripcion(request.reason().trim());
         movement.setPuntos(request.pointsDelta());
         movement.setSaldoResultante(newPoints);
-        movement.setFechaCreacion(LocalDateTime.now());
+        movement.setFechaCreacion(LocalDateTime.now(ZoneOffset.UTC));
 
         if (performedByUserId != null) {
             movement.setCreadoPor(performedByUserId);

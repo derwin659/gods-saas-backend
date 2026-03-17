@@ -3,8 +3,10 @@ package com.gods.saas.service.impl;
 import com.gods.saas.domain.dto.response.BarberCommissionItem;
 import com.gods.saas.domain.dto.response.BarberCommissionResponse;
 import com.gods.saas.domain.model.AppUser;
+import com.gods.saas.domain.model.TenantSettings;
 import com.gods.saas.domain.repository.AppUserRepository;
 import com.gods.saas.domain.repository.SaleRepository;
+import com.gods.saas.domain.repository.TenantSettingsRepository;
 import com.gods.saas.domain.repository.projection.BarberCommissionDailyProjection;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
@@ -15,6 +17,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 
@@ -22,12 +26,19 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class BarberCommissionService {
 
+    private static final String DEFAULT_TIMEZONE = "America/Lima";
+
     private final SaleRepository saleRepository;
     private final AppUserRepository appUserRepository;
-
+    private final TenantSettingsRepository tenantSettingsRepository;
 
     public BarberCommissionResponse getCommissions(LocalDate from, LocalDate to) {
-        LocalDate today = LocalDate.now();
+        AppUser barber = getCurrentBarber();
+        Long tenantId = getCurrentTenantId();
+        Long branchId = getCurrentBranchId();
+
+        ZoneId tenantZone = resolveTenantZoneId(tenantId);
+        LocalDate today = LocalDate.now(tenantZone);
 
         if (from == null && to == null) {
             from = today;
@@ -42,23 +53,16 @@ public class BarberCommissionService {
             throw new IllegalArgumentException("La fecha inicial no puede ser mayor que la fecha final");
         }
 
-        // =========================================================
-        // 1) Obtener contexto del usuario/barbero logueado
-        // =========================================================
-        AppUser barber = getCurrentBarber();
-        Long tenantId = getCurrentTenantId();
-        Long branchId = getCurrentBranchId();
+        BigDecimal porcentajeComision = resolveCommissionPercentage(barber);
 
-        // =========================================================
-        // 2) Determinar porcentaje de comisión
-        // =========================================================
-        BigDecimal  porcentajeComision = resolveCommissionPercentage(barber);
+        // Día del tenant -> convertido a UTC para consultar en BD
+        LocalDateTime start = from.atStartOfDay(tenantZone)
+                .withZoneSameInstant(ZoneOffset.UTC)
+                .toLocalDateTime();
 
-        // =========================================================
-        // 3) Consultar ventas por día
-        // =========================================================
-        LocalDateTime start = from.atStartOfDay();
-        LocalDateTime end = to.plusDays(1).atStartOfDay();
+        LocalDateTime end = to.plusDays(1).atStartOfDay(tenantZone)
+                .withZoneSameInstant(ZoneOffset.UTC)
+                .toLocalDateTime();
 
         List<BarberCommissionDailyProjection> rows =
                 saleRepository.findDailySalesByBarber(
@@ -69,9 +73,6 @@ public class BarberCommissionService {
                         end
                 );
 
-        // =========================================================
-        // 4) Armar detalle y totales
-        // =========================================================
         List<BarberCommissionItem> items = rows.stream()
                 .map(row -> {
                     BigDecimal ventas = nvl(row.getVentas());
@@ -79,29 +80,48 @@ public class BarberCommissionService {
 
                     return BarberCommissionItem.builder()
                             .fecha(row.getFecha())
-                            .ventas(ventas)
-                            .comision(comision)
+                            .ventas(ventas.setScale(2, RoundingMode.HALF_UP))
+                            .comision(comision.setScale(2, RoundingMode.HALF_UP))
                             .build();
                 })
                 .toList();
 
         BigDecimal totalVentas = items.stream()
                 .map(BarberCommissionItem::getVentas)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
 
         BigDecimal totalComision = items.stream()
                 .map(BarberCommissionItem::getComision)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
 
         return BarberCommissionResponse.builder()
                 .barberName(buildFullName(barber))
                 .from(from)
                 .to(to)
-                .totalVentas(totalVentas.setScale(2, RoundingMode.HALF_UP))
-                .totalComision(totalComision.setScale(2, RoundingMode.HALF_UP))
-                .porcentajeComision(porcentajeComision)
+                .totalVentas(totalVentas)
+                .totalComision(totalComision)
+                .porcentajeComision(
+                        porcentajeComision == null
+                                ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+                                : porcentajeComision.setScale(2, RoundingMode.HALF_UP)
+                )
                 .items(items)
                 .build();
+    }
+
+    private ZoneId resolveTenantZoneId(Long tenantId) {
+        String timezone = tenantSettingsRepository.findByTenantId(tenantId)
+                .map(TenantSettings::getTimezone)
+                .filter(tz -> tz != null && !tz.trim().isEmpty())
+                .orElse(DEFAULT_TIMEZONE);
+
+        try {
+            return ZoneId.of(timezone.trim());
+        } catch (Exception e) {
+            return ZoneId.of(DEFAULT_TIMEZONE);
+        }
     }
 
     private BigDecimal calculateCommission(BigDecimal ventas, BigDecimal porcentajeComision) {
@@ -124,13 +144,6 @@ public class BarberCommissionService {
         return (nombre + " " + apellido).trim();
     }
 
-    /**
-     * Regla:
-     * - Si el barbero es PORCENTAJE, usar su porcentaje configurado.
-     * - Si es SUELDO, devolver 0.
-     *
-     * Ajusta esta lógica a tus nombres reales de campos.
-     */
     private BigDecimal resolveCommissionPercentage(AppUser barber) {
         if (barber == null) {
             return BigDecimal.ZERO;
@@ -144,15 +157,8 @@ public class BarberCommissionService {
                 ? BigDecimal.ZERO
                 : barber.getCommissionPercentage();
     }
-    // =========================================================
-    // Métodos de contexto / seguridad
-    // Reemplázalos por tu implementación real
-    // =========================================================
-
-
 
     private AppUser getCurrentBarber() {
-
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
 
         if (auth == null || auth.getPrincipal() == null) {
@@ -160,7 +166,6 @@ public class BarberCommissionService {
         }
 
         Long userId;
-
         try {
             userId = Long.valueOf(auth.getPrincipal().toString());
         } catch (Exception e) {
