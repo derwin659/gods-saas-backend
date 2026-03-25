@@ -4,6 +4,7 @@ import com.gods.saas.domain.model.RoleType;
 import com.gods.saas.domain.model.UserTenantRole;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -37,7 +38,18 @@ public interface UserTenantRoleRepository extends JpaRepository<UserTenantRole, 
     Integer countActiveBarbers(Long tenantId, Long branchId);
 
 
-
+    @Query("""
+    select utr
+    from UserTenantRole utr
+    join fetch utr.tenant t
+    left join fetch utr.branch b
+    where utr.user.id = :userId
+      and utr.tenant.id = :tenantId
+""")
+    Optional<UserTenantRole> findByUserIdAndTenantIdWithRelations(
+            @Param("userId") Long userId,
+            @Param("tenantId") Long tenantId
+    );
 
 }
 

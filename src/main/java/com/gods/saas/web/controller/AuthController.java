@@ -1,9 +1,7 @@
 package com.gods.saas.web.controller;
 
 import com.gods.saas.domain.dto.*;
-import com.gods.saas.domain.model.AppUser;
-import com.gods.saas.domain.model.Customer;
-import com.gods.saas.domain.model.UserTenantRole;
+import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.AppUserRepository;
 import com.gods.saas.domain.repository.UserTenantRoleRepository;
 import com.gods.saas.service.impl.*;
@@ -76,7 +74,87 @@ public class AuthController {
         return res;
     }
 
+    @PostMapping("/login-final")
+    public ResponseEntity<?> loginFinal(@RequestBody LoginFinalRequest req) {
 
+        AppUser user = appUserRepository.findById(req.getUserId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Usuario no encontrado"
+                ));
+
+        String mode = req.getMode() == null ? "TENANT" : req.getMode().trim().toUpperCase();
+
+        if ("SUPER_ADMIN".equals(mode)) {
+            if (!"SUPER_ADMIN".equalsIgnoreCase(user.getRol())) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "El usuario no tiene acceso como SUPER_ADMIN"
+                );
+            }
+
+            String token = jwtService.generateSuperAdminToken(user);
+
+            return ResponseEntity.ok(
+                    LoginFinalResponse.builder()
+                            .token(token)
+                            .userId(user.getId())
+                            .nombre(user.getNombre())
+                            .email(user.getEmail())
+                            .role("SUPER_ADMIN")
+                            .tenantId(null)
+                            .tenantName(null)
+                            .branchId(null)
+                            .branchName(null)
+                            .build()
+            );
+        }
+
+        if (req.getTenantId() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "tenantId es obligatorio para modo TENANT"
+            );
+        }
+
+        UserTenantRole utr = userTenantRoleRepository
+                .findByUserIdAndTenantIdWithRelations(req.getUserId(), req.getTenantId())
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "No tienes acceso a esta barbería"
+                ));
+
+        if (utr.getBranch() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "El usuario no tiene sucursal asignada"
+            );
+        }
+
+        Tenant tenant = utr.getTenant();
+        Branch branch = utr.getBranch();
+
+        String token = jwtService.generateToken(
+                user,
+                tenant.getId(),
+                utr.getRole().name(),
+                branch.getId()
+        );
+
+        return ResponseEntity.ok(
+                LoginFinalResponse.builder()
+                        .token(token)
+                        .userId(user.getId())
+                        .nombre(user.getNombre())
+                        .email(user.getEmail())
+                        .tenantId(tenant.getId())
+                        .tenantName(tenant.getNombre())
+                        .role(utr.getRole().name())
+                        .branchId(branch.getId())
+                        .branchName(branch.getNombre())
+                        .build()
+        );
+    }
 
     @PostMapping("/login-basic")
     public ResponseEntity<?> loginBasic(@RequestBody LoginRequest req) {
@@ -129,82 +207,5 @@ public class AuthController {
         }
     }
 
-    @PostMapping("/login-final")
-    public ResponseEntity<?> loginFinal(@RequestBody LoginFinalRequest req) {
 
-        AppUser user = appUserRepository.findById(req.getUserId())
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.NOT_FOUND,
-                        "Usuario no encontrado"
-                ));
-
-        String mode = req.getMode() == null ? "TENANT" : req.getMode().trim().toUpperCase();
-
-        if ("SUPER_ADMIN".equals(mode)) {
-            if (!"SUPER_ADMIN".equalsIgnoreCase(user.getRol())) {
-                throw new ResponseStatusException(
-                        HttpStatus.FORBIDDEN,
-                        "El usuario no tiene acceso como SUPER_ADMIN"
-                );
-            }
-
-            String token = jwtService.generateSuperAdminToken(user);
-
-            return ResponseEntity.ok(
-                    LoginFinalResponse.builder()
-                            .token(token)
-                            .userId(user.getId())
-                            .nombre(user.getNombre())
-                            .email(user.getEmail())
-                            .role("SUPER_ADMIN")
-                            .tenantId(null)
-                            .tenantName(null)
-                            .branchId(null)
-                            .branchName(null)
-                            .build()
-            );
-        }
-
-        if (req.getTenantId() == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.BAD_REQUEST,
-                    "tenantId es obligatorio para modo TENANT"
-            );
-        }
-
-        UserTenantRole utr = userTenantRoleRepository
-                .findByUserIdAndTenantId(req.getUserId(), req.getTenantId())
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.UNAUTHORIZED,
-                        "No tienes acceso a esta barbería"
-                ));
-
-        if (utr.getBranch() == null) {
-            throw new ResponseStatusException(
-                    HttpStatus.UNAUTHORIZED,
-                    "El usuario no tiene sucursal asignada"
-            );
-        }
-
-        String token = jwtService.generateToken(
-                user,
-                utr.getTenant().getId(),
-                utr.getRole().name(),
-                utr.getBranch().getId()
-        );
-
-        return ResponseEntity.ok(
-                LoginFinalResponse.builder()
-                        .token(token)
-                        .userId(user.getId())
-                        .nombre(user.getNombre())
-                        .email(user.getEmail())
-                        .tenantId(utr.getTenant().getId())
-                        .tenantName(utr.getTenant().getNombre())
-                        .role(utr.getRole().name())
-                        .branchId(utr.getBranch().getId())
-                        .branchName(utr.getBranch().getNombre())
-                        .build()
-        );
-    }
 }
