@@ -60,4 +60,31 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
                                        @Param("roles") List<String> roles);
 
     Optional<AppUser> findFirstByTenantIdAndRolOrderByIdAsc(Long id, String owner);
+
+
+    @Query("""
+    select u
+    from AppUser u
+    left join fetch u.branch b
+    where u.tenant.id = :tenantId
+      and u.rol = :rol
+""")
+    List<AppUser> findByTenantIdAndRolWithBranch(
+            @Param("tenantId") Long tenantId,
+            @Param("rol") String rol
+    );
+
+    @Query("""
+    select u
+    from AppUser u
+    left join fetch u.branch b
+    where u.tenant.id = :tenantId
+      and b.id = :branchId
+      and u.rol = :rol
+""")
+    List<AppUser> findByTenantIdAndBranchIdAndRolWithBranch(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("rol") String rol
+    );
 }

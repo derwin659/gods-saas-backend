@@ -37,8 +37,8 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
     @Override
     public List<BarberResponse> listBarbers(Long tenantId, Long branchId) {
         List<AppUser> users = (branchId != null)
-                ? appUserRepository.findByTenant_IdAndBranch_IdAndRol(tenantId, branchId, "BARBER")
-                : appUserRepository.findByTenant_IdAndRol(tenantId, "BARBER");
+                ? appUserRepository.findByTenantIdAndBranchIdAndRolWithBranch(tenantId, branchId, "BARBER")
+                : appUserRepository.findByTenantIdAndRolWithBranch(tenantId, "BARBER");
 
         return users.stream()
                 .map(this::toResponse)
