@@ -72,12 +72,17 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             // ============================================================
             if ("customer".equals(userType)) {
                 Number customerIdNum = claims.get("customerId", Number.class);
+                Number tenantIdNum = claims.get("tenantId", Number.class);
 
                 if (customerIdNum == null) {
                     throw new JwtException("El token de cliente no contiene customerId");
                 }
+                if (tenantIdNum == null) {
+                    throw new JwtException("El token de cliente no contiene tenantId");
+                }
 
                 Long customerId = customerIdNum.longValue();
+                Long tenantId = tenantIdNum.longValue();
 
                 authentication = new UsernamePasswordAuthenticationToken(
                         customerId,
@@ -86,9 +91,14 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 );
 
                 details.put("customerId", customerId);
+                details.put("tenantId", tenantId);
                 details.put("userType", userType);
-            }
 
+                TenantContext.setTenantId(tenantId);
+
+                request.setAttribute("customerId", customerId);
+                request.setAttribute("tenantId", tenantId);
+            }
             // ============================================================
             // 5. TOKEN PARA USUARIO INTERNO
             // ============================================================
