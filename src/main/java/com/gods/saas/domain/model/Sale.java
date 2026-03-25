@@ -34,9 +34,19 @@ public class Sale {
     @JoinColumn(name = "customer_id")
     private Customer customer;
 
+    /**
+     * Usuario que registró la venta en el sistema.
+     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private AppUser user;
+
+    /**
+     * Caja abierta donde se registró la venta.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cash_register_id")
+    private CashRegister cashRegister;
 
     @Column(name = "subtotal", precision = 12, scale = 2, nullable = false)
     private BigDecimal subtotal;
@@ -47,7 +57,7 @@ public class Sale {
     @Column(name = "total", precision = 12, scale = 2, nullable = false)
     private BigDecimal total;
 
-    @Column(name = "metodo_pago")
+    @Column(name = "metodo_pago", length = 30)
     private String metodoPago;
 
     @Column(name = "fecha_creacion")
@@ -64,7 +74,6 @@ public class Sale {
     private Appointment appointment;
 
     @OneToMany(mappedBy = "sale", cascade = CascadeType.ALL, orphanRemoval = true)
+    @Builder.Default
     private List<SaleItem> items = new ArrayList<>();
-
-
 }

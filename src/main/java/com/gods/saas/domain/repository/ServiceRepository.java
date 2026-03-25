@@ -9,14 +9,21 @@ import java.util.Optional;
 
 @Repository
 public interface ServiceRepository extends JpaRepository<ServiceEntity, Long> {
-    List<ServiceEntity> findByTenant_IdAndActivoTrue(Long tenantId);
-
-
-    List<ServiceEntity> findByTenant_IdAndActivoTrueOrderByNombreAsc(Long tenantId);
-
-
 
     List<ServiceEntity> findByTenant_Id(Long tenantId);
 
+    List<ServiceEntity> findByTenant_IdAndActivoTrue(Long tenantId);
+
+    List<ServiceEntity> findByTenant_IdOrderByNombreAsc(Long tenantId);
+
+    List<ServiceEntity> findByTenant_IdAndActivoTrueOrderByNombreAsc(Long tenantId);
+
     Optional<ServiceEntity> findByIdAndTenant_Id(Long id, Long tenantId);
+
+    boolean existsByTenant_IdAndNombreIgnoreCase(Long tenantId, String nombre);
+
+    boolean existsByTenant_IdAndNombreIgnoreCaseAndIdNot(Long tenantId, String nombre, Long id);
+
+
+
 }

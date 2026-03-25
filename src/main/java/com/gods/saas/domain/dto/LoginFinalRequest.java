@@ -6,5 +6,6 @@ import lombok.Data;
 public class LoginFinalRequest {
     private Long userId;
     private Long tenantId;
+    private String mode; // TENANT | SUPER_ADMIN
 }
 

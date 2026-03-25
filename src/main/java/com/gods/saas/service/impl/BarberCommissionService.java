@@ -95,7 +95,8 @@ public class BarberCommissionService {
                 .map(BarberCommissionItem::getComision)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
-
+        System.out.println("COMM tenantId=" + tenantId + ", branchId=" + branchId + ", barberId=" + barber.getId());
+        System.out.println("COMM totalVentas=" + totalVentas);
         return BarberCommissionResponse.builder()
                 .barberName(buildFullName(barber))
                 .from(from)

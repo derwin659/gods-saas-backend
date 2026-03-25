@@ -166,8 +166,8 @@ public class SaleServiceImpl implements SaleService {
                     .multiply(BigDecimal.valueOf(cantidad))
                     .setScale(2, RoundingMode.HALF_UP);
 
-            item.setPrecioUnitario(precioUnitario.doubleValue());
-            item.setSubtotal(subtotalItem.doubleValue());
+            item.setPrecioUnitario(BigDecimal.valueOf(precioUnitario.doubleValue()));
+            item.setSubtotal(BigDecimal.valueOf(subtotalItem.doubleValue()));
 
             items.add(item);
             subtotalVenta = subtotalVenta.add(subtotalItem);
@@ -178,10 +178,10 @@ public class SaleServiceImpl implements SaleService {
                             .serviceId(item.getService() != null ? item.getService().getId() : null)
                             .serviceNombre(item.getService() != null ? item.getService().getNombre() : null)
                             .productId(item.getProduct() != null ? item.getProduct().getId() : null)
-                            .productNombre(item.getProduct() != null ? item.getProduct().getNombre() : null)
+                            .productName(item.getProduct() != null ? item.getProduct().getNombre() : null)
                             .cantidad(cantidad)
-                            .precioUnitario(precioUnitario.doubleValue())
-                            .subtotal(subtotalItem.doubleValue())
+                            .precioUnitario(precioUnitario)
+                            .subtotal(subtotalItem)
                             .build()
             );
         }
@@ -197,7 +197,7 @@ public class SaleServiceImpl implements SaleService {
                 throw new RuntimeException("cashReceived es obligatorio cuando el método de pago es EFECTIVO");
             }
 
-            cashReceived = BigDecimal.valueOf(request.getCashReceived())
+            cashReceived = BigDecimal.valueOf(request.getCashReceived().doubleValue())
                     .setScale(2, RoundingMode.HALF_UP);
 
             if (cashReceived.compareTo(total) < 0) {
@@ -229,7 +229,7 @@ public class SaleServiceImpl implements SaleService {
                             .serviceId(old.getServiceId())
                             .serviceNombre(old.getServiceNombre())
                             .productId(old.getProductId())
-                            .productNombre(old.getProductNombre())
+                            .productName(old.getProductName())
                             .cantidad(old.getCantidad())
                             .precioUnitario(old.getPrecioUnitario())
                             .subtotal(old.getSubtotal())
@@ -268,7 +268,7 @@ public class SaleServiceImpl implements SaleService {
                 .userId(savedSale.getUser() != null ? savedSale.getUser().getId() : null)
                 .appointmentId(savedSale.getAppointment() != null ? savedSale.getAppointment().getId() : null)
                 .metodoPago(savedSale.getMetodoPago())
-                .total(savedSale.getTotal().doubleValue())
+                .total(savedSale.getTotal())
                 .fechaCreacion(savedSale.getFechaCreacion())
                 .puntosGanados(puntosGanados)
                 .puntosDisponibles(puntosDisponibles)

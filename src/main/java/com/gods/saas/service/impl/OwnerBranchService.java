@@ -7,6 +7,7 @@ import com.gods.saas.domain.model.Tenant;
 import com.gods.saas.domain.repository.BranchRepository;
 import com.gods.saas.domain.repository.TenantRepository;
 import com.gods.saas.exception.BusinessException;
+import com.gods.saas.service.impl.impl.SubscriptionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -20,6 +21,7 @@ public class OwnerBranchService {
 
     private final BranchRepository branchRepository;
     private final TenantRepository tenantRepository;
+    private final SubscriptionService subscriptionService;
 
     @Transactional(readOnly = true)
     public List<OwnerBranchResponse> listBranches(Long tenantId) {
@@ -39,6 +41,8 @@ public class OwnerBranchService {
 
     @Transactional
     public OwnerBranchResponse createBranch(Long tenantId, OwnerBranchUpsertRequest request) {
+        subscriptionService.validateBranchLimit(tenantId);
+
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new BusinessException("No se encontró el tenant"));
 

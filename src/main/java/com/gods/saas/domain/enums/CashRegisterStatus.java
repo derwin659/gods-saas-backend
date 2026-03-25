@@ -1,2 +1,8 @@
-package com.gods.saas.domain.enums;public class CashRegisterStatus {
+package com.gods.saas.domain.enums;
+
+public enum CashRegisterStatus {
+    OPEN,
+    CLOSED,
+    CANCELLED,
+    AUTO_CLOSED
 }

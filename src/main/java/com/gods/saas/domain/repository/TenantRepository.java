@@ -14,4 +14,6 @@ public interface TenantRepository extends JpaRepository<Tenant, Long> {
     List<Tenant> findByActiveTrue();
 
     Optional<Tenant> findByCodigoIgnoreCaseAndActiveTrue(String codigo);
+
+    boolean existsByCodigo(String code);
 }

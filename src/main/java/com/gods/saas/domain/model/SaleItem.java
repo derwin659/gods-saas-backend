@@ -3,6 +3,8 @@ package com.gods.saas.domain.model;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
+
 @Entity
 @Table(name = "sale_item")
 @Getter
@@ -29,10 +31,22 @@ public class SaleItem {
     @JoinColumn(name = "product_id")
     private Product product;
 
+    /**
+     * Barbero que realizó este item.
+     * Muy útil para liquidaciones.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "barber_user_id")
+    private AppUser barberUser;
+
+    @Column(name = "cantidad", nullable = false)
     private Integer cantidad;
 
-    @Column(name = "precio_unitario")
-    private Double precioUnitario;
+    @Column(name = "precio_unitario", precision = 12, scale = 2, nullable = false)
+    private BigDecimal precioUnitario;
 
-    private Double subtotal;
+    @Column(name = "subtotal", precision = 12, scale = 2, nullable = false)
+    private BigDecimal subtotal;
+
+
 }

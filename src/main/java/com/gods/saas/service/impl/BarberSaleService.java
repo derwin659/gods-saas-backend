@@ -116,7 +116,7 @@ public class BarberSaleService {
         saleRequest.setMetodoPago(metodoPago);
 
         if (cashReceived != null) {
-            saleRequest.setCashReceived(cashReceived.longValue());
+            saleRequest.setCashReceived(cashReceived);
         } else {
             saleRequest.setCashReceived(null);
         }

@@ -135,4 +135,27 @@ public class JwtService {
                 .compact();
     }
 
+    public String generateSuperAdminToken(AppUser user) {
+        if (user == null) {
+            throw new IllegalArgumentException("Usuario no puede ser null");
+        }
+
+        if (user.getRol() == null || !"SUPER_ADMIN".equalsIgnoreCase(user.getRol())) {
+            throw new IllegalArgumentException("El usuario no tiene rol SUPER_ADMIN");
+        }
+
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("userType", "internal");
+        claims.put("userId", user.getId());
+        claims.put("role", user.getRol());
+        claims.put("email", user.getEmail());
+
+        return Jwts.builder()
+                .setClaims(claims)
+                .setSubject(user.getEmail())
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + expirationMs))
+                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+                .compact();
+    }
 }

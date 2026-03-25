@@ -4,7 +4,6 @@ import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
-import org.springframework.context.support.BeanDefinitionDsl;
 
 @Entity
 @Table(name = "user_tenant_roles")
@@ -32,13 +31,15 @@ public class UserTenantRole {
     @Enumerated(EnumType.STRING)
     private RoleType role;
 
+
+
+    public UserTenantRole() {
+    }
+
     public UserTenantRole(AppUser user, Tenant tenant, RoleType role) {
         this.user = user;
         this.tenant = tenant;
         this.role = role;
-    }
-
-    public UserTenantRole() {
     }
 
     public UserTenantRole(AppUser user, Tenant tenant, Branch branch, RoleType role) {

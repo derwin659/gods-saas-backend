@@ -3,7 +3,6 @@ package com.gods.saas.web.controller;
 import com.gods.saas.domain.dto.*;
 import com.gods.saas.domain.model.AppUser;
 import com.gods.saas.domain.model.Customer;
-import com.gods.saas.domain.model.Tenant;
 import com.gods.saas.domain.model.UserTenantRole;
 import com.gods.saas.domain.repository.AppUserRepository;
 import com.gods.saas.domain.repository.UserTenantRoleRepository;
@@ -17,10 +16,9 @@ import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
-
 
 import java.util.List;
 
@@ -31,8 +29,10 @@ import java.util.List;
 public class AuthController {
 
     private final CustomerService customerService;
-
     private final AuthService authService;
+    private final JwtService jwtService;
+    private final UserTenantRoleService userTenantRoleService;
+    private final PasswordEncoder passwordEncoder;
 
     @Autowired
     private AuthenticationManager authenticationManager;
@@ -46,9 +46,6 @@ public class AuthController {
     @Autowired
     private JwtUtil jwtUtil;
 
-    private final JwtService jwtService;
-    private final UserTenantRoleService userTenantRoleService;
-
     @PostMapping("/otp/send")
     public ResponseEntity<Void> sendOtp(@RequestBody SendOtpRequest request) {
         authService.sendOtp(request);
@@ -61,10 +58,8 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
-
     @GetMapping("/me")
     public MeResponse me(@RequestHeader("Authorization") String authHeader) {
-
         String token = authHeader.replace("Bearer ", "");
         Long userId = jwtUtil.getUserIdFromToken(token);
 
@@ -80,8 +75,6 @@ public class AuthController {
 
         return res;
     }
-
-    // com.gods.saas.web.controller.AuthController
 
     @PostMapping("/me/perfil")
     public ResponseEntity<MeResponse> completarMiPerfil(
@@ -106,19 +99,27 @@ public class AuthController {
 
     @PostMapping("/login-basic")
     public ResponseEntity<?> loginBasic(@RequestBody LoginRequest req) {
-        System.out.println("paso aqui");
-        System.out.println(req.getEmail());
-        System.out.println(req.getPassword());
-        try {
+        System.out.println("EMAIL REQ => " + req.getEmail());
+        System.out.println("PASSWORD REQ => " + req.getPassword());
+        var userOpt = appUserRepository.findByEmail(req.getEmail());
+        if (userOpt.isPresent()) {
+            var user = userOpt.get();
+            System.out.println("PASSWORD REQ => [" + req.getPassword() + "]");
+            System.out.println("PASSWORD LEN => " + req.getPassword().length());
+            System.out.println("HASH DB DIRECT => [" + user.getPasswordHash() + "]");
+            System.out.println("HASH LEN => " + user.getPasswordHash().length());
+            System.out.println("DIRECT MATCH => " +
+                    passwordEncoder.matches(req.getPassword(), user.getPasswordHash()));
 
+        }
+        try {
             Authentication auth = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
                             req.getEmail(),
                             req.getPassword()
                     )
             );
-            System.out.println("llego aqui {}");
-            System.out.println(auth);
+
             AppUser user = (AppUser) auth.getPrincipal();
 
             List<UserTenantRole> roles = userTenantRoleService.getTenantsOfUser(user.getId());
@@ -132,19 +133,18 @@ public class AuthController {
                     .toList();
 
             return ResponseEntity.ok(
-                    new LoginResponse(
-                            user.getId(),
-                            user.getNombre(),
-                            tenants
-                    )
+                    LoginResponse.builder()
+                            .userId(user.getId())
+                            .nombre(user.getNombre())
+                            .globalRole(user.getRol())
+                            .tenants(tenants)
+                            .build()
             );
 
         } catch (BadCredentialsException e) {
-
             return ResponseEntity
                     .status(HttpStatus.UNAUTHORIZED)
                     .body(new ErrorResponse("Usuario o contraseña inválidos"));
-
         }
     }
 
@@ -152,21 +152,51 @@ public class AuthController {
     public ResponseEntity<?> loginFinal(@RequestBody LoginFinalRequest req) {
 
         AppUser user = appUserRepository.findById(req.getUserId())
-                .orElseThrow(() ->
-                        new ResponseStatusException(
-                                HttpStatus.NOT_FOUND,
-                                "Usuario no encontrado"
-                        )
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Usuario no encontrado"
+                ));
+
+        String mode = req.getMode() == null ? "TENANT" : req.getMode().trim().toUpperCase();
+
+        if ("SUPER_ADMIN".equals(mode)) {
+            if (!"SUPER_ADMIN".equalsIgnoreCase(user.getRol())) {
+                throw new ResponseStatusException(
+                        HttpStatus.FORBIDDEN,
+                        "El usuario no tiene acceso como SUPER_ADMIN"
                 );
+            }
+
+            String token = jwtService.generateSuperAdminToken(user);
+
+            return ResponseEntity.ok(
+                    LoginFinalResponse.builder()
+                            .token(token)
+                            .userId(user.getId())
+                            .nombre(user.getNombre())
+                            .email(user.getEmail())
+                            .role("SUPER_ADMIN")
+                            .tenantId(null)
+                            .tenantName(null)
+                            .branchId(null)
+                            .branchName(null)
+                            .build()
+            );
+        }
+
+        if (req.getTenantId() == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "tenantId es obligatorio para modo TENANT"
+            );
+        }
 
         UserTenantRole utr = userTenantRoleRepository
                 .findByUserIdAndTenantId(req.getUserId(), req.getTenantId())
-                .orElseThrow(() ->
-                        new ResponseStatusException(
-                                HttpStatus.UNAUTHORIZED,
-                                "No tienes acceso a esta barbería"
-                        )
-                );
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.UNAUTHORIZED,
+                        "No tienes acceso a esta barbería"
+                ));
 
         if (utr.getBranch() == null) {
             throw new ResponseStatusException(
@@ -196,7 +226,4 @@ public class AuthController {
                         .build()
         );
     }
-
-
 }
-

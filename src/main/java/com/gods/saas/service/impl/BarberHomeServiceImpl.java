@@ -14,6 +14,7 @@ import com.gods.saas.domain.repository.TenantSettingsRepository;
 import com.gods.saas.service.impl.impl.BarberHomeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -26,6 +27,7 @@ import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -40,21 +42,16 @@ public class BarberHomeServiceImpl implements BarberHomeService {
 
     @Override
     public BarberHomeResponse getBarberHome(Authentication authentication) {
-        String userIdStr = authentication.getName();
-
-        AppUser barber = userRepository.findById(Long.parseLong(userIdStr))
-                .orElseThrow(() -> new RuntimeException("Barbero no encontrado"));
-
-        Long tenantId = barber.getTenant().getId();
+        AppUser barber = getCurrentBarber();
+        Long tenantId = getCurrentTenantId();
+        Long branchId = getCurrentBranchId();
         Long barberId = barber.getId();
 
         ZoneId tenantZone = resolveTenantZoneId(tenantId);
 
-        // Fecha y hora actuales según la zona horaria configurada del tenant
         LocalDate today = LocalDate.now(tenantZone);
         LocalTime now = LocalTime.now(tenantZone);
 
-        // Rango del día del tenant convertido a UTC para consultar timestamps en BD
         LocalDateTime startDayUtc = today.atStartOfDay(tenantZone)
                 .withZoneSameInstant(ZoneOffset.UTC)
                 .toLocalDateTime();
@@ -67,8 +64,23 @@ public class BarberHomeServiceImpl implements BarberHomeService {
         long atendidosHoy = appointmentRepository.countTodayAttended(tenantId, barberId, today);
         long cancelaciones = appointmentRepository.countTodayCancelled(tenantId, barberId, today);
 
-        BigDecimal ventasHoy = nvl(saleRepository.sumTodaySales(tenantId, barberId, startDayUtc, endDayUtc));
-        long serviciosHoy = saleRepository.countTodayServices(tenantId, barberId, startDayUtc, endDayUtc);
+        BigDecimal ventasHoy = nvl(
+                saleRepository.sumTodaySales(
+                        tenantId,
+                        branchId,
+                        barberId,
+                        startDayUtc,
+                        endDayUtc
+                )
+        );
+
+        long serviciosHoy = saleRepository.countTodayServices(
+                tenantId,
+                branchId,
+                barberId,
+                startDayUtc,
+                endDayUtc
+        );
 
         List<Appointment> upcoming = appointmentRepository.findUpcomingTodayAppointments(
                 tenantId,
@@ -78,7 +90,8 @@ public class BarberHomeServiceImpl implements BarberHomeService {
         );
 
         DateTimeFormatter hourFormatter = DateTimeFormatter.ofPattern("HH:mm");
-
+        System.out.println("HOME tenantId=" + tenantId + ", branchId=" + branchId + ", barberId=" + barberId);
+        System.out.println("HOME ventasHoy=" + ventasHoy);
         List<BarberHomeAppointmentResponse> proximasCitas = upcoming.stream()
                 .limit(5)
                 .map(a -> new BarberHomeAppointmentResponse(
@@ -92,8 +105,8 @@ public class BarberHomeServiceImpl implements BarberHomeService {
 
         BarberQuickStatsResponse stats = new BarberQuickStatsResponse(
                 (int) serviciosHoy,
-                BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP), // luego conectamos propinas reales
-                0, // luego conectamos IA real
+                BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP),
+                0,
                 (int) cancelaciones
         );
 
@@ -180,5 +193,75 @@ public class BarberHomeServiceImpl implements BarberHomeService {
 
         String full = (nombre + " " + apellido).trim();
         return full.isEmpty() ? "Barbero" : full;
+    }
+
+    private AppUser getCurrentBarber() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+
+        if (auth == null || auth.getPrincipal() == null) {
+            throw new RuntimeException("Usuario no autenticado");
+        }
+
+        Long userId;
+        try {
+            userId = Long.valueOf(auth.getPrincipal().toString());
+        } catch (Exception e) {
+            throw new RuntimeException("No se pudo obtener el userId del token");
+        }
+
+        return userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Barbero no encontrado"));
+    }
+
+    private Long getCurrentTenantId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+
+        if (auth == null || auth.getDetails() == null) {
+            throw new RuntimeException("No se pudo obtener el tenant del usuario autenticado");
+        }
+
+        Object details = auth.getDetails();
+
+        if (!(details instanceof Map<?, ?> map)) {
+            throw new RuntimeException("Los detalles de autenticación no contienen el tenantId");
+        }
+
+        Object tenantIdValue = map.get("tenantId");
+
+        if (tenantIdValue == null) {
+            throw new RuntimeException("tenantId no encontrado en el token");
+        }
+
+        try {
+            return Long.valueOf(tenantIdValue.toString());
+        } catch (Exception e) {
+            throw new RuntimeException("tenantId inválido en el token");
+        }
+    }
+
+    private Long getCurrentBranchId() {
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+
+        if (auth == null || auth.getDetails() == null) {
+            throw new RuntimeException("No se pudo obtener la sucursal del usuario autenticado");
+        }
+
+        Object details = auth.getDetails();
+
+        if (!(details instanceof Map<?, ?> map)) {
+            throw new RuntimeException("Los detalles de autenticación no contienen el branchId");
+        }
+
+        Object branchIdValue = map.get("branchId");
+
+        if (branchIdValue == null) {
+            throw new RuntimeException("branchId no encontrado en el token");
+        }
+
+        try {
+            return Long.valueOf(branchIdValue.toString());
+        } catch (Exception e) {
+            throw new RuntimeException("branchId inválido en el token");
+        }
     }
 }

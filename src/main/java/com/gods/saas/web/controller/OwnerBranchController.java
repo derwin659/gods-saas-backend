@@ -1,4 +1,4 @@
-package com.gods.saas.controller.owner;
+package com.gods.saas.web.controller;
 
 import com.gods.saas.domain.dto.request.OwnerBranchStatusRequest;
 import com.gods.saas.domain.dto.request.OwnerBranchUpsertRequest;

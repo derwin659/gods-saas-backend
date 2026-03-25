@@ -47,8 +47,7 @@ public class ClientPointsServiceImpl implements ClientPointsService {
 
         int disponibles = safeInt(loyalty.getPuntosDisponibles());
 
-        var rewards = rewardItemRepository
-                .findByTenantIdAndActivoTrueOrderByPuntosRequeridosAsc(tenantId);
+        var rewards = rewardItemRepository.findByTenant_IdAndActivoTrueOrderByPuntosRequeridosAsc(tenantId);
 
         int metaCorteGratis = rewards.stream()
                 .filter(r -> r.getNombre() != null

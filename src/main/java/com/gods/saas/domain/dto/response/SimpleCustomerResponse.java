@@ -1,2 +1,17 @@
-package com.gods.saas.domain.dto.response;public class SimpleCustomerResponse {
+package com.gods.saas.domain.dto.response;
+
+
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+public class SimpleCustomerResponse {
+    private Long id;
+    private String nombres;
+    private String telefono;
 }

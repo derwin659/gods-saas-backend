@@ -1,6 +1,5 @@
 package com.gods.saas.service.impl;
 
-
 import com.gods.saas.domain.dto.AppUserResponse;
 import com.gods.saas.domain.dto.CrearUsuarioRequest;
 import com.gods.saas.domain.dto.request.BootstrapOwnerRequest;
@@ -10,9 +9,9 @@ import com.gods.saas.domain.repository.BranchRepository;
 import com.gods.saas.domain.repository.TenantRepository;
 import com.gods.saas.domain.repository.UserTenantRoleRepository;
 import com.gods.saas.security.TenantContext;
+import com.gods.saas.service.impl.impl.SubscriptionService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
-import org.springframework.context.support.BeanDefinitionDsl;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -21,6 +20,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
 
 @Service
 @RequiredArgsConstructor
@@ -31,7 +31,7 @@ public class UserService {
     private final UserTenantRoleRepository userTenantRoleRepository;
     private final TenantRepository tenantRepository;
     private final BranchRepository branchRepository;
-
+    private final SubscriptionService subscriptionService;
 
     private void validarOwner() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -40,16 +40,11 @@ public class UserService {
             throw new AccessDeniedException("Solo OWNER puede realizar esta acción");
         }
     }
-    /**
-     * Método interno para hashear passwords
-     */
+
     public String hashPassword(String rawPassword) {
         return passwordEncoder.encode(rawPassword);
     }
 
-    /**
-     * Crear un usuario interno (barbero, admin, owner)
-     */
     public AppUser crearUsuarioInterno(String nombre,
                                        String apellido,
                                        String email,
@@ -68,7 +63,7 @@ public class UserService {
                 .apellido(apellido)
                 .email(email)
                 .phone(phone)
-                .rol(rol) // BARBER, ADMIN, OWNER, CASHIER
+                .rol(rol)
                 .passwordHash(passwordHash)
                 .activo(true)
                 .fechaCreacion(LocalDateTime.now())
@@ -77,15 +72,10 @@ public class UserService {
         return userRepository.save(user);
     }
 
-
-    /**
-     * Login interno por email y contraseña
-     */
     public AppUser loginInterno(String email, Long tenantId, String rawPassword) {
         AppUser user = userRepository.findByEmailAndTenantId(email, tenantId)
                 .orElseThrow(() -> new RuntimeException("Credenciales inválidas"));
 
-        // 👇 Validar contraseña con BCrypt
         if (!passwordEncoder.matches(rawPassword, user.getPasswordHash())) {
             throw new RuntimeException("Credenciales inválidas");
         }
@@ -93,17 +83,11 @@ public class UserService {
         return user;
     }
 
-
-    /**
-     * Obtener usuario interno por id
-     */
     public AppUser getById(Long id) {
         return userRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
     }
-    // ===============================
-    // LISTAR USUARIOS
-    // ===============================
+
     public List<AppUserResponse> getUsers() {
         Long tenantId = TenantContext.getTenantId();
 
@@ -112,9 +96,7 @@ public class UserService {
                 .map(AppUserResponse::from)
                 .toList();
     }
-    // ===============================
-    // OBTENER USUARIO
-    // ===============================
+
     public AppUserResponse getUser(Long id) {
         Long tenantId = TenantContext.getTenantId();
 
@@ -124,7 +106,6 @@ public class UserService {
 
         return AppUserResponse.from(user);
     }
-
 
     public AppUser actualizarUsuario(Long userId,
                                      String nombre,
@@ -146,10 +127,6 @@ public class UserService {
         return userRepository.save(user);
     }
 
-
-    /**
-     * Cambiar password de un empleado/barbero
-     */
     public void cambiarPassword(Long userId, String newPasswordHash) {
         AppUser user = getById(userId);
         user.setPasswordHash(newPasswordHash);
@@ -157,10 +134,6 @@ public class UserService {
         userRepository.save(user);
     }
 
-
-    /**
-     * Desactivar o activar usuario
-     */
     public void cambiarEstado(Long userId, boolean activo) {
         AppUser user = getById(userId);
         user.setActivo(activo);
@@ -168,23 +141,25 @@ public class UserService {
     }
 
 
-    // ============================================================
-    //  VALIDAR PASSWORD
-    // ============================================================
-    public boolean passwordMatches(String rawPassword, String hashedPassword) {
-        return passwordEncoder.matches(rawPassword, hashedPassword);
-    }
-
     public AppUserResponse crearUsuario(CrearUsuarioRequest req) {
-
-        Long tenantId = TenantContext.getTenantId(); // ✅ primero
+        Long tenantId = TenantContext.getTenantId();
+        String role = req.getRol() == null ? "" : req.getRol().trim().toUpperCase(Locale.ROOT);
 
         if (userRepository.countByTenantId(tenantId) == 0) {
-            if (!"OWNER".equalsIgnoreCase(req.getRol())) {
+            if (!"OWNER".equals(role)) {
                 throw new RuntimeException("El primer usuario del tenant debe ser OWNER");
             }
         } else {
             validarOwner();
+            subscriptionService.validateSubscriptionActive(tenantId);
+
+            if ("BARBER".equals(role)) {
+                subscriptionService.validateBarberLimit(tenantId);
+            }
+
+            if ("ADMIN".equals(role) || "OWNER".equals(role)) {
+                subscriptionService.validateAdminLimit(tenantId);
+            }
         }
 
         if (userRepository.existsByEmailAndTenantId(req.getEmail(), tenantId)) {
@@ -198,18 +173,29 @@ public class UserService {
                 .phone(req.getPhone())
                 .passwordHash(passwordEncoder.encode(req.getPassword()))
                 .activo(true)
+                .rol(role)
                 .tenant(new Tenant(tenantId))
+                .fechaCreacion(LocalDateTime.now())
                 .build();
+
+        if (req.getBranchId() != null) {
+            Branch branch = branchRepository.findByIdAndTenant_Id(req.getBranchId(), tenantId)
+                    .orElseThrow(() -> new RuntimeException("La sede no pertenece al tenant"));
+            user.setBranch(branch);
+        }
 
         userRepository.save(user);
 
-        userTenantRoleRepository.save(
-                new UserTenantRole(
-                        user,
-                        new Tenant(tenantId),
-                        RoleType.valueOf(req.getRol().toUpperCase())
-                )
-        );
+        Tenant tenantRef = new Tenant(tenantId);
+
+        UserTenantRole userTenantRole = UserTenantRole.builder()
+                .user(user)
+                .tenant(tenantRef)
+                .branch(user.getBranch())
+                .role(RoleType.valueOf(role))
+                .build();
+
+        userTenantRoleRepository.save(userTenantRole);
 
         return AppUserResponse.from(user);
     }
@@ -217,21 +203,21 @@ public class UserService {
     @Transactional
     public AppUserResponse bootstrapRegister(BootstrapOwnerRequest req) {
 
-        // 1) crear tenant
         Tenant tenant = Tenant.builder()
                 .nombre(req.getTenantNombre())
                 .ownerName(req.getOwnerName())
                 .pais(req.getPais())
                 .ciudad(req.getCiudad())
-                .plan(req.getPlan())
+                .plan("STARTER")
                 .active(true)
-                .estadoSuscripcion("ACTIVE")
+                .estadoSuscripcion("TRIAL")
                 .fechaCreacion(LocalDateTime.now())
                 .build();
 
         tenant = tenantRepository.save(tenant);
 
-        // 2) crear branch principal
+        subscriptionService.createStarterTrial(tenant.getId());
+
         Branch branch = Branch.builder()
                 .tenant(tenant)
                 .nombre(req.getBranchNombre() != null ? req.getBranchNombre() : "Sede Principal")
@@ -242,7 +228,6 @@ public class UserService {
 
         branch = branchRepository.save(branch);
 
-        // 3) crear owner
         if (userRepository.existsByEmailAndTenantId(req.getEmail(), tenant.getId())) {
             throw new RuntimeException("Email ya existe en este tenant");
         }
@@ -262,12 +247,15 @@ public class UserService {
 
         user = userRepository.save(user);
 
-        // 4) asignar rol en tabla pivote
-        userTenantRoleRepository.save(
-                new UserTenantRole(user, tenant, RoleType.OWNER)
-        );
+        UserTenantRole ownerRole = UserTenantRole.builder()
+                .user(user)
+                .tenant(tenant)
+                .branch(branch)
+                .role(RoleType.OWNER)
+                .build();
+
+        userTenantRoleRepository.save(ownerRole);
 
         return AppUserResponse.from(user);
     }
-
 }

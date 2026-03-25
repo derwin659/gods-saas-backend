@@ -54,13 +54,29 @@ public class TenantService {
         settings.setCreatedAt(LocalDateTime.now());
 
         Subscription subscription = Subscription.builder()
-                .tenant(tenant)
-                .plan("FREE")
-                .precioMensual(0.0)
-                .estado("ACTIVE")
+                .tenantId(savedTenant.getId())
+                .plan("STARTER")
+                .precioMensual(9.0)
+                .estado("TRIAL")
                 .fechaInicio(LocalDateTime.now())
-                .fechaRenovacion(LocalDateTime.now().plusDays(14))
+                .fechaRenovacion(LocalDateTime.now().plusDays(7))
+                .fechaFin(LocalDateTime.now().plusDays(7))
+                .trial(true)
+                .diasGracia(0)
+                .maxBranches(1)
+                .maxBarbers(5)
+                .maxAdmins(1)
+                .aiEnabled(false)
+                .loyaltyEnabled(true)
+                .promotionsEnabled(true)
+                .billingCycle("MONTHLY")
+                .currency("USD")
+                .observaciones("Trial inicial al crear tenant")
+                .createdAt(LocalDateTime.now())
+                .updatedAt(LocalDateTime.now())
                 .build();
+
+        subscriptionRepository.save(subscription);
 
         subscriptionRepository.save(subscription);
 

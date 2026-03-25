@@ -12,7 +12,9 @@ import com.gods.saas.domain.model.UserTenantRole;
 import com.gods.saas.domain.repository.AppUserRepository;
 import com.gods.saas.domain.repository.BranchRepository;
 import com.gods.saas.domain.repository.UserTenantRoleRepository;
+import com.gods.saas.exception.BusinessException;
 import com.gods.saas.service.impl.impl.OwnerBarberService;
+import com.gods.saas.service.impl.impl.SubscriptionService;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +32,7 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
     private final BranchRepository branchRepository;
     private final UserTenantRoleRepository userTenantRoleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final SubscriptionService subscriptionService;
 
     @Override
     public List<BarberResponse> listBarbers(Long tenantId, Long branchId) {
@@ -45,12 +48,25 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
     @Override
     @Transactional
     public BarberResponse createBarber(Long tenantId, BarberCreateRequest request) {
-        if (appUserRepository.existsByEmailAndTenant_Id(request.getEmail().trim(), tenantId)) {
-            throw new IllegalArgumentException("Ya existe un usuario con ese email en este tenant.");
+        subscriptionService.validateSubscriptionActive(tenantId);
+        subscriptionService.validateBarberLimit(tenantId);
+
+
+        String email = normalizeRequired(request.getEmail(), "El email es obligatorio").toLowerCase();
+        String nombre = normalizeRequired(request.getNombre(), "El nombre es obligatorio");
+        String apellido = normalizeRequired(request.getApellido(), "El apellido es obligatorio");
+        String password = normalizeRequired(request.getPassword(), "La contraseña es obligatoria");
+
+        if (request.getBranchId() == null) {
+            throw new BusinessException("La sede es obligatoria");
+        }
+
+        if (appUserRepository.existsByEmailAndTenant_Id(email, tenantId)) {
+            throw new BusinessException("Ya existe un usuario con ese email en este tenant");
         }
 
         Branch branch = branchRepository.findByIdAndTenant_Id(request.getBranchId(), tenantId)
-                .orElseThrow(() -> new EntityNotFoundException("La sede no existe o no pertenece al tenant."));
+                .orElseThrow(() -> new EntityNotFoundException("La sede no existe o no pertenece al tenant"));
 
         Tenant tenantRef = new Tenant();
         tenantRef.setId(tenantId);
@@ -58,11 +74,11 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
         AppUser user = AppUser.builder()
                 .tenant(tenantRef)
                 .branch(branch)
-                .nombre(request.getNombre().trim())
-                .apellido(request.getApellido().trim())
-                .email(request.getEmail().trim().toLowerCase())
-                .phone(request.getPhone() == null ? null : request.getPhone().trim())
-                .passwordHash(passwordEncoder.encode(request.getPassword()))
+                .nombre(nombre)
+                .apellido(apellido)
+                .email(email)
+                .phone(normalizeNullable(request.getPhone()))
+                .passwordHash(passwordEncoder.encode(password))
                 .rol("BARBER")
                 .activo(request.getActivo() != null ? request.getActivo() : true)
                 .fechaCreacion(LocalDateTime.now())
@@ -92,26 +108,32 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
                 .orElseThrow(() -> new EntityNotFoundException("Barbero no encontrado."));
 
         if (!"BARBER".equalsIgnoreCase(barber.getRol())) {
-            throw new IllegalArgumentException("El usuario indicado no es un barbero.");
+            throw new BusinessException("El usuario indicado no es un barbero");
         }
 
-        if (appUserRepository.existsByEmailAndTenant_IdAndIdNot(
-                request.getEmail().trim(),
-                tenantId,
-                barberId
-        )) {
-            throw new IllegalArgumentException("Ya existe otro usuario con ese email en este tenant.");
+        String email = normalizeRequired(request.getEmail(), "El email es obligatorio").toLowerCase();
+
+        if (request.getBranchId() == null) {
+            throw new BusinessException("La sede es obligatoria");
+        }
+
+        if (appUserRepository.existsByEmailAndTenant_IdAndIdNot(email, tenantId, barberId)) {
+            throw new BusinessException("Ya existe otro usuario con ese email en este tenant");
         }
 
         Branch branch = branchRepository.findByIdAndTenant_Id(request.getBranchId(), tenantId)
-                .orElseThrow(() -> new EntityNotFoundException("La sede no existe o no pertenece al tenant."));
+                .orElseThrow(() -> new EntityNotFoundException("La sede no existe o no pertenece al tenant"));
 
-        barber.setNombre(request.getNombre().trim());
-        barber.setApellido(request.getApellido().trim());
-        barber.setEmail(request.getEmail().trim().toLowerCase());
-        barber.setPhone(request.getPhone() == null ? null : request.getPhone().trim());
+        barber.setNombre(normalizeRequired(request.getNombre(), "El nombre es obligatorio"));
+        barber.setApellido(normalizeRequired(request.getApellido(), "El apellido es obligatorio"));
+        barber.setEmail(email);
+        barber.setPhone(normalizeNullable(request.getPhone()));
         barber.setBranch(branch);
-        barber.setActivo(request.getActivo());
+
+        if (request.getActivo() != null) {
+            barber.setActivo(request.getActivo());
+        }
+
         barber.setFechaActualizacion(LocalDateTime.now());
 
         AppUser saved = appUserRepository.save(barber);
@@ -136,7 +158,7 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
                 .orElseThrow(() -> new EntityNotFoundException("Barbero no encontrado."));
 
         if (!"BARBER".equalsIgnoreCase(barber.getRol())) {
-            throw new IllegalArgumentException("El usuario indicado no es un barbero.");
+            throw new BusinessException("El usuario indicado no es un barbero");
         }
 
         barber.setActivo(request.getActivo());
@@ -157,5 +179,19 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
                 .branchId(user.getBranch() != null ? user.getBranch().getId() : null)
                 .branchNombre(user.getBranch() != null ? user.getBranch().getNombre() : null)
                 .build();
+    }
+
+    private String normalizeRequired(String value, String message) {
+        if (value == null || value.trim().isEmpty()) {
+            throw new BusinessException(message);
+        }
+        return value.trim();
+    }
+
+    private String normalizeNullable(String value) {
+        if (value == null || value.trim().isEmpty()) {
+            return null;
+        }
+        return value.trim();
     }
 }

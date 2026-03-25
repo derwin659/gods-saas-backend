@@ -1,5 +1,6 @@
 package com.gods.saas.service.impl;
 
+import com.gods.saas.domain.model.AppUser;
 import com.gods.saas.domain.repository.AppUserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -15,7 +16,13 @@ public class UserDetailsServiceImpl implements UserDetailsService {
 
     @Override
     public UserDetails loadUserByUsername(String email) throws UsernameNotFoundException {
-        return userRepository.findByEmail(email)
+        AppUser user = userRepository.findByEmail(email)
                 .orElseThrow(() -> new UsernameNotFoundException("User not found"));
+
+        System.out.println("LOAD USER EMAIL => " + user.getEmail());
+        System.out.println("LOAD USER HASH => " + user.getPasswordHash());
+        System.out.println("LOAD USER GETPASSWORD => " + user.getPassword());
+
+        return user;
     }
 }

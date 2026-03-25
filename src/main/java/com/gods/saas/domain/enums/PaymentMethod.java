@@ -1,2 +1,10 @@
-package com.gods.saas.domain.enums;public class PaymentMethod {
+package com.gods.saas.domain.enums;
+
+public enum PaymentMethod {
+    CASH,
+    YAPE,
+    PLIN,
+    CARD,
+    TRANSFER,
+    FREE
 }

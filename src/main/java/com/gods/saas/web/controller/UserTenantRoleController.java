@@ -18,9 +18,12 @@ public class UserTenantRoleController {
     public ResponseEntity<?> assign(
             @RequestParam Long userId,
             @RequestParam Long tenantId,
+            @RequestParam Long branchId, // 👈 NUEVO
             @RequestParam RoleType role
     ) {
-        return ResponseEntity.ok(service.assignRole(userId, tenantId, role));
+        return ResponseEntity.ok(
+                service.assignRole(userId, tenantId, branchId, role)
+        );
     }
 
     @GetMapping("/user/{userId}")

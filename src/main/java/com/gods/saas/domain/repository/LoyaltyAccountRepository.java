@@ -10,5 +10,7 @@ public interface LoyaltyAccountRepository extends JpaRepository<LoyaltyAccount, 
 
     Optional<LoyaltyAccount> findByTenant_IdAndCustomer_Id(Long tenantId, Long customerId);
 
+    Optional<LoyaltyAccount> findByCustomer_Id(Long customerId);
+
 
 }

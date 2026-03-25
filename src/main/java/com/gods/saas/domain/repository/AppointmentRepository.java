@@ -17,6 +17,8 @@ import java.util.Optional;
 @Repository
 public interface AppointmentRepository extends JpaRepository<Appointment, Long> {
 
+    Optional<Appointment> findByIdAndTenant_Id(Long id, Long tenantId);
+
     List<Appointment> findByTenant_IdAndBranch_IdAndFechaOrderByHoraInicioAsc(
             Long tenantId,
             Long branchId,
@@ -191,5 +193,28 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             Long userId
     );
 
+
+
+
+
+    @Query("""
+    select a
+    from Appointment a
+    left join fetch a.customer
+    left join fetch a.service
+    left join fetch a.user
+    where a.tenant.id = :tenantId
+      and (:branchId is null or a.branch.id = :branchId)
+      and a.fecha = :today
+      and a.horaInicio >= :nowTime
+      and (a.estado is null or a.estado <> 'CANCELLED')
+    order by a.horaInicio asc
+""")
+    List<Appointment> findUpcomingAppointmentsForDashboard(
+            Long tenantId,
+            Long branchId,
+            LocalDate today,
+            LocalTime nowTime
+    );
 
 }

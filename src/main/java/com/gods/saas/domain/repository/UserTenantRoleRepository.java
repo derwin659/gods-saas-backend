@@ -3,6 +3,7 @@ package com.gods.saas.domain.repository;
 import com.gods.saas.domain.model.RoleType;
 import com.gods.saas.domain.model.UserTenantRole;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -24,6 +25,16 @@ public interface UserTenantRoleRepository extends JpaRepository<UserTenantRole, 
     List<UserTenantRole> findByTenant_Id(Long tenantId);
 
     boolean existsByUser_IdAndTenant_IdAndRole(Long userId, Long tenantId, RoleType role);
+
+    @Query("""
+    select count(r)
+    from UserTenantRole r
+    where r.tenant.id = :tenantId
+      and (:branchId is null or r.branch.id = :branchId)
+      and r.role = 'BARBER'
+      and r.user.activo = true
+""")
+    Integer countActiveBarbers(Long tenantId, Long branchId);
 
 
 

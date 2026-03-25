@@ -1,8 +1,8 @@
 package com.gods.saas.domain.repository;
 
-
+import com.gods.saas.domain.dto.response.BarberReportSummaryResponse;
 import com.gods.saas.domain.model.Sale;
-import com.gods.saas.domain.repository.projection.BarberCommissionDailyProjection;
+import com.gods.saas.domain.repository.projection.*;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -11,28 +11,101 @@ import org.springframework.stereotype.Repository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface SaleRepository extends JpaRepository<Sale, Long> {
+
+    @Query(value = """
+        select
+            cast(s.fecha_creacion as date) as saleDate,
+            coalesce(sum(s.total), 0) as totalSales,
+            count(s.sale_id) as salesCount
+        from sale s
+        where s.tenant_id = :tenantId
+          and (:branchId is null or s.branch_id = :branchId)
+          and s.fecha_creacion between :start and :end
+        group by cast(s.fecha_creacion as date)
+        order by cast(s.fecha_creacion as date) asc
+        """, nativeQuery = true)
+    List<DailySalesReportProjection> getDailySalesReport(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+
+    @Query(value = """
+        select
+            coalesce(se.nombre, p.nombre, 'Item') as serviceName,
+            count(si.sale_item_id) as timesSold,
+            coalesce(sum(si.subtotal), 0) as totalAmount
+        from sale s
+        join sale_item si on si.sale_id = s.sale_id
+        left join service se on se.service_id = si.service_id
+        left join product p on p.product_id = si.product_id
+        where s.tenant_id = :tenantId
+          and (:branchId is null or s.branch_id = :branchId)
+          and s.fecha_creacion between :start and :end
+        group by coalesce(se.nombre, p.nombre, 'Item')
+        order by count(si.sale_item_id) desc, coalesce(sum(si.subtotal), 0) desc
+        """, nativeQuery = true)
+    List<TopServiceReportProjection> getTopServicesReport(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
 
     @Query("""
         select coalesce(sum(s.total), 0)
         from Sale s
         where s.tenant.id = :tenantId
-          and s.user.id = :barberId
+          and (:branchId is null or s.branch.id = :branchId)
+          and upper(coalesce(s.metodoPago, '')) = upper(:paymentMethod)
           and s.fechaCreacion between :start and :end
-    """)
-    BigDecimal sumTodaySales(Long tenantId, Long barberId, LocalDateTime start, LocalDateTime end);
+        """)
+    BigDecimal getTotalByPaymentMethod(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("paymentMethod") String paymentMethod,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+
+    @Query("""
+        select coalesce(sum(s.total), 0)
+        from Sale s
+        where s.tenant.id = :tenantId
+          and s.branch.id = :branchId
+          and s.user.id = :barberId
+          and s.fechaCreacion >= :start
+          and s.fechaCreacion < :end
+        """)
+    BigDecimal sumTodaySales(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("barberId") Long barberId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
 
     @Query("""
         select count(s)
         from Sale s
         where s.tenant.id = :tenantId
+          and s.branch.id = :branchId
           and s.user.id = :barberId
-          and s.fechaCreacion between :start and :end
-    """)
-    long countTodayServices(Long tenantId, Long barberId, LocalDateTime start, LocalDateTime end);
-
+          and s.fechaCreacion >= :start
+          and s.fechaCreacion < :end
+        """)
+    long countTodayServices(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("barberId") Long barberId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
 
     List<Sale> findByTenant_IdAndBranch_IdAndUser_IdAndFechaCreacionBetween(
             Long tenantId,
@@ -54,7 +127,7 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
           and s.fechaCreacion < :end
         group by cast(s.fechaCreacion as date)
         order by cast(s.fechaCreacion as date) asc
-    """)
+        """)
     List<BarberCommissionDailyProjection> findDailySalesByBarber(
             @Param("tenantId") Long tenantId,
             @Param("branchId") Long branchId,
@@ -62,4 +135,195 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end
     );
+
+    @Query("""
+        select coalesce(sum(s.total), 0)
+        from Sale s
+        where s.cashRegister.id = :cashRegisterId
+        """)
+    BigDecimal sumTotalByCashRegisterId(@Param("cashRegisterId") Long cashRegisterId);
+
+    @Query("""
+        select coalesce(sum(s.total), 0)
+        from Sale s
+        where s.cashRegister.id = :cashRegisterId
+          and s.metodoPago = 'CASH'
+        """)
+    BigDecimal sumCashTotalByCashRegisterId(@Param("cashRegisterId") Long cashRegisterId);
+
+    Optional<Sale> findByIdAndTenant_Id(Long saleId, Long tenantId);
+
+    List<Sale> findByTenant_IdAndBranch_IdAndFechaCreacionBetweenOrderByFechaCreacionDesc(
+            Long tenantId,
+            Long branchId,
+            LocalDateTime from,
+            LocalDateTime to
+    );
+
+    @Query(value = """
+        select
+            u.user_id as barberId,
+            u.nombre as barberName,
+            coalesce(sum(s.total), 0) as totalSales,
+            count(s.sale_id) as salesCount
+        from sale s
+        join app_user u on u.user_id = s.user_id
+        where s.tenant_id = :tenantId
+          and (:branchId is null or s.branch_id = :branchId)
+          and s.fecha_creacion between :start and :end
+        group by u.user_id, u.nombre
+        order by coalesce(sum(s.total), 0) desc, u.nombre asc
+        """, nativeQuery = true)
+    List<BarberSalesSummaryProjection> getBarberSalesSummary(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+
+    @Query("""
+        select coalesce(sum(s.total), 0)
+        from Sale s
+        where s.tenant.id = :tenantId
+          and (:branchId is null or s.branch.id = :branchId)
+          and s.fechaCreacion between :start and :end
+        """)
+    BigDecimal getTotalSalesByRange(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+
+    @Query("""
+        select count(s)
+        from Sale s
+        where s.tenant.id = :tenantId
+          and (:branchId is null or s.branch.id = :branchId)
+          and s.fechaCreacion between :start and :end
+        """)
+    Long countSalesByRange(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+
+    @Query(value = """
+        select count(distinct s.user_id)
+        from sale s
+        where s.tenant_id = :tenantId
+          and (:branchId is null or s.branch_id = :branchId)
+          and s.fecha_creacion between :start and :end
+        """, nativeQuery = true)
+    Long countActiveBarbersByRange(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+
+    @Query(value = """
+        select
+            s.sale_id as saleId,
+            coalesce(
+                nullif(trim(concat(coalesce(c.nombres, ''), ' ', coalesce(c.apellidos, ''))), ''),
+                'Cliente'
+            ) as customerName,
+            coalesce(
+                string_agg(
+                    distinct coalesce(se.nombre, p.nombre, 'Item'),
+                    ', '
+                ),
+                ''
+            ) as serviceNames,
+            s.total as total,
+            coalesce(s.metodo_pago, '') as paymentMethod,
+            s.fecha_creacion as createdAt
+        from sale s
+        left join customer c on c.customer_id = s.customer_id
+        left join sale_item si on si.sale_id = s.sale_id
+        left join service se on se.service_id = si.service_id
+        left join product p on p.product_id = si.product_id
+        where s.tenant_id = :tenantId
+          and (:branchId is null or s.branch_id = :branchId)
+          and s.user_id = :barberId
+          and s.fecha_creacion between :start and :end
+        group by s.sale_id, c.nombres, c.apellidos, s.total, s.metodo_pago, s.fecha_creacion
+        order by s.fecha_creacion desc
+        """, nativeQuery = true)
+    List<BarberSaleDetailProjection> getBarberSaleDetails(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("barberId") Long barberId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+
+    @Query("""
+        select
+            b.id as branchId,
+            b.nombre as branchName,
+            coalesce(sum(s.total), 0) as totalSales,
+            count(distinct s.id) as totalServices,
+            count(distinct s.customer.id) as totalClients,
+            coalesce(avg(s.total), 0) as averageTicket
+        from Sale s
+        join s.branch b
+        where s.tenant.id = :tenantId
+          and (:fromDateTime is null or s.fechaCreacion >= :fromDateTime)
+          and (:toDateTime is null or s.fechaCreacion < :toDateTime)
+        group by b.id, b.nombre
+        order by coalesce(sum(s.total), 0) desc
+        """)
+    List<BranchReportSummaryProjection> getBranchSummary(
+            @Param("tenantId") Long tenantId,
+            @Param("fromDateTime") LocalDateTime fromDateTime,
+            @Param("toDateTime") LocalDateTime toDateTime
+    );
+
+    @Query("""
+        select
+            u.id as barberId,
+            u.nombre as barberName,
+            b.id as branchId,
+            b.nombre as branchName,
+            coalesce(sum(s.total), 0) as totalSales,
+            count(distinct s.id) as totalServices,
+            count(distinct s.customer.id) as totalClients,
+            coalesce(avg(s.total), 0) as averageTicket
+        from Sale s
+        join s.user u
+        join s.branch b
+        where s.tenant.id = :tenantId
+          and (:branchId is null or b.id = :branchId)
+          and (:fromDateTime is null or s.fechaCreacion >= :fromDateTime)
+          and (:toDateTime is null or s.fechaCreacion < :toDateTime)
+        group by u.id, u.nombre, b.id, b.nombre
+        order by coalesce(sum(s.total), 0) desc
+        """)
+    List<BarberReportSummaryResponse> getBarberSummary(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("fromDateTime") LocalDateTime fromDateTime,
+            @Param("toDateTime") LocalDateTime toDateTime
+    );
+
+    @Query("""
+    select coalesce(sum(s.total), 0)
+    from Sale s
+    where s.tenant.id = :tenantId
+      and (:branchId is null or s.branch.id = :branchId)
+      and s.fechaCreacion between :start and :end
+""")
+    BigDecimal sumSalesByDay(Long tenantId, Long branchId, LocalDateTime start, LocalDateTime end);
+
+    @Query("""
+    select coalesce(avg(s.total), 0)
+    from Sale s
+    where s.tenant.id = :tenantId
+      and (:branchId is null or s.branch.id = :branchId)
+      and s.fechaCreacion between :start and :end
+""")
+    BigDecimal averageTicketByDay(Long tenantId, Long branchId, LocalDateTime start, LocalDateTime end);
 }

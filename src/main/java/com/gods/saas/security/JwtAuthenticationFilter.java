@@ -101,15 +101,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 if (userIdNum == null) {
                     throw new JwtException("El token interno no contiene userId");
                 }
-                if (tenantIdNum == null) {
-                    throw new JwtException("El token interno no contiene tenantId");
-                }
                 if (role == null || role.isBlank()) {
                     throw new JwtException("El token interno no contiene role");
                 }
 
                 Long userId = userIdNum.longValue();
-                Long tenantId = tenantIdNum.longValue();
+                Long tenantId = tenantIdNum != null ? tenantIdNum.longValue() : null;
                 Long branchId = branchIdNum != null ? branchIdNum.longValue() : null;
 
                 SimpleGrantedAuthority authority =
@@ -128,6 +125,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 details.put("userType", userType);
 
                 TenantContext.setTenantId(tenantId);
+
+                // 🔥 ESTO ES LO QUE FALTA
+                request.setAttribute("userId", userId);
+                request.setAttribute("tenantId", tenantId);
+                request.setAttribute("branchId", branchId);
+                request.setAttribute("role", role);
             }
 
             // ============================================================

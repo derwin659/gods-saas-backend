@@ -87,7 +87,7 @@ public class SecurityConfig {
                         // PRIMERO las rutas más específicas
                         .requestMatchers("/api/admin/rewards/redemptions/**")
                         .hasAnyRole("OWNER", "ADMIN", "BARBER")
-
+                        .requestMatchers("/api/super-admin/**").hasRole("SUPER_ADMIN")
                         .requestMatchers("/api/internal/users/**").hasAnyRole("OWNER", "ADMIN")
                         .requestMatchers("/api/internal/users/login/**").hasAnyRole("OWNER", "ADMIN")
                         .requestMatchers("/api/internal/me").hasAnyRole("OWNER", "ADMIN", "BARBER")
