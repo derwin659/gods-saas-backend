@@ -87,4 +87,13 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
             @Param("branchId") Long branchId,
             @Param("rol") String rol
     );
+
+
+    @Query("""
+    select u
+    from AppUser u
+    left join fetch u.tenant t
+    where u.id = :userId
+""")
+    Optional<AppUser> findByIdWithTenant(@Param("userId") Long userId);
 }

@@ -209,7 +209,7 @@ public class BarberHomeServiceImpl implements BarberHomeService {
             throw new RuntimeException("No se pudo obtener el userId del token");
         }
 
-        return userRepository.findById(userId)
+        return userRepository.findByIdWithTenant(userId)
                 .orElseThrow(() -> new RuntimeException("Barbero no encontrado"));
     }
 
