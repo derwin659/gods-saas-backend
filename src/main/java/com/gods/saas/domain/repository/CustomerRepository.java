@@ -33,7 +33,31 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
     boolean existsByEmailAndTenantId(String email, Long tenantId);
 
 
+    @Query("""
+    select c
+    from Customer c
+    join fetch c.tenant t
+    left join fetch t.settings
+    where t.id = :tenantId
+      and c.telefono = :telefono
+""")
+    Optional<Customer> findByTenantIdAndTelefonoWithTenant(
+            @Param("tenantId") Long tenantId,
+            @Param("telefono") String telefono
+    );
 
+    @Query("""
+    select c
+    from Customer c
+    join fetch c.tenant t
+    left join fetch t.settings
+    where c.id = :customerId
+      and t.id = :tenantId
+""")
+    Optional<Customer> findByIdAndTenantIdWithTenant(
+            @Param("customerId") Long customerId,
+            @Param("tenantId") Long tenantId
+    );
 
 
 

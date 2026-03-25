@@ -76,26 +76,7 @@ public class AuthController {
         return res;
     }
 
-    @PostMapping("/me/perfil")
-    public ResponseEntity<MeResponse> completarMiPerfil(
-            @RequestHeader("Authorization") String authHeader,
-            @RequestBody PerfilClienteRequest request
-    ) {
-        String token = authHeader.replace("Bearer ", "");
-        Long userId = jwtUtil.getUserIdFromToken(token);
 
-        Customer userActualizado = customerService.completarPerfil(userId, request);
-
-        MeResponse resp = new MeResponse();
-        resp.setUserId(userActualizado.getId());
-        resp.setNombre(userActualizado.getNombres());
-        resp.setApellido(userActualizado.getApellidos());
-        resp.setPhone(userActualizado.getTelefono());
-        resp.setEmail(userActualizado.getEmail());
-        resp.setTenantId(userActualizado.getTenant().getId());
-
-        return ResponseEntity.ok(resp);
-    }
 
     @PostMapping("/login-basic")
     public ResponseEntity<?> loginBasic(@RequestBody LoginRequest req) {

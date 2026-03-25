@@ -79,7 +79,22 @@ public class JwtService {
                 .parseClaimsJws(token)
                 .getBody();
     }
+    public String generateCustomerToken(Long customerId, Long tenantId) {
 
+        Map<String, Object> claims = new HashMap<>();
+        claims.put("userType", "customer");
+        claims.put("tenantId", tenantId);
+        claims.put("customerId", customerId);
+        claims.put("role", "CLIENT");
+
+        return Jwts.builder()
+                .setClaims(claims)
+                .setSubject("customer-" + customerId)
+                .setIssuedAt(new Date())
+                .setExpiration(new Date(System.currentTimeMillis() + expirationMs))
+                .signWith(getSigningKey(), SignatureAlgorithm.HS256)
+                .compact();
+    }
     public boolean isTokenExpired(String token) {
         return extractAllClaims(token).getExpiration().before(new Date());
     }

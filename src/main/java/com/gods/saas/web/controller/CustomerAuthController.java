@@ -3,6 +3,7 @@ package com.gods.saas.web.controller;
 import com.gods.saas.domain.dto.request.ClientRegisterRequest;
 import com.gods.saas.domain.dto.request.OtpRequest;
 import com.gods.saas.domain.dto.request.OtpVerifyRequest;
+import com.gods.saas.domain.dto.response.ClientLoginResponse;
 import com.gods.saas.domain.model.Customer;
 import com.gods.saas.domain.model.OtpCode;
 import com.gods.saas.service.impl.CustomerService;
@@ -42,21 +43,22 @@ public class CustomerAuthController {
 
     @PostMapping("/otp/verify")
     public ResponseEntity<?> verifyOtp(@RequestBody OtpVerifyRequest req) {
+        ClientLoginResponse login = customerService.verifyLoginOtp(req.getOtpId(), req.getCode());
 
-        Customer c = customerService.verifyLoginOtp(req.getOtpId(), req.getCode());
+        Long tenantId = login.getTenantId();
+        Long customerId = login.getCustomerId();
 
-        Long tenantId = c.getTenant().getId();
-        Long customerId = c.getId();
-
-        String token = jwtService.generateCustomerToken(c);
+        String token = jwtService.generateCustomerToken(customerId, tenantId);
 
         return ResponseEntity.ok(Map.of(
                 "token", token,
                 "role", "CLIENT",
                 "tenantId", tenantId,
-                "tenantName", c.getTenant().getNombre() == null ? "" : c.getTenant().getNombre(),
+                "tenantName", login.getTenantNombre() == null ? "" : login.getTenantNombre(),
+                "tenantLogoUrl", login.getTenantLogoUrl(),
                 "customerId", customerId,
-                "nombre", (c.getNombres() == null ? "Cliente" : c.getNombres())
+                "phoneVerified", login.getPhoneVerified(),
+                "appActivated", login.getAppActivated()
         ));
     }
 }

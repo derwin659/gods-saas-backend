@@ -1,30 +1,37 @@
 package com.gods.saas.service.impl;
 
-import com.gods.saas.domain.dto.*;
+import com.gods.saas.domain.dto.ActualizarClienteRequest;
+import com.gods.saas.domain.dto.CambiarTelefonoRequest;
+import com.gods.saas.domain.dto.ClienteResponse;
+import com.gods.saas.domain.dto.VentaRapidaRequest;
 import com.gods.saas.domain.dto.response.ClientHomeResponse;
+import com.gods.saas.domain.dto.response.ClientLoginResponse;
+import com.gods.saas.domain.model.Customer;
 import com.gods.saas.domain.model.LoyaltyAccount;
+import com.gods.saas.domain.model.OtpCode;
 import com.gods.saas.domain.model.Tenant;
-import com.gods.saas.domain.repository.*;
+import com.gods.saas.domain.repository.AppointmentRepository;
+import com.gods.saas.domain.repository.CustomerRepository;
+import com.gods.saas.domain.repository.LoyaltyAccountRepository;
+import com.gods.saas.domain.repository.LoyaltyMovementRepository;
+import com.gods.saas.domain.repository.OtpCodeRepository;
+import com.gods.saas.domain.repository.RewardRedemptionRepository;
+import com.gods.saas.domain.repository.TenantRepository;
 import com.gods.saas.domain.repository.projection.LastVisitProjection;
 import com.gods.saas.service.impl.impl.LoyaltyService;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
+
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.YearMonth;
 import java.util.Collections;
 import java.util.List;
 import java.util.Random;
-import java.util.Set;
 import java.util.stream.Collectors;
-
-import com.gods.saas.domain.model.Customer;
-import com.gods.saas.domain.model.OtpCode;
-import org.springframework.web.server.ResponseStatusException;
-
 
 @Service
 @RequiredArgsConstructor
@@ -39,13 +46,12 @@ public class CustomerService {
     private final RewardRedemptionRepository rewardRedemptionRepository;
     private final LoyaltyService loyaltyService;
 
-    /**
-     * Crear cliente rápido desde POS (venta rápida).
-     */
+    @Transactional
     public Customer registrarCliente(VentaRapidaRequest req) {
-
         customerRepository.findByTelefono(req.getPhone())
-                .ifPresent(c -> { throw new RuntimeException("El teléfono ya está registrado"); });
+                .ifPresent(c -> {
+                    throw new RuntimeException("El teléfono ya está registrado");
+                });
 
         Customer newClient = Customer.builder()
                 .telefono(req.getPhone())
@@ -55,86 +61,40 @@ public class CustomerService {
                 .origenCliente(req.getOrigenCliente())
                 .phoneVerified(false)
                 .fechaRegistro(LocalDateTime.now())
+                .fechaActualizacion(LocalDateTime.now())
                 .build();
 
         return customerRepository.save(newClient);
     }
 
-    /**
-     * Obtener cliente por teléfono
-     */
+    @Transactional
+    public Customer actualizarCliente(Long customerId, ActualizarClienteRequest req) {
+        Customer customer = customerRepository.findById(customerId)
+                .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
+
+        if (req.getNombre() != null) customer.setNombres(req.getNombre());
+        if (req.getApellido() != null) customer.setApellidos(req.getApellido());
+        if (req.getEmail() != null) customer.setEmail(req.getEmail());
+        if (req.getFechaNacimiento() != null) customer.setFechaNacimiento(req.getFechaNacimiento());
+
+
+        customer.setFechaActualizacion(LocalDateTime.now());
+        return customerRepository.save(customer);
+    }
+
+
     public Customer obtenerClientePorTelefono(Long tenantId, String phone) {
         return customerRepository.findByTenantIdAndTelefono(tenantId, phone)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cliente no encontrado"));
     }
 
-    /**
-     * Obtener cliente por ID
-     */
     public Customer getById(Long customerId) {
         return customerRepository.findById(customerId)
                 .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
     }
 
-    /**
-     * Actualizar datos del cliente (desde Backoffice / Perfil)
-     */
-    @Transactional(readOnly = true)
-    public Customer actualizarCliente(Long customerId, ActualizarClienteRequest req) {
-
-        Customer customer = customerRepository.findById(customerId)
-                .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
-
-        if (req.getNombre() != null) customer.setNombres(req.getNombre());
-        if (req.getApellido() != null) customer.setApellidos(req.getApellido());
-        if (req.getEmail() != null) customer.setEmail(req.getEmail());
-        if (req.getFechaNacimiento() != null) customer.setFechaNacimiento(req.getFechaNacimiento());
-        if (req.getOrigenCliente() != null) customer.setOrigenCliente(req.getOrigenCliente());
-
-        customer.setFechaActualizacion(LocalDateTime.now());
-
-        return customerRepository.save(customer);
-    }
-
-    /**
-     * Completar perfil del cliente (desde App cliente)
-     */
-    @Transactional(readOnly = true)
-    public Customer completarPerfil(Long customerId, PerfilClienteRequest req) {
-
-        Customer customer = customerRepository.findById(customerId)
-                .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
-
-        if (req.getNombre() != null) customer.setNombres(req.getNombre());
-        if (req.getApellido() != null) customer.setApellidos(req.getApellido());
-        if (req.getEmail() != null) customer.setEmail(req.getEmail());
-        if (req.getFechaNacimiento() != null) customer.setFechaNacimiento(req.getFechaNacimiento());
-        if (req.getOrigenCliente() != null) customer.setOrigenCliente(req.getOrigenCliente());
-
-        customer.setFechaActualizacion(LocalDateTime.now());
-
-        return customerRepository.save(customer);
-    }
-
-    /**
-     * Solicitar cambio de teléfono (envía OTP al nuevo número)
-     */
-    @Transactional(readOnly = true)
-    public void solicitarCambioTelefono(Long customerId, String nuevoTelefono) {
-
-        Customer customer = customerRepository.findById(customerId)
-                .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
-
-        // Validar que no exista otro cliente con ese número
-        customerRepository.findByTelefono(nuevoTelefono)
-                .ifPresent(c -> { throw new RuntimeException("Ese teléfono ya está registrado"); });
-
-        // Guardar el nuevo teléfono pendiente
-        customer.setPhonePendiente(nuevoTelefono);
-        customer.setPhonePendienteVerificacion(true);
-        customerRepository.save(customer);
-
-        // Generar OTP para el nuevo teléfono
+    @Transactional
+    public void solicitarCambioTelefono(String nuevoTelefono) {
         String code = String.format("%06d", new Random().nextInt(999999));
 
         OtpCode otp = OtpCode.builder()
@@ -146,20 +106,13 @@ public class CustomerService {
                 .build();
 
         otpCodeRepository.save(otp);
-
         System.out.println("🔐 OTP para cambio de teléfono: " + code);
     }
 
-    /**
-     * Confirmar cambio de teléfono usando OTP
-     */
-    @Transactional(readOnly = true)
-    public Customer confirmarCambioTelefono(String nuevoTelefono, String code, Long tenanId) {
-
-        // OJO: el repo debe tener este método:
-        // Optional<OtpCode> findTopByPhoneAndUsedIsFalseOrderByCreatedAtDesc(String phone);
+    @Transactional
+    public Customer confirmarCambioTelefono(String nuevoTelefono, String code, Long tenantId) {
         OtpCode otp = otpCodeRepository
-                .findTopByPhoneAndTenantIdAndUsedIsFalseOrderByCreatedAtDesc(nuevoTelefono, tenanId )
+                .findTopByPhoneAndTenantIdAndUsedIsFalseOrderByCreatedAtDesc(nuevoTelefono, tenantId)
                 .orElseThrow(() -> new RuntimeException("OTP no encontrado"));
 
         if (!otp.getCode().equals(code)) {
@@ -170,11 +123,9 @@ public class CustomerService {
             throw new RuntimeException("Código expirado");
         }
 
-        // Obtener cliente que tenía ese nuevo teléfono como pendiente
         Customer customer = customerRepository.findByPhonePendiente(nuevoTelefono)
                 .orElseThrow(() -> new RuntimeException("No hay cliente con solicitud de cambio"));
 
-        // Aplicar cambio real
         customer.setTelefono(nuevoTelefono);
         customer.setPhonePendiente(null);
         customer.setPhonePendienteVerificacion(false);
@@ -187,29 +138,21 @@ public class CustomerService {
         return customerRepository.save(customer);
     }
 
-    /**
-     * Recuperar cuenta por teléfono antiguo:
-     * - Cliente perdió acceso al número anterior
-     * - Quiere asociar su cuenta a un nuevo teléfono
-     * - Se envía OTP al nuevo número
-     */
-    @Transactional(readOnly = true)
+    @Transactional
     public Customer recuperarCuentaPorTelefono(CambiarTelefonoRequest req) {
-
-        // 1. Buscar cliente por número antiguo
         Customer customer = customerRepository.findByTelefono(req.getOldPhone())
                 .orElseThrow(() -> new RuntimeException("No existe un cliente con ese teléfono antiguo"));
 
-        // 2. Validar que el nuevo teléfono no esté en uso
         customerRepository.findByTelefono(req.getNewPhone())
-                .ifPresent(c -> { throw new RuntimeException("El nuevo teléfono ya está en uso"); });
+                .ifPresent(c -> {
+                    throw new RuntimeException("El nuevo teléfono ya está en uso");
+                });
 
-        // 3. Guardar el nuevo teléfono en campo temporal
         customer.setPhonePendiente(req.getNewPhone());
         customer.setPhonePendienteVerificacion(true);
+        customer.setFechaActualizacion(LocalDateTime.now());
         customerRepository.save(customer);
 
-        // 4. Generar OTP para el nuevo número
         String code = String.format("%06d", new Random().nextInt(999999));
 
         OtpCode otp = OtpCode.builder()
@@ -227,10 +170,8 @@ public class CustomerService {
         return customer;
     }
 
-
-    @Transactional(readOnly = true)
-    public Customer verifyLoginOtp(Long otpId, String code) {
-
+    @Transactional
+    public ClientLoginResponse verifyLoginOtp(Long otpId, String code) {
         OtpCode otp = otpCodeRepository.findById(otpId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "OTP no encontrado"));
 
@@ -247,54 +188,55 @@ public class CustomerService {
         }
 
         Long tenantId = otp.getTenantId();
-
         if (tenantId == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "OTP inválido (sin tenant)");
         }
 
-        Customer c = customerRepository.findByTenantIdAndTelefono(tenantId, otp.getPhone())
+        Customer customer = customerRepository.findByTenantIdAndTelefonoWithTenant(tenantId, otp.getPhone())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cliente no encontrado"));
 
-        c.setPhoneVerified(true);
-        c.setFechaActualizacion(LocalDateTime.now());
+        customer.setPhoneVerified(true);
+        customer.setFechaActualizacion(LocalDateTime.now());
 
-        if (!Boolean.TRUE.equals(c.getAppActivated())) {
-            c.setAppActivated(true);
-            c.setAppActivatedAt(LocalDateTime.now());
+        if (!Boolean.TRUE.equals(customer.getAppActivated())) {
+            customer.setAppActivated(true);
+            customer.setAppActivatedAt(LocalDateTime.now());
         }
 
         otp.setUsed(true);
         otpCodeRepository.save(otp);
+        customerRepository.save(customer);
 
-        c = customerRepository.save(c);
+        if (Boolean.TRUE.equals(customer.getMigrated())
+                && !Boolean.TRUE.equals(customer.getActivationBonusGranted())) {
+            loyaltyService.grantActivationBonusIfNeeded(customer);
 
-        // 1) Bono por activación de cliente migrado
-        if (Boolean.TRUE.equals(c.getMigrated())
-                && !Boolean.TRUE.equals(c.getActivationBonusGranted())) {
-
-            loyaltyService.grantActivationBonusIfNeeded(c);
-
-            // refrescar customer por si el servicio actualizó flags
-            c = customerRepository.findById(c.getId())
+            customer = customerRepository.findByTenantIdAndTelefonoWithTenant(tenantId, otp.getPhone())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cliente no encontrado"));
         }
 
-        // 2) Bono de bienvenida para cliente nuevo real
-        if (!Boolean.TRUE.equals(c.getMigrated())
-                && !Boolean.TRUE.equals(c.getWelcomeBonusGranted())) {
+        if (!Boolean.TRUE.equals(customer.getMigrated())
+                && !Boolean.TRUE.equals(customer.getWelcomeBonusGranted())) {
+            loyaltyService.grantWelcomeBonusIfNeeded(customer);
 
-            loyaltyService.grantWelcomeBonusIfNeeded(c);
-
-            c = customerRepository.findById(c.getId())
+            customer = customerRepository.findByTenantIdAndTelefonoWithTenant(tenantId, otp.getPhone())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cliente no encontrado"));
         }
 
-        return c;
+        Tenant tenant = customer.getTenant();
+
+        return ClientLoginResponse.builder()
+                .customerId(customer.getId())
+                .tenantId(tenant.getId())
+                .tenantNombre(tenant.getNombre())
+                .tenantLogoUrl(tenant.getLogoUrl())
+                .phoneVerified(Boolean.TRUE.equals(customer.isPhoneVerified()))
+                .appActivated(Boolean.TRUE.equals(customer.getAppActivated()))
+                .build();
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public Customer registerFromApp(Long tenantId, String phone, String nombres, String apellidos) {
-
         customerRepository.findByTenantIdAndTelefono(tenantId, phone)
                 .ifPresent(c -> {
                     throw new ResponseStatusException(HttpStatus.CONFLICT, "El teléfono ya está registrado");
@@ -303,7 +245,7 @@ public class CustomerService {
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tenant no encontrado"));
 
-        Customer c = Customer.builder()
+        Customer customer = Customer.builder()
                 .tenant(tenant)
                 .telefono(phone)
                 .nombres(nombres)
@@ -320,13 +262,11 @@ public class CustomerService {
                 .puntosDisponibles(0)
                 .build();
 
-        return customerRepository.save(c);
+        return customerRepository.save(customer);
     }
 
-    @Transactional(readOnly = true)
+    @Transactional
     public OtpCode requestLoginOtp(Long tenantId, String phone) {
-
-        // validar cliente existe
         customerRepository.findByTenantIdAndTelefono(tenantId, phone)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cliente no encontrado"));
 
@@ -347,25 +287,24 @@ public class CustomerService {
         return otp;
     }
 
-
     public Customer obtenerClientePorId(Long tenantId, Long customerId) {
         return customerRepository.findByIdAndTenantId(customerId, tenantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cliente no encontrado"));
     }
 
+    @Transactional
     public ClientHomeResponse getClientHome(Long tenantId, Long customerId) {
+        Customer customer = customerRepository.findByIdAndTenantIdWithTenant(customerId, tenantId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cliente no encontrado"));
 
-        Customer c = obtenerClientePorId(tenantId, customerId);
-        System.out.printf("customer {}"+c);
-        Tenant t = c.getTenant();
-        System.out.printf("tenanid {}"+t);
+        Tenant tenant = customer.getTenant();
 
-        LoyaltyAccount la = loyaltyAccountRepository
+        LoyaltyAccount loyaltyAccount = loyaltyAccountRepository
                 .findByTenant_IdAndCustomer_Id(tenantId, customerId)
                 .orElseGet(() -> {
                     LoyaltyAccount created = LoyaltyAccount.builder()
                             .tenant(new Tenant(tenantId))
-                            .customer(c)
+                            .customer(customer)
                             .puntosAcumulados(0)
                             .puntosDisponibles(0)
                             .fechaUltimoMovimiento(LocalDateTime.now())
@@ -373,9 +312,9 @@ public class CustomerService {
                     return loyaltyAccountRepository.save(created);
                 });
 
-        int meta = 200; // luego lo sacas de tenant_settings.schedule_config o config
-        int disponibles = la.getPuntosDisponibles() == null ? 0 : la.getPuntosDisponibles();
-        int acumulados  = la.getPuntosAcumulados() == null ? 0 : la.getPuntosAcumulados();
+        int meta = 200;
+        int disponibles = loyaltyAccount.getPuntosDisponibles() == null ? 0 : loyaltyAccount.getPuntosDisponibles();
+        int acumulados = loyaltyAccount.getPuntosAcumulados() == null ? 0 : loyaltyAccount.getPuntosAcumulados();
 
         int faltan = Math.max(meta - disponibles, 0);
         double progreso = meta <= 0 ? 0.0 : Math.min((double) disponibles / meta, 1.0);
@@ -386,12 +325,12 @@ public class CustomerService {
 
         return ClientHomeResponse.builder()
                 .tenant(ClientHomeResponse.TenantMini.builder()
-                        .id(t.getId())
-                        .nombre(t.getNombre())
-                        .logoUrl(t.getLogoUrl())
-                        .ciudad(t.getCiudad())
+                        .id(tenant.getId())
+                        .nombre(tenant.getNombre())
+                        .logoUrl(tenant.getLogoUrl())
+                        .ciudad(tenant.getCiudad())
                         .build())
-                .customer(ClienteResponse.fromEntity(c))
+                .customer(ClienteResponse.fromEntity(customer))
                 .points(ClientHomeResponse.PointsSummary.builder()
                         .disponibles(disponibles)
                         .acumulados(acumulados)
@@ -418,82 +357,37 @@ public class CustomerService {
                         .horaInicio(p.getHoraInicio() != null ? p.getHoraInicio().toString() : null)
                         .horaFin(p.getHoraFin() != null ? p.getHoraFin().toString() : null)
                         .servicio(p.getServicio())
-                        .barbero(blankToNull(p.getBarbero()))
+                        .barbero(p.getBarbero())
                         .branch(p.getBranch())
-                        .estado(p.getEstado())
+                        .estado("PENDIENTE")
                         .build())
                 .orElse(null);
     }
 
     private List<ClientHomeResponse.LastVisitResponse> buildLastVisits(Long tenantId, Long customerId) {
-        List<LastVisitProjection> visits = appointmentRepository.findLastVisits(tenantId, customerId, 3);
+        List<LastVisitProjection> rows = appointmentRepository.findLastVisits(tenantId, customerId, 5);
+        if (rows == null || rows.isEmpty()) return Collections.emptyList();
 
-        if (visits == null || visits.isEmpty()) {
-            return Collections.emptyList();
-        }
-        System.out.printf("visit {}"+visits);
-        return visits.stream()
+        return rows.stream()
                 .map(v -> ClientHomeResponse.LastVisitResponse.builder()
                         .appointmentId(v.getAppointmentId())
                         .fecha(v.getFecha() != null ? v.getFecha().toString() : null)
                         .servicio(v.getServicio())
-                        .puntos(v.getPuntos() == null ? 0 : v.getPuntos())
-                        .total(v.getTotal() == null ? 0.0 : v.getTotal())
+                        .puntos(0)
+                        .total(0.0)
                         .build())
-                .toList();
+                .collect(Collectors.toList());
     }
 
     private ClientHomeResponse.BenefitsResponse buildBenefits(Long tenantId, Long customerId, int acumulados) {
-        long cantidadCanjes = rewardRedemptionRepository
+        int cantidadCanjes = (int) rewardRedemptionRepository
                 .countCompletedOrGeneratedRedemptions(tenantId, customerId);
 
-        Integer puntosMes = loyaltyMovementRepository
-                .sumPositivePointsCurrentMonth(tenantId, customerId);
-
-        int racha = calcularRachaMensual(
-                appointmentRepository.findVisitedMonths(tenantId, customerId)
-        );
-
         return ClientHomeResponse.BenefitsResponse.builder()
-                .nivel(calcularNivel(acumulados))
-                .cantidadCanjes((int) cantidadCanjes)
-                .puntosMes(puntosMes == null ? 0 : puntosMes)
-                .racha(racha)
+                .nivel(acumulados >= 200 ? "Gold" : acumulados >= 100 ? "Silver" : "Bronze")
+                .cantidadCanjes(cantidadCanjes)
+                .puntosMes(acumulados)
+                .racha(0)
                 .build();
     }
-
-    private String calcularNivel(int puntosAcumulados) {
-        if (puntosAcumulados >= 1000) return "Black";
-        if (puntosAcumulados >= 500) return "Oro";
-        if (puntosAcumulados >= 200) return "Plata";
-        return "Bronce";
-    }
-
-    private int calcularRachaMensual(List<LocalDate> mesesConVisita) {
-        if (mesesConVisita == null || mesesConVisita.isEmpty()) {
-            return 0;
-        }
-
-        Set<YearMonth> months = mesesConVisita.stream()
-                .map(YearMonth::from)
-                .collect(Collectors.toSet());
-
-        YearMonth current = YearMonth.now();
-        int streak = 0;
-
-        while (months.contains(current)) {
-            streak++;
-            current = current.minusMonths(1);
-        }
-
-        return streak;
-    }
-
-    private String blankToNull(String value) {
-        if (value == null || value.trim().isEmpty()) {
-            return null;
-        }
-        return value.trim();
-    }
 }
-
