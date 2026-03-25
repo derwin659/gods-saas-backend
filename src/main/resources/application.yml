@@ -2,6 +2,7 @@ spring:
   profiles:
     active: prod   # 👈 por defecto local
 
+
   messages:
     basename: messages
     encoding: UTF-8

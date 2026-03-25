@@ -7,11 +7,10 @@ import com.gods.saas.domain.model.Tenant;
 import com.gods.saas.domain.repository.*;
 import com.gods.saas.domain.repository.projection.LastVisitProjection;
 import com.gods.saas.service.impl.impl.LoyaltyService;
-import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-
+import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -80,7 +79,7 @@ public class CustomerService {
     /**
      * Actualizar datos del cliente (desde Backoffice / Perfil)
      */
-    @Transactional
+    @Transactional(readOnly = true)
     public Customer actualizarCliente(Long customerId, ActualizarClienteRequest req) {
 
         Customer customer = customerRepository.findById(customerId)
@@ -100,7 +99,7 @@ public class CustomerService {
     /**
      * Completar perfil del cliente (desde App cliente)
      */
-    @Transactional
+    @Transactional(readOnly = true)
     public Customer completarPerfil(Long customerId, PerfilClienteRequest req) {
 
         Customer customer = customerRepository.findById(customerId)
@@ -120,7 +119,7 @@ public class CustomerService {
     /**
      * Solicitar cambio de teléfono (envía OTP al nuevo número)
      */
-    @Transactional
+    @Transactional(readOnly = true)
     public void solicitarCambioTelefono(Long customerId, String nuevoTelefono) {
 
         Customer customer = customerRepository.findById(customerId)
@@ -154,7 +153,7 @@ public class CustomerService {
     /**
      * Confirmar cambio de teléfono usando OTP
      */
-    @Transactional
+    @Transactional(readOnly = true)
     public Customer confirmarCambioTelefono(String nuevoTelefono, String code, Long tenanId) {
 
         // OJO: el repo debe tener este método:
@@ -194,7 +193,7 @@ public class CustomerService {
      * - Quiere asociar su cuenta a un nuevo teléfono
      * - Se envía OTP al nuevo número
      */
-    @Transactional
+    @Transactional(readOnly = true)
     public Customer recuperarCuentaPorTelefono(CambiarTelefonoRequest req) {
 
         // 1. Buscar cliente por número antiguo
@@ -229,7 +228,7 @@ public class CustomerService {
     }
 
 
-    @Transactional
+    @Transactional(readOnly = true)
     public Customer verifyLoginOtp(Long otpId, String code) {
 
         OtpCode otp = otpCodeRepository.findById(otpId)
@@ -293,7 +292,7 @@ public class CustomerService {
         return c;
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public Customer registerFromApp(Long tenantId, String phone, String nombres, String apellidos) {
 
         customerRepository.findByTenantIdAndTelefono(tenantId, phone)
@@ -324,7 +323,7 @@ public class CustomerService {
         return customerRepository.save(c);
     }
 
-    @Transactional
+    @Transactional(readOnly = true)
     public OtpCode requestLoginOtp(Long tenantId, String phone) {
 
         // validar cliente existe

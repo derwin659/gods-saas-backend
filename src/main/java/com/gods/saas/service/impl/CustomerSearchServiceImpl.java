@@ -44,7 +44,7 @@ public class CustomerSearchServiceImpl implements CustomerSearchService {
     }
 
     @Override
-    @Transactional
+    @Transactional(readOnly = true)
     public CustomerSearchResponse createQuick(Long tenantId, CreateQuickCustomerRequest request) {
 
         String nombres = request.getNombres() == null ? "" : request.getNombres().trim();
