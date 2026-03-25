@@ -55,7 +55,7 @@ public class CustomerAuthController {
                 "role", "CLIENT",
                 "tenantId", tenantId,
                 "tenantName", login.getTenantNombre() == null ? "" : login.getTenantNombre(),
-                "tenantLogoUrl", login.getTenantLogoUrl(),
+                "tenantLogoUrl",   login.getTenantLogoUrl() != null ? login.getTenantLogoUrl() : "",
                 "customerId", customerId,
                 "phoneVerified", login.getPhoneVerified(),
                 "appActivated", login.getAppActivated()
