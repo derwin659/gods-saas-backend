@@ -11,6 +11,8 @@ import java.math.BigDecimal;
 public class PaymentSummaryResponse {
     private BigDecimal cash;
     private BigDecimal yape;
+    private BigDecimal plin;
+    private BigDecimal free;
     private BigDecimal card;
     private BigDecimal transfer;
     private BigDecimal total;

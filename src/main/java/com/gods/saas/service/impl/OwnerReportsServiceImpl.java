@@ -229,18 +229,22 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
         LocalDateTime start = startOfDay(from);
         LocalDateTime end = endInclusive(to);
 
-        BigDecimal cash = nvl(saleRepository.getTotalByPaymentMethod(tenantId, branchId, "CASH", start, end));
+        BigDecimal cash = nvl(saleRepository.getTotalByPaymentMethod(tenantId, branchId, "EFECTIVO", start, end));
         BigDecimal yape = nvl(saleRepository.getTotalByPaymentMethod(tenantId, branchId, "YAPE", start, end));
-        BigDecimal card = nvl(saleRepository.getTotalByPaymentMethod(tenantId, branchId, "CARD", start, end));
+        BigDecimal card = nvl(saleRepository.getTotalByPaymentMethod(tenantId, branchId, "TARJETA", start, end));
         BigDecimal transfer = nvl(saleRepository.getTotalByPaymentMethod(tenantId, branchId, "TRANSFER", start, end));
+        BigDecimal plin = nvl(saleRepository.getTotalByPaymentMethod(tenantId, branchId, "PLIN", start, end));
+        BigDecimal gratis = nvl(saleRepository.getTotalByPaymentMethod(tenantId, branchId, "GRATIS", start, end));
 
-        BigDecimal total = cash.add(yape).add(card).add(transfer);
+        BigDecimal total = cash.add(yape).add(card).add(transfer).add(plin);
 
         return PaymentSummaryResponse.builder()
                 .cash(cash)
                 .yape(yape)
                 .card(card)
+                .free(gratis)
                 .transfer(transfer)
+                .plin(plin)
                 .total(total)
                 .build();
     }
