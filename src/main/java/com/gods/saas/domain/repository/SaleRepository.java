@@ -17,17 +17,18 @@ import java.util.Optional;
 public interface SaleRepository extends JpaRepository<Sale, Long> {
 
     @Query(value = """
-        select
-            cast(s.fecha_creacion as date) as saleDate,
-            coalesce(sum(s.total), 0) as totalSales,
-            count(s.sale_id) as salesCount
-        from sale s
-        where s.tenant_id = :tenantId
-          and (:branchId is null or s.branch_id = :branchId)
-          and s.fecha_creacion between >= :start and s.fechaCreacion < :end
-        group by cast(s.fecha_creacion as date)
-        order by cast(s.fecha_creacion as date) asc
-        """, nativeQuery = true)
+    select
+        cast(s.fecha_creacion as date) as saleDate,
+        coalesce(sum(s.total), 0) as totalSales,
+        count(s.sale_id) as salesCount
+    from sale s
+    where s.tenant_id = :tenantId
+      and (:branchId is null or s.branch_id = :branchId)
+      and s.fecha_creacion >= :start
+      and s.fecha_creacion < :end
+    group by cast(s.fecha_creacion as date)
+    order by cast(s.fecha_creacion as date) asc
+    """, nativeQuery = true)
     List<DailySalesReportProjection> getDailySalesReport(
             @Param("tenantId") Long tenantId,
             @Param("branchId") Long branchId,

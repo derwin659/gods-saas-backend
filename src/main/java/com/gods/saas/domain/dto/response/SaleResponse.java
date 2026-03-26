@@ -1,6 +1,5 @@
 package com.gods.saas.domain.dto.response;
 
-
 import lombok.Builder;
 import lombok.Getter;
 
@@ -30,9 +29,5 @@ public class SaleResponse {
     private BigDecimal cashReceived;
     private BigDecimal changeAmount;
 
-
-
-
-
-
+    private String barberName;
 }

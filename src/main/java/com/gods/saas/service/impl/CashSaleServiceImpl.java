@@ -149,6 +149,10 @@ public class CashSaleServiceImpl implements CashSaleService {
                 .changeAmount(safe(sale.getChangeAmount()))
                 .fechaCreacion(sale.getFechaCreacion())
                 .puntosGanados(puntosGanados == null ? 0 : puntosGanados)
+
+                // 🔥 ESTA ES LA CLAVE
+                .barberName(resolveBarberName(sale))
+
                 .items(
                         sale.getItems() == null
                                 ? List.of()
@@ -169,7 +173,6 @@ public class CashSaleServiceImpl implements CashSaleService {
                 )
                 .build();
     }
-
     private BigDecimal safe(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
     }
@@ -179,5 +182,25 @@ public class CashSaleServiceImpl implements CashSaleService {
             return "CASH";
         }
         return metodoPago.trim().toUpperCase();
+    }
+
+    private String resolveBarberName(Sale sale) {
+        if (sale.getUser() != null
+                && sale.getUser().getNombre() != null
+                && !sale.getUser().getNombre().trim().isEmpty()) {
+            return sale.getUser().getNombre().trim();
+        }
+
+        if (sale.getItems() != null) {
+            return sale.getItems().stream()
+                    .filter(item -> item.getBarberUser() != null)
+                    .map(item -> item.getBarberUser().getNombre())
+                    .filter(name -> name != null && !name.trim().isEmpty())
+                    .map(String::trim)
+                    .findFirst()
+                    .orElse(null);
+        }
+
+        return null;
     }
 }
