@@ -21,38 +21,46 @@ public class CashRegisterController {
     @PostMapping("/open")
     public CashRegisterResponse open(
             @RequestAttribute("tenantId") Long tenantId,
-            @RequestAttribute("branchId") Long branchId,
+            @RequestAttribute("branchId") Long sessionBranchId,
             @RequestAttribute("userId") Long userId,
+            @RequestParam(required = false) Long branchId,
             @RequestBody OpenCashRegisterRequest request
     ) {
-        return cashRegisterService.open(tenantId, branchId, userId, request);
+        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        return cashRegisterService.open(tenantId, effectiveBranchId, userId, request);
     }
 
     @GetMapping("/current")
     public CashRegisterResponse current(
             @RequestAttribute("tenantId") Long tenantId,
-            @RequestAttribute("branchId") Long branchId
+            @RequestAttribute("branchId") Long sessionBranchId,
+            @RequestParam(required = false) Long branchId
     ) {
-        return cashRegisterService.getCurrent(tenantId, branchId);
+        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        return cashRegisterService.getCurrent(tenantId, effectiveBranchId);
     }
 
     @PostMapping("/{cashRegisterId}/close")
     public CashRegisterResponse close(
             @RequestAttribute("tenantId") Long tenantId,
-            @RequestAttribute("branchId") Long branchId,
+            @RequestAttribute("branchId") Long sessionBranchId,
             @PathVariable Long cashRegisterId,
+            @RequestParam(required = false) Long branchId,
             @RequestBody CloseCashRegisterRequest request
     ) {
-        return cashRegisterService.close(tenantId, branchId, cashRegisterId, request);
+        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        return cashRegisterService.close(tenantId, effectiveBranchId, cashRegisterId, request);
     }
 
     @GetMapping("/history")
     public List<CashRegisterResponse> history(
             @RequestAttribute("tenantId") Long tenantId,
-            @RequestAttribute("branchId") Long branchId,
+            @RequestAttribute("branchId") Long sessionBranchId,
+            @RequestParam(required = false) Long branchId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
-        return cashRegisterService.history(tenantId, branchId, from, to);
+        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        return cashRegisterService.history(tenantId, effectiveBranchId, from, to);
     }
 }

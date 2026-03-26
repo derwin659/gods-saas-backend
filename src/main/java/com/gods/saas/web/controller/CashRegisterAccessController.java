@@ -6,6 +6,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -18,8 +19,10 @@ public class CashRegisterAccessController {
     @GetMapping("/current")
     public CashRegisterResponse current(
             @RequestAttribute("tenantId") Long tenantId,
-            @RequestAttribute("branchId") Long branchId
+            @RequestAttribute("branchId") Long sessionBranchId,
+            @RequestParam(required = false) Long branchId
     ) {
-        return cashRegisterService.getCurrent(tenantId, branchId);
+        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        return cashRegisterService.getCurrent(tenantId, effectiveBranchId);
     }
 }

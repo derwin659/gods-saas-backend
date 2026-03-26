@@ -120,7 +120,7 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
         if (appUserRepository.existsByEmailAndTenant_IdAndIdNot(email, tenantId, barberId)) {
             throw new BusinessException("Ya existe otro usuario con ese email en este tenant");
         }
-
+        System.out.printf("antes {}", request.getBranchId());
         Branch branch = branchRepository.findByIdAndTenant_Id(request.getBranchId(), tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("La sede no existe o no pertenece al tenant"));
 
@@ -129,7 +129,7 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
         barber.setEmail(email);
         barber.setPhone(normalizeNullable(request.getPhone()));
         barber.setBranch(branch);
-
+        System.out.printf("branch {}", branch);
         if (request.getActivo() != null) {
             barber.setActivo(request.getActivo());
         }

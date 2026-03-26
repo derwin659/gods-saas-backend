@@ -20,29 +20,35 @@ public class CashSaleController {
     @PostMapping
     public SaleResponse create(
             @RequestAttribute("tenantId") Long tenantId,
-            @RequestAttribute("branchId") Long branchId,
+            @RequestAttribute("branchId") Long sessionBranchId,
             @RequestAttribute("userId") Long userId,
+            @RequestParam(required = false) Long branchId,
             @RequestBody CreateCashSaleRequest request
     ) {
-        return cashSaleService.createCashSale(tenantId, branchId, userId, request);
+        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        return cashSaleService.createCashSale(tenantId, effectiveBranchId, userId, request);
     }
 
     @GetMapping("/today")
     public List<SaleResponse> today(
             @RequestAttribute("tenantId") Long tenantId,
-            @RequestAttribute("branchId") Long branchId
+            @RequestAttribute("branchId") Long sessionBranchId,
+            @RequestParam(required = false) Long branchId
     ) {
-        return cashSaleService.getTodaySales(tenantId, branchId);
+        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        return cashSaleService.getTodaySales(tenantId, effectiveBranchId);
     }
 
     @GetMapping
     public List<SaleResponse> byRange(
             @RequestAttribute("tenantId") Long tenantId,
-            @RequestAttribute("branchId") Long branchId,
+            @RequestAttribute("branchId") Long sessionBranchId,
+            @RequestParam(required = false) Long branchId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
-        return cashSaleService.getSalesByRange(tenantId, branchId, from, to);
+        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        return cashSaleService.getSalesByRange(tenantId, effectiveBranchId, from, to);
     }
 
     @GetMapping("/{saleId}")
