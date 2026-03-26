@@ -24,7 +24,7 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
         from sale s
         where s.tenant_id = :tenantId
           and (:branchId is null or s.branch_id = :branchId)
-          and s.fecha_creacion between :start and :end
+          and s.fecha_creacion between >= :start and s.fechaCreacion < :end
         group by cast(s.fecha_creacion as date)
         order by cast(s.fecha_creacion as date) asc
         """, nativeQuery = true)
@@ -314,16 +314,28 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
     from Sale s
     where s.tenant.id = :tenantId
       and (:branchId is null or s.branch.id = :branchId)
-      and s.fechaCreacion between :start and :end
+      and s.fechaCreacion >= :start
+      and s.fechaCreacion < :end
 """)
-    BigDecimal sumSalesByDay(Long tenantId, Long branchId, LocalDateTime start, LocalDateTime end);
+    BigDecimal sumSalesByDay(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
 
     @Query("""
     select coalesce(avg(s.total), 0)
     from Sale s
     where s.tenant.id = :tenantId
       and (:branchId is null or s.branch.id = :branchId)
-      and s.fechaCreacion between :start and :end
+      and s.fechaCreacion >= :start
+      and s.fechaCreacion < :end
 """)
-    BigDecimal averageTicketByDay(Long tenantId, Long branchId, LocalDateTime start, LocalDateTime end);
+    BigDecimal averageTicketByDay(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
 }

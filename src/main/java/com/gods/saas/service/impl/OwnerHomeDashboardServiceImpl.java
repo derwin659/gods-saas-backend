@@ -16,7 +16,10 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.*;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.List;
 
 @Service
@@ -28,22 +31,25 @@ public class OwnerHomeDashboardServiceImpl implements OwnerHomeDashboardService 
     private final CustomerRepository customerRepository;
     private final UserTenantRoleRepository userTenantRolesRepository;
     private final BranchRepository branchRepository;
-
-    private static final ZoneId ZONE = ZoneId.of("America/Lima");
+    private final TenantTimeService tenantTimeService;
 
     @Override
     public OwnerHomeDashboardResponse getDashboard(Long tenantId, Long branchId) {
-        LocalDate today = LocalDate.now(ZONE);
-        LocalDateTime start = today.atStartOfDay();
-        LocalDateTime end = today.atTime(LocalTime.MAX);
 
-        // RESUMEN GENERAL DEL DUEÑO: TODAS LAS SEDES
+        ZoneId zone = tenantTimeService.getZone(tenantId);
+        LocalDate today = tenantTimeService.today(tenantId);
+        LocalDateTime start = today.atStartOfDay();
+        LocalDateTime end = today.plusDays(1).atStartOfDay();
+        LocalTime now = tenantTimeService.currentTime(tenantId);
+
         Long globalBranchId = null;
 
         BigDecimal todaySales = saleRepository.sumSalesByDay(tenantId, globalBranchId, start, end);
+
         Integer todayAppointments = Math.toIntExact(
                 appointmentRepository.countTodayAppointments(tenantId, globalBranchId, today)
         );
+
         Integer activeBarbers = userTenantRolesRepository.countActiveBarbers(tenantId, globalBranchId);
         Integer newClients = customerRepository.countCustomers(tenantId);
         BigDecimal averageTicket = saleRepository.averageTicketByDay(tenantId, globalBranchId, start, end);
@@ -54,10 +60,9 @@ public class OwnerHomeDashboardServiceImpl implements OwnerHomeDashboardService 
                         tenantId,
                         globalBranchId,
                         today,
-                        LocalTime.now(ZONE)
+                        now
                 ).stream().map(this::mapUpcoming).toList();
 
-        // DESGLOSE POR SEDE
         List<BranchDashboardItemResponse> branches = branchRepository
                 .findByTenantIdAndActivoTrueOrderByNombreAsc(tenantId)
                 .stream()
