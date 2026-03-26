@@ -1,6 +1,7 @@
 package com.gods.saas.service.impl.impl;
 
 import com.gods.saas.domain.dto.request.CreateCashSaleRequest;
+import com.gods.saas.domain.dto.request.UpdateSaleRequest;
 import com.gods.saas.domain.dto.response.SaleResponse;
 
 import java.time.LocalDate;
@@ -15,4 +16,8 @@ public interface CashSaleService {
     List<SaleResponse> getSalesByRange(Long tenantId, Long branchId, LocalDate from, LocalDate to);
 
     SaleResponse getById(Long tenantId, Long saleId);
+
+    SaleResponse updateSale(Long tenantId, Long branchId, Long userId, Long saleId, UpdateSaleRequest request);
+
+    void deleteSale(Long tenantId, Long branchId, Long userId, Long saleId);
 }

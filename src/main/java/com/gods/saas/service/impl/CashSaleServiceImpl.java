@@ -1,17 +1,13 @@
 package com.gods.saas.service.impl;
 
-import com.gods.saas.domain.dto.request.CreateCashSaleItemRequest;
-import com.gods.saas.domain.dto.request.CreateCashSaleRequest;
-import com.gods.saas.domain.dto.request.CreateSaleRequest;
-import com.gods.saas.domain.dto.request.SaleItemRequest;
+import com.gods.saas.domain.dto.request.*;
 import com.gods.saas.domain.dto.response.SaleItemResponse;
 import com.gods.saas.domain.dto.response.SaleResponse;
 import com.gods.saas.domain.enums.CashRegisterStatus;
 import com.gods.saas.domain.model.Appointment;
+import com.gods.saas.domain.model.Customer;
 import com.gods.saas.domain.model.Sale;
-import com.gods.saas.domain.repository.AppointmentRepository;
-import com.gods.saas.domain.repository.CashRegisterRepository;
-import com.gods.saas.domain.repository.SaleRepository;
+import com.gods.saas.domain.repository.*;
 import com.gods.saas.service.impl.impl.CashSaleService;
 import com.gods.saas.service.impl.impl.SaleService;
 import jakarta.persistence.EntityNotFoundException;
@@ -34,6 +30,8 @@ public class CashSaleServiceImpl implements CashSaleService {
     private final CashRegisterRepository cashRegisterRepository;
     private final AppointmentRepository appointmentRepository;
     private final SaleService saleService;
+    private final CustomerRepository customerRepository;
+    private final SaleItemRepository saleItemRepository;
 
     @Override
     public SaleResponse createCashSale(Long tenantId, Long branchId, Long userId, CreateCashSaleRequest request) {
@@ -124,6 +122,54 @@ public class CashSaleServiceImpl implements CashSaleService {
         return mapResponse(sale, 0);
     }
 
+    @Override
+    @Transactional
+    public SaleResponse updateSale(Long tenantId, Long branchId, Long userId, Long saleId, UpdateSaleRequest request) {
+        Sale sale = saleRepository.findByIdAndTenant_IdAndBranch_Id(saleId, tenantId, branchId)
+                .orElseThrow(() -> new RuntimeException("Venta no encontrada"));
+
+        if (sale.getCashRegister() == null) {
+            throw new RuntimeException("La venta no pertenece a una caja");
+        }
+
+        if (sale.getCashRegister().getClosedAt() != null) {
+            throw new RuntimeException("Solo se puede editar una venta con caja abierta");
+        }
+
+        if (request.getCustomerId() != null) {
+            Customer customer = customerRepository.findById(request.getCustomerId())
+                    .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
+            sale.setCustomer(customer);
+        }
+
+        if (request.getMetodoPago() != null && !request.getMetodoPago().isBlank()) {
+            sale.setMetodoPago(request.getMetodoPago().trim());
+        }
+
+        if (request.getSubtotal() != null) {
+            sale.setSubtotal(request.getSubtotal());
+        }
+
+        if (request.getDiscount() != null) {
+            sale.setDiscount(request.getDiscount());
+        }
+
+        if (request.getTotal() != null) {
+            sale.setTotal(request.getTotal());
+        }
+
+        if (request.getCashReceived() != null) {
+            sale.setCashReceived(request.getCashReceived());
+        }
+
+        if (request.getChangeAmount() != null) {
+            sale.setChangeAmount(request.getChangeAmount());
+        }
+
+        Sale saved = saleRepository.save(sale);
+        return mapResponse(saved, 0);
+    }
+
     private SaleItemRequest toSaleItemRequest(CreateCashSaleItemRequest request) {
         SaleItemRequest item = new SaleItemRequest();
         item.setServiceId(request.getServiceId());
@@ -202,5 +248,27 @@ public class CashSaleServiceImpl implements CashSaleService {
         }
 
         return null;
+    }
+
+
+    @Override
+    @Transactional
+    public void deleteSale(Long tenantId, Long branchId, Long userId, Long saleId) {
+        Sale sale = saleRepository.findByIdAndTenant_IdAndBranch_Id(saleId, tenantId, branchId)
+                .orElseThrow(() -> new RuntimeException("Venta no encontrada"));
+
+        if (sale.getCashRegister() == null) {
+            throw new RuntimeException("La venta no pertenece a una caja");
+        }
+
+        if (sale.getCashRegister().getClosedAt() != null) {
+            throw new RuntimeException("Solo se puede eliminar una venta con caja abierta");
+        }
+
+        if (sale.getItems() != null && !sale.getItems().isEmpty()) {
+            saleItemRepository.deleteAll(sale.getItems());
+        }
+
+        saleRepository.delete(sale);
     }
 }

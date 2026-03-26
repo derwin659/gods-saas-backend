@@ -339,4 +339,6 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end
     );
+
+    Optional<Sale> findByIdAndTenant_IdAndBranch_Id(Long saleId, Long tenantId, Long branchId);
 }
