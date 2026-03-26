@@ -36,6 +36,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
@@ -116,7 +117,6 @@ public class SaleServiceImpl implements SaleService {
         sale.setTenant(tenant);
         sale.setBranch(branch);
         sale.setCustomer(customer);
-        sale.setUser(user);
         sale.setAppointment(appointment);
         sale.setCashRegister(cashRegister);
         sale.setMetodoPago(metodoPago);
@@ -125,6 +125,9 @@ public class SaleServiceImpl implements SaleService {
         List<SaleItem> items = new ArrayList<>();
         List<SaleItemResponse> itemResponses = new ArrayList<>();
         BigDecimal subtotalVenta = BigDecimal.ZERO;
+
+        Long uniqueBarberUserIdFromItems = null;
+        boolean multipleBarbersInItems = false;
 
         for (SaleItemRequest itemRequest : request.getItems()) {
             SaleItem item = new SaleItem();
@@ -177,8 +180,9 @@ public class SaleServiceImpl implements SaleService {
                 }
             }
 
+            AppUser barberUser = null;
             if (itemRequest.getBarberUserId() != null) {
-                AppUser barberUser = userRepository.findById(itemRequest.getBarberUserId())
+                barberUser = userRepository.findById(itemRequest.getBarberUserId())
                         .orElseThrow(() -> new RuntimeException(
                                 "Barbero no encontrado: " + itemRequest.getBarberUserId()
                         ));
@@ -188,6 +192,12 @@ public class SaleServiceImpl implements SaleService {
                 }
 
                 item.setBarberUser(barberUser);
+
+                if (uniqueBarberUserIdFromItems == null) {
+                    uniqueBarberUserIdFromItems = barberUser.getId();
+                } else if (!Objects.equals(uniqueBarberUserIdFromItems, barberUser.getId())) {
+                    multipleBarbersInItems = true;
+                }
             }
 
             BigDecimal subtotalItem = precioUnitario
@@ -207,8 +217,8 @@ public class SaleServiceImpl implements SaleService {
                             .serviceNombre(item.getService() != null ? item.getService().getNombre() : null)
                             .productId(item.getProduct() != null ? item.getProduct().getId() : null)
                             .productName(item.getProduct() != null ? item.getProduct().getNombre() : null)
-                            .barberUserId(item.getBarberUser() != null ? item.getBarberUser().getId() : null)
-                            .barberUserName(item.getBarberUser() != null ? item.getBarberUser().getNombre() : null)
+                            .barberUserId(barberUser != null ? barberUser.getId() : null)
+                            .barberUserName(barberUser != null ? barberUser.getNombre() : null)
                             .cantidad(cantidad)
                             .precioUnitario(precioUnitario)
                             .subtotal(subtotalItem)
@@ -216,29 +226,39 @@ public class SaleServiceImpl implements SaleService {
             );
         }
 
-        BigDecimal discount = safe(request.getDiscount()).setScale(2, RoundingMode.HALF_UP);
-        if (discount.compareTo(subtotalVenta) > 0) {
-            throw new RuntimeException("El descuento no puede ser mayor al subtotal");
+        if (user == null && uniqueBarberUserIdFromItems != null && !multipleBarbersInItems) {
+            user = userRepository.findById(uniqueBarberUserIdFromItems)
+                    .orElseThrow(() -> new RuntimeException("Barbero principal no encontrado"));
         }
 
+        if (user != null && uniqueBarberUserIdFromItems != null && !multipleBarbersInItems) {
+            if (!Objects.equals(user.getId(), uniqueBarberUserIdFromItems)) {
+                user = userRepository.findById(uniqueBarberUserIdFromItems)
+                        .orElseThrow(() -> new RuntimeException("Barbero principal no encontrado"));
+            }
+        }
+
+        sale.setUser(user);
+
+        BigDecimal discount = safe(request.getDiscount()).setScale(2, RoundingMode.HALF_UP);
         BigDecimal total = subtotalVenta.subtract(discount).setScale(2, RoundingMode.HALF_UP);
+
+        if (total.compareTo(BigDecimal.ZERO) < 0) {
+            total = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
 
         BigDecimal cashReceived;
         BigDecimal changeAmount;
 
         if ("EFECTIVO".equals(metodoPago)) {
-            if (request.getCashReceived() == null) {
-                throw new RuntimeException("cashReceived es obligatorio cuando el método de pago es EFECTIVO");
-            }
-
-            cashReceived = request.getCashReceived().setScale(2, RoundingMode.HALF_UP);
+            cashReceived = safe(request.getCashReceived()).setScale(2, RoundingMode.HALF_UP);
 
             if (cashReceived.compareTo(total) < 0) {
-                throw new RuntimeException("El monto recibido no puede ser menor al total de la venta");
+                throw new RuntimeException("El monto recibido no puede ser menor al total");
             }
 
             changeAmount = cashReceived.subtract(total).setScale(2, RoundingMode.HALF_UP);
-        } else if ("FREE".equals(metodoPago) || total.compareTo(BigDecimal.ZERO) == 0) {
+        } else if ("FREE".equals(metodoPago)) {
             cashReceived = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
             changeAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         } else {
