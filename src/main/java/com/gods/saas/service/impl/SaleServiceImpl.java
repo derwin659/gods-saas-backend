@@ -34,8 +34,6 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.LocalDateTime;
-import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -57,9 +55,11 @@ public class SaleServiceImpl implements SaleService {
     private final AppointmentRepository appointmentRepository;
     private final LoyaltyAccountRepository loyaltyAccountRepository;
     private final CashRegisterRepository cashRegisterRepository;
+    private final TenantTimeService tenantTimeService;
 
     @Override
     public SaleResponse crearVenta(CreateSaleRequest request) {
+
         validarRequest(request);
 
         Tenant tenant = tenantRepository.findById(request.getTenantId())
@@ -120,7 +120,7 @@ public class SaleServiceImpl implements SaleService {
         sale.setAppointment(appointment);
         sale.setCashRegister(cashRegister);
         sale.setMetodoPago(metodoPago);
-        sale.setFechaCreacion(LocalDateTime.now(ZoneOffset.UTC));
+        sale.setFechaCreacion(tenantTimeService.now(tenant.getId()));
 
         List<SaleItem> items = new ArrayList<>();
         List<SaleItemResponse> itemResponses = new ArrayList<>();
