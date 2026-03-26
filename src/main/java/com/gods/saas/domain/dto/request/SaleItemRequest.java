@@ -8,6 +8,7 @@ import lombok.Setter;
 public class SaleItemRequest {
     private Long serviceId;
     private Long productId;
+    private Long barberUserId;
     private Integer cantidad;
     private Double precioUnitario;
 }

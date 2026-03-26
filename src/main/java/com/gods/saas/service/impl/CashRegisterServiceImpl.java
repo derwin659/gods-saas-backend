@@ -105,22 +105,16 @@ public class CashRegisterServiceImpl implements CashRegisterService {
     @Override
     public CashRegisterResponse close(Long tenantId, Long branchId, Long cashRegisterId, CloseCashRegisterRequest request) {
         autoCloseOpenRegisterIfExpired(tenantId, branchId);
-
-        CashRegister cashRegister = cashRegisterRepository.findByIdAndTenant_Id(cashRegisterId, tenantId)
-                .orElseThrow(() -> new EntityNotFoundException("Caja no encontrada"));
-
-        if (!cashRegister.getBranch().getId().equals(branchId)) {
-            throw new IllegalStateException("La caja no pertenece a la sede indicada.");
-        }
-
-        if (cashRegister.getStatus() != CashRegisterStatus.OPEN) {
-            throw new IllegalStateException("Solo se puede cerrar una caja abierta.");
-        }
+        System.out.println("CLOSE CASH => tenantId=" + tenantId + " branchId=" + branchId);
+        CashRegister cashRegister = cashRegisterRepository
+                .findByTenant_IdAndBranch_IdAndStatus(tenantId, branchId, CashRegisterStatus.OPEN)
+                .orElseThrow(() -> new IllegalStateException("No hay una caja abierta en esta sede."));
 
         BigDecimal openingAmount = safe(cashRegister.getOpeningAmount());
         BigDecimal salesCash = safe(saleRepository.sumCashTotalByCashRegisterId(cashRegister.getId()));
 
-        List<CashMovement> movements = cashMovementRepository.findByCashRegister_IdOrderByMovementDateDesc(cashRegister.getId());
+        List<CashMovement> movements = cashMovementRepository
+                .findByCashRegister_IdOrderByMovementDateDesc(cashRegister.getId());
 
         BigDecimal incomes = movements.stream()
                 .filter(m -> m.getType() == CashMovementType.INCOME || m.getType() == CashMovementType.ADJUSTMENT)
@@ -132,7 +126,8 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 .filter(m ->
                         m.getType() == CashMovementType.EXPENSE ||
                                 m.getType() == CashMovementType.ADVANCE_BARBER ||
-                                m.getType() == CashMovementType.PAYMENT_BARBER)
+                                m.getType() == CashMovementType.PAYMENT_BARBER
+                )
                 .map(CashMovement::getAmount)
                 .map(this::safe)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -210,7 +205,8 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 .filter(m ->
                         m.getType() == CashMovementType.EXPENSE ||
                                 m.getType() == CashMovementType.ADVANCE_BARBER ||
-                                m.getType() == CashMovementType.PAYMENT_BARBER)
+                                m.getType() == CashMovementType.PAYMENT_BARBER
+                )
                 .map(CashMovement::getAmount)
                 .map(this::safe)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -247,7 +243,8 @@ public class CashRegisterServiceImpl implements CashRegisterService {
         BigDecimal salesTotal = safe(saleRepository.sumTotalByCashRegisterId(cashRegister.getId()));
         BigDecimal cashSalesTotal = safe(saleRepository.sumCashTotalByCashRegisterId(cashRegister.getId()));
 
-        List<CashMovement> movements = cashMovementRepository.findByCashRegister_IdOrderByMovementDateDesc(cashRegister.getId());
+        List<CashMovement> movements = cashMovementRepository
+                .findByCashRegister_IdOrderByMovementDateDesc(cashRegister.getId());
 
         BigDecimal movementsIncome = movements.stream()
                 .filter(m -> m.getType() == CashMovementType.INCOME || m.getType() == CashMovementType.ADJUSTMENT)
@@ -259,7 +256,8 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 .filter(m ->
                         m.getType() == CashMovementType.EXPENSE ||
                                 m.getType() == CashMovementType.ADVANCE_BARBER ||
-                                m.getType() == CashMovementType.PAYMENT_BARBER)
+                                m.getType() == CashMovementType.PAYMENT_BARBER
+                )
                 .map(CashMovement::getAmount)
                 .map(this::safe)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);

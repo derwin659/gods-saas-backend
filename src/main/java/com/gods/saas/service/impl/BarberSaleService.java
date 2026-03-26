@@ -7,10 +7,8 @@ import com.gods.saas.domain.dto.response.CreateSaleFromAppointmentResponse;
 import com.gods.saas.domain.dto.response.SaleResponse;
 import com.gods.saas.domain.model.Appointment;
 import com.gods.saas.domain.model.Customer;
-import com.gods.saas.domain.model.LoyaltyAccount;
 import com.gods.saas.domain.model.ServiceEntity;
 import com.gods.saas.domain.repository.AppointmentRepository;
-import com.gods.saas.domain.repository.LoyaltyAccountRepository;
 import com.gods.saas.service.impl.impl.SaleService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -27,7 +25,6 @@ public class BarberSaleService {
 
     private final AppointmentRepository appointmentRepository;
     private final SaleService saleService;
-    private final LoyaltyAccountRepository loyaltyAccountRepository;
 
     @Transactional
     public CreateSaleFromAppointmentResponse createSaleFromAppointment(
@@ -48,7 +45,8 @@ public class BarberSaleService {
 
         if (!"CASH".equals(metodoPago)
                 && !"CARD".equals(metodoPago)
-                && !"YAPE".equals(metodoPago)) {
+                && !"YAPE".equals(metodoPago)
+                && !"PLIN".equals(metodoPago)) {
             throw new RuntimeException("metodoPago no válido");
         }
 
@@ -114,15 +112,12 @@ public class BarberSaleService {
         saleRequest.setUserId(userId);
         saleRequest.setAppointmentId(appointment.getId());
         saleRequest.setMetodoPago(metodoPago);
-
-        if (cashReceived != null) {
-            saleRequest.setCashReceived(cashReceived);
-        } else {
-            saleRequest.setCashReceived(null);
-        }
+        saleRequest.setDiscount(BigDecimal.ZERO);
+        saleRequest.setCashReceived(cashReceived);
 
         SaleItemRequest item = new SaleItemRequest();
         item.setServiceId(service.getId());
+        item.setBarberUserId(userId);
         item.setCantidad(1);
         item.setPrecioUnitario(service.getPrecio());
 
@@ -140,18 +135,8 @@ public class BarberSaleService {
 
         Customer customer = appointment.getCustomer();
 
-        int pointsEarned = total.intValue();
-        int customerPointsBalance = 0;
-
-        if (customer != null && customer.getId() != null) {
-            LoyaltyAccount loyaltyAccount = loyaltyAccountRepository
-                    .findByTenant_IdAndCustomer_Id(tenantId, customer.getId())
-                    .orElse(null);
-
-            if (loyaltyAccount != null && loyaltyAccount.getPuntosDisponibles() != null) {
-                customerPointsBalance = loyaltyAccount.getPuntosDisponibles();
-            }
-        }
+        int pointsEarned = saleResponse.getPuntosGanados() != null ? saleResponse.getPuntosGanados() : 0;
+        int customerPointsBalance = saleResponse.getPuntosDisponibles() != null ? saleResponse.getPuntosDisponibles() : 0;
 
         String clienteNombre = "Sin cliente";
         if (customer != null) {

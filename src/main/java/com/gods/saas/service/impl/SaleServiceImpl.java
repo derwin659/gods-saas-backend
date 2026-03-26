@@ -4,9 +4,11 @@ import com.gods.saas.domain.dto.request.CreateSaleRequest;
 import com.gods.saas.domain.dto.request.SaleItemRequest;
 import com.gods.saas.domain.dto.response.SaleItemResponse;
 import com.gods.saas.domain.dto.response.SaleResponse;
+import com.gods.saas.domain.enums.CashRegisterStatus;
 import com.gods.saas.domain.model.AppUser;
 import com.gods.saas.domain.model.Appointment;
 import com.gods.saas.domain.model.Branch;
+import com.gods.saas.domain.model.CashRegister;
 import com.gods.saas.domain.model.Customer;
 import com.gods.saas.domain.model.LoyaltyAccount;
 import com.gods.saas.domain.model.Product;
@@ -17,6 +19,7 @@ import com.gods.saas.domain.model.Tenant;
 import com.gods.saas.domain.repository.AppUserRepository;
 import com.gods.saas.domain.repository.AppointmentRepository;
 import com.gods.saas.domain.repository.BranchRepository;
+import com.gods.saas.domain.repository.CashRegisterRepository;
 import com.gods.saas.domain.repository.CustomerRepository;
 import com.gods.saas.domain.repository.LoyaltyAccountRepository;
 import com.gods.saas.domain.repository.ProductRepository;
@@ -32,7 +35,6 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
@@ -54,7 +56,7 @@ public class SaleServiceImpl implements SaleService {
     private final AppUserRepository userRepository;
     private final AppointmentRepository appointmentRepository;
     private final LoyaltyAccountRepository loyaltyAccountRepository;
-    private OffsetDateTime fechaCreacion;
+    private final CashRegisterRepository cashRegisterRepository;
 
     @Override
     public SaleResponse crearVenta(CreateSaleRequest request) {
@@ -69,6 +71,10 @@ public class SaleServiceImpl implements SaleService {
         if (!branch.getTenant().getId().equals(tenant.getId())) {
             throw new RuntimeException("La sucursal no pertenece al tenant");
         }
+
+        CashRegister cashRegister = cashRegisterRepository
+                .findByTenant_IdAndBranch_IdAndStatus(tenant.getId(), branch.getId(), CashRegisterStatus.OPEN)
+                .orElseThrow(() -> new RuntimeException("No hay una caja abierta en esta sede."));
 
         Customer customer = null;
         if (request.getCustomerId() != null) {
@@ -98,6 +104,10 @@ public class SaleServiceImpl implements SaleService {
             if (!appointment.getTenant().getId().equals(tenant.getId())) {
                 throw new RuntimeException("La cita no pertenece al tenant");
             }
+
+            if (appointment.getBranch() != null && !appointment.getBranch().getId().equals(branch.getId())) {
+                throw new RuntimeException("La cita no pertenece a esta sede");
+            }
         }
 
         String metodoPago = normalizarMetodoPago(request.getMetodoPago());
@@ -108,6 +118,7 @@ public class SaleServiceImpl implements SaleService {
         sale.setCustomer(customer);
         sale.setUser(user);
         sale.setAppointment(appointment);
+        sale.setCashRegister(cashRegister);
         sale.setMetodoPago(metodoPago);
         sale.setFechaCreacion(LocalDateTime.now(ZoneOffset.UTC));
 
@@ -125,6 +136,10 @@ public class SaleServiceImpl implements SaleService {
             BigDecimal precioUnitario = itemRequest.getPrecioUnitario() != null
                     ? BigDecimal.valueOf(itemRequest.getPrecioUnitario()).setScale(2, RoundingMode.HALF_UP)
                     : BigDecimal.ZERO;
+
+            if (itemRequest.getServiceId() != null && itemRequest.getProductId() != null) {
+                throw new RuntimeException("Cada item debe tener solo serviceId o productId, no ambos");
+            }
 
             if (itemRequest.getServiceId() != null) {
                 ServiceEntity service = serviceRepository.findById(itemRequest.getServiceId())
@@ -162,12 +177,25 @@ public class SaleServiceImpl implements SaleService {
                 }
             }
 
+            if (itemRequest.getBarberUserId() != null) {
+                AppUser barberUser = userRepository.findById(itemRequest.getBarberUserId())
+                        .orElseThrow(() -> new RuntimeException(
+                                "Barbero no encontrado: " + itemRequest.getBarberUserId()
+                        ));
+
+                if (!barberUser.getTenant().getId().equals(tenant.getId())) {
+                    throw new RuntimeException("El barbero no pertenece al tenant");
+                }
+
+                item.setBarberUser(barberUser);
+            }
+
             BigDecimal subtotalItem = precioUnitario
                     .multiply(BigDecimal.valueOf(cantidad))
                     .setScale(2, RoundingMode.HALF_UP);
 
-            item.setPrecioUnitario(BigDecimal.valueOf(precioUnitario.doubleValue()));
-            item.setSubtotal(BigDecimal.valueOf(subtotalItem.doubleValue()));
+            item.setPrecioUnitario(precioUnitario);
+            item.setSubtotal(subtotalItem);
 
             items.add(item);
             subtotalVenta = subtotalVenta.add(subtotalItem);
@@ -179,6 +207,8 @@ public class SaleServiceImpl implements SaleService {
                             .serviceNombre(item.getService() != null ? item.getService().getNombre() : null)
                             .productId(item.getProduct() != null ? item.getProduct().getId() : null)
                             .productName(item.getProduct() != null ? item.getProduct().getNombre() : null)
+                            .barberUserId(item.getBarberUser() != null ? item.getBarberUser().getId() : null)
+                            .barberUserName(item.getBarberUser() != null ? item.getBarberUser().getNombre() : null)
                             .cantidad(cantidad)
                             .precioUnitario(precioUnitario)
                             .subtotal(subtotalItem)
@@ -186,7 +216,11 @@ public class SaleServiceImpl implements SaleService {
             );
         }
 
-        BigDecimal discount = BigDecimal.ZERO;
+        BigDecimal discount = safe(request.getDiscount()).setScale(2, RoundingMode.HALF_UP);
+        if (discount.compareTo(subtotalVenta) > 0) {
+            throw new RuntimeException("El descuento no puede ser mayor al subtotal");
+        }
+
         BigDecimal total = subtotalVenta.subtract(discount).setScale(2, RoundingMode.HALF_UP);
 
         BigDecimal cashReceived;
@@ -197,14 +231,16 @@ public class SaleServiceImpl implements SaleService {
                 throw new RuntimeException("cashReceived es obligatorio cuando el método de pago es EFECTIVO");
             }
 
-            cashReceived = BigDecimal.valueOf(request.getCashReceived().doubleValue())
-                    .setScale(2, RoundingMode.HALF_UP);
+            cashReceived = request.getCashReceived().setScale(2, RoundingMode.HALF_UP);
 
             if (cashReceived.compareTo(total) < 0) {
                 throw new RuntimeException("El monto recibido no puede ser menor al total de la venta");
             }
 
             changeAmount = cashReceived.subtract(total).setScale(2, RoundingMode.HALF_UP);
+        } else if ("FREE".equals(metodoPago) || total.compareTo(BigDecimal.ZERO) == 0) {
+            cashReceived = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+            changeAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         } else {
             cashReceived = total;
             changeAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
@@ -230,6 +266,8 @@ public class SaleServiceImpl implements SaleService {
                             .serviceNombre(old.getServiceNombre())
                             .productId(old.getProductId())
                             .productName(old.getProductName())
+                            .barberUserId(old.getBarberUserId())
+                            .barberUserName(old.getBarberUserName())
                             .cantidad(old.getCantidad())
                             .precioUnitario(old.getPrecioUnitario())
                             .subtotal(old.getSubtotal())
@@ -240,7 +278,7 @@ public class SaleServiceImpl implements SaleService {
         int puntosGanados = 0;
         int puntosDisponibles = 0;
 
-        if (customer != null) {
+        if (customer != null && total.compareTo(BigDecimal.ZERO) > 0) {
             puntosGanados = calcularPuntos(total.doubleValue());
 
             loyaltyService.grantSalePoints(
@@ -262,13 +300,18 @@ public class SaleServiceImpl implements SaleService {
 
         return SaleResponse.builder()
                 .saleId(savedSale.getId())
+                .cashRegisterId(savedSale.getCashRegister() != null ? savedSale.getCashRegister().getId() : null)
                 .tenantId(savedSale.getTenant().getId())
                 .branchId(savedSale.getBranch().getId())
                 .customerId(savedSale.getCustomer() != null ? savedSale.getCustomer().getId() : null)
                 .userId(savedSale.getUser() != null ? savedSale.getUser().getId() : null)
                 .appointmentId(savedSale.getAppointment() != null ? savedSale.getAppointment().getId() : null)
                 .metodoPago(savedSale.getMetodoPago())
+                .subtotal(savedSale.getSubtotal())
+                .discount(savedSale.getDiscount())
                 .total(savedSale.getTotal())
+                .cashReceived(savedSale.getCashReceived())
+                .changeAmount(savedSale.getChangeAmount())
                 .fechaCreacion(savedSale.getFechaCreacion())
                 .puntosGanados(puntosGanados)
                 .puntosDisponibles(puntosDisponibles)
@@ -294,6 +337,10 @@ public class SaleServiceImpl implements SaleService {
                 throw new RuntimeException("Cada item debe tener serviceId o productId");
             }
 
+            if (item.getServiceId() != null && item.getProductId() != null) {
+                throw new RuntimeException("Cada item debe tener solo serviceId o productId");
+            }
+
             if (item.getCantidad() == null || item.getCantidad() <= 0) {
                 throw new RuntimeException("La cantidad debe ser mayor a 0");
             }
@@ -308,9 +355,16 @@ public class SaleServiceImpl implements SaleService {
         return switch (metodoPago.trim().toUpperCase()) {
             case "CASH", "EFECTIVO" -> "EFECTIVO";
             case "CARD", "TARJETA" -> "TARJETA";
-            case "TRANSFER", "TRANSFERENCIA", "YAPE", "PLIN", "YAPE_PLIN" -> "YAPE";
+            case "TRANSFER", "TRANSFERENCIA" -> "TRANSFER";
+            case "YAPE" -> "YAPE";
+            case "PLIN" -> "PLIN";
+            case "FREE", "GRATIS", "CORTESIA", "CORTESÍA" -> "FREE";
             default -> metodoPago.trim().toUpperCase();
         };
+    }
+
+    private BigDecimal safe(BigDecimal value) {
+        return value == null ? BigDecimal.ZERO : value;
     }
 
     private int calcularPuntos(double total) {

@@ -2,6 +2,7 @@ package com.gods.saas.domain.repository;
 import com.gods.saas.domain.model.Branch;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -18,4 +19,6 @@ public interface BranchRepository extends JpaRepository<Branch, Long> {
     boolean existsByTenant_IdAndNombreIgnoreCase(Long tenantId, String nombre);
 
     boolean existsByTenant_IdAndNombreIgnoreCaseAndIdNot(Long tenantId, String nombre, Long branchId);
+
+    List<Branch> findByTenantIdAndActivoTrueOrderByNombreAsc(Long tenantId);
 }

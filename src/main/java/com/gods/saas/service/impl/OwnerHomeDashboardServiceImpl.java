@@ -1,9 +1,12 @@
 package com.gods.saas.service.impl;
 
+import com.gods.saas.domain.dto.response.BranchDashboardItemResponse;
 import com.gods.saas.domain.dto.response.OwnerHomeDashboardResponse;
 import com.gods.saas.domain.dto.response.UpcomingAppointmentItemResponse;
 import com.gods.saas.domain.model.Appointment;
+import com.gods.saas.domain.model.Branch;
 import com.gods.saas.domain.repository.AppointmentRepository;
+import com.gods.saas.domain.repository.BranchRepository;
 import com.gods.saas.domain.repository.CustomerRepository;
 import com.gods.saas.domain.repository.SaleRepository;
 import com.gods.saas.domain.repository.UserTenantRoleRepository;
@@ -24,6 +27,7 @@ public class OwnerHomeDashboardServiceImpl implements OwnerHomeDashboardService 
     private final AppointmentRepository appointmentRepository;
     private final CustomerRepository customerRepository;
     private final UserTenantRoleRepository userTenantRolesRepository;
+    private final BranchRepository branchRepository;
 
     private static final ZoneId ZONE = ZoneId.of("America/Lima");
 
@@ -33,22 +37,32 @@ public class OwnerHomeDashboardServiceImpl implements OwnerHomeDashboardService 
         LocalDateTime start = today.atStartOfDay();
         LocalDateTime end = today.atTime(LocalTime.MAX);
 
-        BigDecimal todaySales = saleRepository.sumSalesByDay(tenantId, branchId, start, end);
-        Integer todayAppointments = Math.toIntExact(appointmentRepository.countTodayAppointments(tenantId, branchId, today));
-        Integer activeBarbers = userTenantRolesRepository.countActiveBarbers(tenantId, branchId);
-        Integer newClients = customerRepository.countCustomers(
-                tenantId
+        // RESUMEN GENERAL DEL DUEÑO: TODAS LAS SEDES
+        Long globalBranchId = null;
+
+        BigDecimal todaySales = saleRepository.sumSalesByDay(tenantId, globalBranchId, start, end);
+        Integer todayAppointments = Math.toIntExact(
+                appointmentRepository.countTodayAppointments(tenantId, globalBranchId, today)
         );
-        BigDecimal averageTicket = saleRepository.averageTicketByDay(tenantId, branchId, start, end);
-        BigDecimal todayExpenses = BigDecimal.ZERO; // luego lo conectas a expense/cash movement si ya lo tienes
+        Integer activeBarbers = userTenantRolesRepository.countActiveBarbers(tenantId, globalBranchId);
+        Integer newClients = customerRepository.countCustomers(tenantId);
+        BigDecimal averageTicket = saleRepository.averageTicketByDay(tenantId, globalBranchId, start, end);
+        BigDecimal todayExpenses = BigDecimal.ZERO;
 
         List<UpcomingAppointmentItemResponse> upcomingAppointments =
                 appointmentRepository.findUpcomingAppointmentsForDashboard(
                         tenantId,
-                        branchId,
+                        globalBranchId,
                         today,
                         LocalTime.now(ZONE)
                 ).stream().map(this::mapUpcoming).toList();
+
+        // DESGLOSE POR SEDE
+        List<BranchDashboardItemResponse> branches = branchRepository
+                .findByTenantIdAndActivoTrueOrderByNombreAsc(tenantId)
+                .stream()
+                .map(branch -> mapBranchDashboard(branch, tenantId, today, start, end))
+                .toList();
 
         return OwnerHomeDashboardResponse.builder()
                 .todaySales(nvl(todaySales))
@@ -58,6 +72,42 @@ public class OwnerHomeDashboardServiceImpl implements OwnerHomeDashboardService 
                 .averageTicket(nvl(averageTicket))
                 .todayExpenses(nvl(todayExpenses))
                 .upcomingAppointments(upcomingAppointments)
+                .branches(branches)
+                .build();
+    }
+
+    private BranchDashboardItemResponse mapBranchDashboard(
+            Branch branch,
+            Long tenantId,
+            LocalDate today,
+            LocalDateTime start,
+            LocalDateTime end
+    ) {
+        Long currentBranchId = branch.getId();
+
+        BigDecimal branchTodaySales = saleRepository.sumSalesByDay(
+                tenantId, currentBranchId, start, end
+        );
+
+        Integer branchTodayAppointments = Math.toIntExact(
+                appointmentRepository.countTodayAppointments(tenantId, currentBranchId, today)
+        );
+
+        Integer branchActiveBarbers = userTenantRolesRepository.countActiveBarbers(
+                tenantId, currentBranchId
+        );
+
+        BigDecimal branchAverageTicket = saleRepository.averageTicketByDay(
+                tenantId, currentBranchId, start, end
+        );
+
+        return BranchDashboardItemResponse.builder()
+                .branchId(branch.getId())
+                .branchName(branch.getNombre())
+                .todaySales(nvl(branchTodaySales))
+                .todayAppointments(nvl(branchTodayAppointments))
+                .activeBarbers(nvl(branchActiveBarbers))
+                .averageTicket(nvl(branchAverageTicket))
                 .build();
     }
 
