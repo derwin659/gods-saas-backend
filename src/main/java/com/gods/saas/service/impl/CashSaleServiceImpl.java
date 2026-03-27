@@ -18,6 +18,7 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.stream.Collectors;
 
@@ -32,6 +33,7 @@ public class CashSaleServiceImpl implements CashSaleService {
     private final SaleService saleService;
     private final CustomerRepository customerRepository;
     private final SaleItemRepository saleItemRepository;
+    private final TenantTimeService tenantTimeService;
 
     @Override
     public SaleResponse createCashSale(Long tenantId, Long branchId, Long userId, CreateCashSaleRequest request) {
@@ -87,12 +89,19 @@ public class CashSaleServiceImpl implements CashSaleService {
     @Override
     @Transactional(readOnly = true)
     public List<SaleResponse> getTodaySales(Long tenantId, Long branchId) {
-        LocalDate today = LocalDate.now();
+        ZoneId zoneId = tenantTimeService.getZone(tenantId);
+
+        LocalDate today = LocalDate.now(zoneId);
         LocalDateTime from = today.atStartOfDay();
         LocalDateTime to = today.plusDays(1).atStartOfDay();
 
         return saleRepository
-                .findByTenant_IdAndBranch_IdAndFechaCreacionBetweenOrderByFechaCreacionDesc(tenantId, branchId, from, to)
+                .findByTenant_IdAndBranch_IdAndFechaCreacionGreaterThanEqualAndFechaCreacionLessThanOrderByFechaCreacionDesc(
+                        tenantId,
+                        branchId,
+                        from,
+                        to
+                )
                 .stream()
                 .map(sale -> mapResponse(sale, 0))
                 .collect(Collectors.toList());

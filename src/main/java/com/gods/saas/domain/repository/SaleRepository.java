@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
@@ -145,11 +146,11 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
     BigDecimal sumTotalByCashRegisterId(@Param("cashRegisterId") Long cashRegisterId);
 
     @Query("""
-        select coalesce(sum(s.total), 0)
-        from Sale s
-        where s.cashRegister.id = :cashRegisterId
-          and s.metodoPago = 'CASH'
-        """)
+    select coalesce(sum(s.total), 0)
+    from Sale s
+    where s.cashRegister.id = :cashRegisterId
+      and upper(trim(s.metodoPago)) in ('EFECTIVO', 'CASH')
+""")
     BigDecimal sumCashTotalByCashRegisterId(@Param("cashRegisterId") Long cashRegisterId);
 
     Optional<Sale> findByIdAndTenant_Id(Long saleId, Long tenantId);
@@ -341,4 +342,11 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
     );
 
     Optional<Sale> findByIdAndTenant_IdAndBranch_Id(Long saleId, Long tenantId, Long branchId);
+
+    List<Sale> findByTenant_IdAndBranch_IdAndFechaCreacionGreaterThanEqualAndFechaCreacionLessThanOrderByFechaCreacionDesc(
+            Long tenantId,
+            Long branchId,
+            LocalDateTime from,
+            LocalDateTime to
+    );
 }
