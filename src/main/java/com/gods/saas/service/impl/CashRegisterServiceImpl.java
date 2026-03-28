@@ -108,14 +108,14 @@ public class CashRegisterServiceImpl implements CashRegisterService {
         System.out.println("CLOSE CASH => tenantId=" + tenantId + " branchId=" + branchId);
         CashRegister cashRegister = cashRegisterRepository
                 .findByIdAndTenant_Id(cashRegisterId, tenantId)
-                .orElseThrow(() -> new IllegalStateException("Caja no encontrada"));
-
-        if (!cashRegister.getStatus().equals(CashRegisterStatus.OPEN)) {
-            throw new IllegalStateException("La caja ya no está abierta.");
-        }
+                .orElseThrow(() -> new IllegalStateException("Caja no encontrada."));
 
         if (!cashRegister.getBranch().getId().equals(branchId)) {
             throw new IllegalStateException("La caja no pertenece a esta sede.");
+        }
+
+        if (cashRegister.getStatus() != CashRegisterStatus.OPEN) {
+            throw new IllegalStateException("La caja ya no está abierta.");
         }
 
         BigDecimal openingAmount = safe(cashRegister.getOpeningAmount());
