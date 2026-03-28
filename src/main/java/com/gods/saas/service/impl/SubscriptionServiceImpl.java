@@ -108,7 +108,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         Subscription subscription = Subscription.builder()
                 .tenantId(tenantId)
                 .plan("STARTER")
-                .precioMensual(9.0)
+                .precioMensual(39.0)
                 .estado(STATUS_TRIAL)
                 .fechaInicio(now)
                 .fechaRenovacion(now.plusDays(7))
@@ -122,7 +122,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 .loyaltyEnabled(true)
                 .promotionsEnabled(true)
                 .billingCycle("MONTHLY")
-                .currency("USD")
+                .currency("PEN")
                 .observaciones("Trial inicial automático")
                 .createdAt(now)
                 .updatedAt(now)
@@ -143,7 +143,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         sub.setEstado(STATUS_ACTIVE);
         sub.setTrial(false);
         sub.setBillingCycle("MONTHLY");
-        sub.setCurrency("USD");
+        sub.setCurrency("PEN");
         sub.setFechaInicio(now);
         sub.setFechaRenovacion(now.plusDays(30));
         sub.setFechaFin(now.plusDays(30));
@@ -262,7 +262,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         sub.setEstado(STATUS_ACTIVE);
         sub.setTrial(false);
         sub.setBillingCycle(normalizeBillingCycle(payment.getRequestedBillingCycle()));
-        sub.setCurrency("USD");
+        sub.setCurrency("PEN");
         sub.setFechaInicio(now);
         sub.setFechaRenovacion(now.plusDays(days));
         sub.setFechaFin(now.plusDays(days));
@@ -421,8 +421,8 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
     private double monthlyPrice(String plan) {
         return switch (plan) {
-            case "STARTER" -> 35.0;
-            case "PRO" -> 75.0;
+            case "STARTER" -> 39.0;
+            case "PRO" -> 79.0;
             case "GODS_AI" -> 149.0;
             default -> throw new BusinessException("PLAN_INVALID", "Plan no válido");
         };
@@ -441,7 +441,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         switch (normalizedPlan) {
             case "STARTER" -> {
                 sub.setPlan("STARTER");
-                sub.setPrecioMensual(35.0);
+                sub.setPrecioMensual(39.0);
                 sub.setMaxBranches(1);
                 sub.setMaxBarbers(5);
                 sub.setMaxAdmins(1);
@@ -451,7 +451,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             }
             case "PRO" -> {
                 sub.setPlan("PRO");
-                sub.setPrecioMensual(75.0);
+                sub.setPrecioMensual(79.0);
                 sub.setMaxBranches(3);
                 sub.setMaxBarbers(15);
                 sub.setMaxAdmins(3);
