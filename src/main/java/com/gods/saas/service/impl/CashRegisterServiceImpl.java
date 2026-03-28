@@ -107,8 +107,16 @@ public class CashRegisterServiceImpl implements CashRegisterService {
         autoCloseOpenRegisterIfExpired(tenantId, branchId);
         System.out.println("CLOSE CASH => tenantId=" + tenantId + " branchId=" + branchId);
         CashRegister cashRegister = cashRegisterRepository
-                .findByTenant_IdAndBranch_IdAndStatus(tenantId, branchId, CashRegisterStatus.OPEN)
-                .orElseThrow(() -> new IllegalStateException("No hay una caja abierta en esta sede."));
+                .findByIdAndTenant_Id(cashRegisterId, tenantId)
+                .orElseThrow(() -> new IllegalStateException("Caja no encontrada"));
+
+        if (!cashRegister.getStatus().equals(CashRegisterStatus.OPEN)) {
+            throw new IllegalStateException("La caja ya no está abierta.");
+        }
+
+        if (!cashRegister.getBranch().getId().equals(branchId)) {
+            throw new IllegalStateException("La caja no pertenece a esta sede.");
+        }
 
         BigDecimal openingAmount = safe(cashRegister.getOpeningAmount());
         BigDecimal salesCash = safe(saleRepository.sumCashTotalByCashRegisterId(cashRegister.getId()));
