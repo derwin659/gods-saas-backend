@@ -57,6 +57,7 @@ public class SaleServiceImpl implements SaleService {
     private final LoyaltyAccountRepository loyaltyAccountRepository;
     private final CashRegisterRepository cashRegisterRepository;
     private final TenantTimeService tenantTimeService;
+    private final CustomerCutHistoryService customerCutHistoryService;
 
     @Override
     public SaleResponse crearVenta(CreateSaleRequest request) {
@@ -226,6 +227,20 @@ public class SaleServiceImpl implements SaleService {
             );
         }
 
+        boolean hasHaircutService = items.stream()
+                .map(SaleItem::getService)
+                .filter(Objects::nonNull)
+                .anyMatch(this::isHaircutService);
+
+        boolean hasCutData =
+                hasText(request.getCutType()) ||
+                        hasText(request.getCutDetail()) ||
+                        hasText(request.getCutObservations());
+
+        if (hasHaircutService && !hasText(request.getCutType())) {
+            throw new RuntimeException("Debes registrar el corte realizado.");
+        }
+
         if (user == null && uniqueBarberUserIdFromItems != null && !multipleBarbersInItems) {
             user = userRepository.findById(uniqueBarberUserIdFromItems)
                     .orElseThrow(() -> new RuntimeException("Barbero principal no encontrado"));
@@ -274,6 +289,12 @@ public class SaleServiceImpl implements SaleService {
         sale.setItems(items);
 
         Sale savedSale = saleRepository.save(sale);
+        customerCutHistoryService.registerFromSale(
+                savedSale,
+                request.getCutType(),
+                request.getCutDetail(),
+                request.getCutObservations()
+        );
 
         for (int i = 0; i < savedSale.getItems().size(); i++) {
             SaleItem savedItem = savedSale.getItems().get(i);
@@ -294,6 +315,7 @@ public class SaleServiceImpl implements SaleService {
                             .build()
             );
         }
+
 
         int puntosGanados = 0;
         int puntosDisponibles = 0;
@@ -364,7 +386,11 @@ public class SaleServiceImpl implements SaleService {
             if (item.getCantidad() == null || item.getCantidad() <= 0) {
                 throw new RuntimeException("La cantidad debe ser mayor a 0");
             }
+
+
         }
+
+
     }
 
     private String normalizarMetodoPago(String metodoPago) {
@@ -392,5 +418,29 @@ public class SaleServiceImpl implements SaleService {
             return 0;
         }
         return (int) Math.floor(total * POINTS_PER_SOL);
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
+    }
+
+    private String clean(String value) {
+        return hasText(value) ? value.trim() : null;
+    }
+
+    private boolean isHaircutService(ServiceEntity service) {
+        String categoria = service.getCategoria() == null
+                ? ""
+                : service.getCategoria().trim().toUpperCase();
+
+        String nombre = service.getNombre() == null
+                ? ""
+                : service.getNombre().trim().toUpperCase();
+
+        return "CORTE".equals(categoria)
+                || "HAIRCUT".equals(categoria)
+                || nombre.contains("CORTE")
+                || nombre.contains("FADE")
+                || nombre.contains("TAPER");
     }
 }

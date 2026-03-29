@@ -21,6 +21,7 @@ import com.gods.saas.domain.repository.projection.LastVisitProjection;
 import com.gods.saas.service.impl.impl.LoyaltyService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
@@ -48,20 +49,45 @@ public class CustomerService {
 
     @Transactional
     public Customer registrarCliente(VentaRapidaRequest req) {
-        customerRepository.findByTelefono(req.getPhone())
-                .ifPresent(c -> {
-                    throw new RuntimeException("El teléfono ya está registrado");
-                });
+        throw new IllegalStateException("Usa registrarCliente(tenantId, req) para respetar multi-tenant");
+    }
+
+    @Transactional
+    public Customer registrarCliente(Long tenantId, VentaRapidaRequest req) {
+        if (tenantId == null) {
+            throw new RuntimeException("tenantId es obligatorio");
+        }
+
+        if (req.getPhone() == null || req.getPhone().isBlank()) {
+            throw new RuntimeException("El teléfono es obligatorio");
+        }
+
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new RuntimeException("Tenant no encontrado"));
+
+        String telefono = req.getPhone().trim();
+
+        if (customerRepository.existsByTenant_IdAndTelefono(tenantId, telefono)) {
+            throw new RuntimeException("El teléfono ya está registrado en esta barbería");
+        }
 
         Customer newClient = Customer.builder()
-                .telefono(req.getPhone())
+                .tenant(tenant)
+                .telefono(telefono)
                 .nombres(req.getNombre())
                 .apellidos(req.getApellido())
                 .fechaNacimiento(req.getFechaNacimiento())
-                .origenCliente(req.getOrigenCliente())
+                .origenCliente(req.getOrigenCliente() != null ? req.getOrigenCliente() : "CAJA")
                 .phoneVerified(false)
                 .fechaRegistro(LocalDateTime.now())
                 .fechaActualizacion(LocalDateTime.now())
+                .puntosDisponibles(0)
+                .migrated(false)
+                .appActivated(false)
+                .welcomeBonusGranted(false)
+                .activationBonusGranted(false)
+                .activo(true)
+                .source("INTERNAL")
                 .build();
 
         return customerRepository.save(newClient);
@@ -82,9 +108,70 @@ public class CustomerService {
         return customerRepository.save(customer);
     }
 
+    @Transactional
+    public Customer actualizarCliente(Long tenantId, Long customerId, ActualizarClienteRequest req) {
+        Customer customer = customerRepository.findByIdAndTenant_IdAndActivoTrue(customerId, tenantId)
+                .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
+
+        if (req.getNombre() != null && !req.getNombre().isBlank()) {
+            customer.setNombres(req.getNombre().trim());
+        }
+
+        if (req.getApellido() != null) {
+            customer.setApellidos(req.getApellido().trim());
+        }
+
+        if (req.getEmail() != null) {
+            String email = req.getEmail().trim();
+            if (!email.isBlank()) {
+                customerRepository.findByEmailAndTenantId(email, tenantId)
+                        .filter(existing -> !existing.getId().equals(customerId))
+                        .ifPresent(existing -> {
+                            throw new RuntimeException("El email ya está registrado en esta barbería");
+                        });
+                customer.setEmail(email);
+            } else {
+                customer.setEmail(null);
+            }
+        }
+
+        if (req.getFechaNacimiento() != null) {
+            customer.setFechaNacimiento(req.getFechaNacimiento());
+        }
+
+        customer.setFechaActualizacion(LocalDateTime.now());
+        return customerRepository.save(customer);
+    }
+
+    @Transactional
+    public void eliminarClienteOwner(Long tenantId, Long customerId) {
+        Customer customer = customerRepository.findByIdAndTenant_IdAndActivoTrue(customerId, tenantId)
+                .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
+
+        customer.setActivo(false);
+        customer.setFechaActualizacion(LocalDateTime.now());
+        customerRepository.save(customer);
+    }
+
+    public List<Customer> listarClientesOwner(Long tenantId, String q, int limit) {
+        int safeLimit = Math.min(Math.max(limit, 1), 100);
+        PageRequest pageable = PageRequest.of(0, safeLimit);
+
+        if (q == null || q.isBlank()) {
+            return customerRepository.findByTenant_IdAndActivoTrueOrderByFechaRegistroDesc(tenantId, pageable);
+        }
+
+        return customerRepository.searchByNameOrPhone(tenantId, q.strip(), pageable);
+    }
+
+    public Customer obtenerClienteOwner(Long tenantId, Long customerId) {
+        return customerRepository.findByIdAndTenant_IdAndActivoTrue(customerId, tenantId)
+                .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
+    }
+
 
     public Customer obtenerClientePorTelefono(Long tenantId, String phone) {
-        return customerRepository.findByTenantIdAndTelefono(tenantId, phone)
+        return customerRepository.findByTenant_IdAndTelefonoAndActivoTrue(tenantId, phone)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cliente no encontrado"));
     }
 
@@ -123,7 +210,7 @@ public class CustomerService {
             throw new RuntimeException("Código expirado");
         }
 
-        Customer customer = customerRepository.findByPhonePendiente(nuevoTelefono)
+        Customer customer = customerRepository.findByPhonePendienteAndTenantId(nuevoTelefono, tenantId)
                 .orElseThrow(() -> new RuntimeException("No hay cliente con solicitud de cambio"));
 
         customer.setTelefono(nuevoTelefono);
@@ -258,6 +345,7 @@ public class CustomerService {
                 .welcomeBonusGranted(false)
                 .activationBonusGranted(false)
                 .source("APP")
+                .activo(true)
                 .origenCliente("APP")
                 .puntosDisponibles(0)
                 .build();
@@ -288,7 +376,7 @@ public class CustomerService {
     }
 
     public Customer obtenerClientePorId(Long tenantId, Long customerId) {
-        return customerRepository.findByIdAndTenantId(customerId, tenantId)
+        return customerRepository.findByIdAndTenant_IdAndActivoTrue(customerId, tenantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cliente no encontrado"));
     }
 

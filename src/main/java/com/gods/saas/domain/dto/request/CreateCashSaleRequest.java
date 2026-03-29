@@ -1,6 +1,5 @@
 package com.gods.saas.domain.dto.request;
 
-
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -16,4 +15,8 @@ public class CreateCashSaleRequest {
     private BigDecimal cashReceived;
     private List<CreateCashSaleItemRequest> items;
 
+    // NUEVO
+    private String cutType;
+    private String cutDetail;
+    private String cutObservations;
 }

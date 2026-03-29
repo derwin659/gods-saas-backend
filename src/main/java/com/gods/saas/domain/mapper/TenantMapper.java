@@ -15,7 +15,7 @@ public class TenantMapper {
                 t.getOwnerName(),
                 t.getCodigo(),
                 t.getPlan(),
-                t.getActive() ? "ACTIVE" : "SUSPENDED",
+                t.getActive() ? "ACTIVA" : "SUSPENDED",
                 t.getFechaCreacion().toString()
         );
     }

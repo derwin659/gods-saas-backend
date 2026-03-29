@@ -72,6 +72,9 @@ public class CashSaleServiceImpl implements CashSaleService {
         saleRequest.setMetodoPago(normalizeMethod(request.getMetodoPago()));
         saleRequest.setDiscount(safe(request.getDiscount()));
         saleRequest.setCashReceived(safe(request.getCashReceived()));
+        saleRequest.setCutType(request.getCutType());
+        saleRequest.setCutDetail(request.getCutDetail());
+        saleRequest.setCutObservations(request.getCutObservations());
         saleRequest.setItems(
                 request.getItems().stream().map(this::toSaleItemRequest).toList()
         );

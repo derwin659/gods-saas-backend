@@ -1,6 +1,5 @@
 package com.gods.saas.domain.dto.request;
 
-
 import lombok.Getter;
 import lombok.Setter;
 
@@ -21,4 +20,8 @@ public class CreateSaleRequest {
     private List<SaleItemRequest> items;
     private BigDecimal discount;
 
+    // NUEVO
+    private String cutType;
+    private String cutDetail;
+    private String cutObservations;
 }

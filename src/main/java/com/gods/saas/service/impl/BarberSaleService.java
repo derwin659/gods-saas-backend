@@ -25,6 +25,7 @@ public class BarberSaleService {
 
     private final AppointmentRepository appointmentRepository;
     private final SaleService saleService;
+    private final CustomerCutHistoryService customerCutHistoryService;
 
     @Transactional
     public CreateSaleFromAppointmentResponse createSaleFromAppointment(
@@ -114,6 +115,9 @@ public class BarberSaleService {
         saleRequest.setMetodoPago(metodoPago);
         saleRequest.setDiscount(BigDecimal.ZERO);
         saleRequest.setCashReceived(cashReceived);
+        saleRequest.setCutType(request.getCutType());
+        saleRequest.setCutDetail(request.getCutDetail());
+        saleRequest.setCutObservations(request.getCutObservations());
 
         SaleItemRequest item = new SaleItemRequest();
         item.setServiceId(service.getId());
@@ -122,13 +126,18 @@ public class BarberSaleService {
         item.setPrecioUnitario(service.getPrecio());
 
         saleRequest.setItems(List.of(item));
+        saleRequest.setCutType(request.getCutType());
+        saleRequest.setCutDetail(request.getCutDetail());
+        saleRequest.setCutObservations(request.getCutObservations());
 
         SaleResponse saleResponse = saleService.crearVenta(saleRequest);
 
         appointment.setEstado("COMPLETADO");
 
         if (request.getNotes() != null && !request.getNotes().isBlank()) {
-            appointment.setNotas(request.getNotes().trim());
+            String notes = request.getNotes().trim();
+            appointment.setNotas(notes);
+            customerCutHistoryService.syncNotesFromSale(tenantId, saleResponse.getSaleId(), notes);
         }
 
         appointmentRepository.save(appointment);
