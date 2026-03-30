@@ -36,23 +36,22 @@ public class RewardRedemptionAdminServiceImpl implements RewardRedemptionAdminSe
 
     @Override
     public RewardRedemptionDetailResponse findByCode(String codigo, Authentication authentication) {
-       /* System.out.printf("entro");
+        System.out.println("imprime codigo {}"+codigo);
         AuthUserInfo auth = authHelper.getUserInfo(authentication);
-        System.out.printf("salio");
-       // validateRole(auth);
-        System.out.printf("salio de nuevo");
         Long tenantId = auth.getTenantId();
+
         if (tenantId == null) {
             throw new RuntimeException("No se pudo determinar el tenant del usuario");
         }
 
         String code = codigo == null ? "" : codigo.trim();
+
         if (code.isEmpty()) {
             throw new RuntimeException("El código es obligatorio");
-        }*/
+        }
 
         RewardRedemption redemption = rewardRedemptionRepository
-                .findByCodigoIgnoreCase(codigo)
+                .findByTenantIdAndCodigoIgnoreCase(tenantId, code)
                 .orElseThrow(() -> new RuntimeException("Código no encontrado"));
 
         return mapToDetail(redemption);
