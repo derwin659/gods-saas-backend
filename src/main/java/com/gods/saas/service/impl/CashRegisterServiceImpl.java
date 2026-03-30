@@ -83,7 +83,7 @@ public class CashRegisterServiceImpl implements CashRegisterService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public CashRegisterResponse getCurrent(Long tenantId, Long branchId) {
         autoCloseOpenRegisterIfExpired(tenantId, branchId);
 
