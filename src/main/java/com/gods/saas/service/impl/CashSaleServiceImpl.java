@@ -4,11 +4,13 @@ import com.gods.saas.domain.dto.request.*;
 import com.gods.saas.domain.dto.response.SaleItemResponse;
 import com.gods.saas.domain.dto.response.SaleResponse;
 import com.gods.saas.domain.enums.CashRegisterStatus;
+import com.gods.saas.domain.model.AppUser;
 import com.gods.saas.domain.model.Appointment;
 import com.gods.saas.domain.model.Customer;
 import com.gods.saas.domain.model.Sale;
 import com.gods.saas.domain.repository.*;
 import com.gods.saas.service.impl.impl.CashSaleService;
+import com.gods.saas.service.impl.impl.LoyaltyService;
 import com.gods.saas.service.impl.impl.SaleService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +36,8 @@ public class CashSaleServiceImpl implements CashSaleService {
     private final CustomerRepository customerRepository;
     private final SaleItemRepository saleItemRepository;
     private final TenantTimeService tenantTimeService;
+    private final CustomerCutHistoryService customerCutHistoryService;
+    private final LoyaltyService loyaltyService;
 
     @Override
     public SaleResponse createCashSale(Long tenantId, Long branchId, Long userId, CreateCashSaleRequest request) {
@@ -277,10 +281,28 @@ public class CashSaleServiceImpl implements CashSaleService {
             throw new RuntimeException("Solo se puede eliminar una venta con caja abierta");
         }
 
-        if (sale.getItems() != null && !sale.getItems().isEmpty()) {
-            saleItemRepository.deleteAll(sale.getItems());
+        // 1) revertir puntos si esta venta generó fidelización
+        if (sale.getCustomer() != null) {
+            AppUser actor = sale.getUser(); // si luego quieres, aquí puedes usar el userId autenticado
+            loyaltyService.revertSalePoints(sale.getTenant(), sale.getCustomer(), actor, sale);
         }
 
+        // 2) borrar historial ligado a la venta
+        customerCutHistoryService.deleteBySale(tenantId, saleId);
+
+        // 3) revertir cita si esta venta salió de una cita
+        if (sale.getAppointment() != null) {
+            sale.getAppointment().setEstado("CONFIRMADO");
+            appointmentRepository.save(sale.getAppointment());
+        }
+
+        // 4) borrar items
+        if (sale.getItems() != null && !sale.getItems().isEmpty()) {
+            saleItemRepository.deleteAll(sale.getItems());
+            sale.getItems().clear();
+        }
+
+        // 5) borrar venta
         saleRepository.delete(sale);
     }
 }

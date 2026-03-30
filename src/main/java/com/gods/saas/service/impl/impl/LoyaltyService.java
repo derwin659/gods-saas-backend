@@ -11,4 +11,7 @@ public interface LoyaltyService {
     void grantWelcomeBonusIfNeeded(Customer customer);
 
     int expirePoints();
+
+    void revertSalePoints(Tenant tenant, Customer customer, AppUser user, Sale sale);
 }
+

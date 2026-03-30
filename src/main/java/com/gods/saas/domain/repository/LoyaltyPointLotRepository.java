@@ -11,4 +11,12 @@ public interface LoyaltyPointLotRepository extends JpaRepository<LoyaltyPointLot
     List<LoyaltyPointLot> findByCustomerIdAndStatusOrderByExpiresAtAsc(Long customerId, String status);
 
     List<LoyaltyPointLot> findByStatusAndExpiresAtBefore(String status, LocalDateTime now);
+
+
+    List<LoyaltyPointLot> findByTenantIdAndCustomerIdAndSourceTypeAndSourceReferenceIdOrderByEarnedAtAsc(
+            Long tenantId,
+            Long customerId,
+            String sourceType,
+            Long sourceReferenceId
+    );
 }

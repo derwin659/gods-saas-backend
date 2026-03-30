@@ -251,4 +251,79 @@ public class LoyaltyServiceImpl implements LoyaltyService {
                     return loyaltyAccountRepository.save(loyalty);
                 });
     }
+
+    @Override
+    public void revertSalePoints(Tenant tenant, Customer customer, AppUser user, Sale sale) {
+        if (tenant == null || customer == null || sale == null || sale.getId() == null) {
+            return;
+        }
+
+        LoyaltyAccount loyalty = loyaltyAccountRepository
+                .findByTenant_IdAndCustomer_Id(tenant.getId(), customer.getId())
+                .orElse(null);
+
+        if (loyalty == null) {
+            return;
+        }
+
+        List<LoyaltyPointLot> saleLots = loyaltyPointLotRepository
+                .findByTenantIdAndCustomerIdAndSourceTypeAndSourceReferenceIdOrderByEarnedAtAsc(
+                        tenant.getId(),
+                        customer.getId(),
+                        "SALE",
+                        sale.getId()
+                );
+
+        if (saleLots.isEmpty()) {
+            return;
+        }
+
+        // Seguridad: si ya se usaron o expiraron puntos de esta venta, no permitas delete físico
+        boolean touchedLots = saleLots.stream().anyMatch(lot ->
+                safeInt(lot.getPointsAvailable()) < safeInt(lot.getPointsEarned())
+        );
+
+        if (touchedLots) {
+            throw new RuntimeException(
+                    "No se puede eliminar la venta porque los puntos generados ya fueron usados o expirados."
+            );
+        }
+
+        int puntosARemover = saleLots.stream()
+                .mapToInt(lot -> safeInt(lot.getPointsEarned()))
+                .sum();
+
+        if (puntosARemover <= 0) {
+            return;
+        }
+
+        int nuevoAcumulado = Math.max(0, safeInt(loyalty.getPuntosAcumulados()) - puntosARemover);
+        int nuevoDisponible = Math.max(0, safeInt(loyalty.getPuntosDisponibles()) - puntosARemover);
+
+        loyalty.setPuntosAcumulados(nuevoAcumulado);
+        loyalty.setPuntosDisponibles(nuevoDisponible);
+        loyalty.setFechaUltimoMovimiento(LocalDateTime.now());
+        loyaltyAccountRepository.save(loyalty);
+
+        LoyaltyMovement mov = new LoyaltyMovement();
+        mov.setTenantId(tenant.getId());
+        mov.setCustomerId(customer.getId());
+        mov.setLoyaltyId(loyalty.getId());
+        mov.setTipo("REVERSAL");
+        mov.setOrigen("SALE_DELETE");
+        mov.setReferenciaId(sale.getId());
+        mov.setDescripcion("Reversa de puntos por eliminación de venta #" + sale.getId());
+        mov.setPuntos(-puntosARemover);
+        mov.setSaldoResultante(nuevoDisponible);
+        mov.setCreadoPor(user != null ? user.getId() : null);
+        mov.setFechaCreacion(LocalDateTime.now(ZoneOffset.UTC));
+        loyaltyMovementRepository.save(mov);
+
+        for (LoyaltyPointLot lot : saleLots) {
+            lot.setPointsAvailable(0);
+            lot.setStatus("REVERSED");
+        }
+
+        loyaltyPointLotRepository.saveAll(saleLots);
+    }
 }

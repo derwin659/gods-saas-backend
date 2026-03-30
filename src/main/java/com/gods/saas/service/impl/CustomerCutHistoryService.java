@@ -172,4 +172,12 @@ public class CustomerCutHistoryService {
         }
         return null;
     }
+
+    @Transactional
+    public int deleteBySale(Long tenantId, Long saleId) {
+        if (tenantId == null || saleId == null) {
+            return 0;
+        }
+        return customerCutHistoryRepository.deleteBySale(tenantId, saleId);
+    }
 }
