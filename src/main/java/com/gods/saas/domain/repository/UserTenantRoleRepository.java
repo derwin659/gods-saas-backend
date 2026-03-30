@@ -7,11 +7,24 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 
 @Repository
 public interface UserTenantRoleRepository extends JpaRepository<UserTenantRole, Long> {
+    boolean existsByUserIdAndTenantIdAndRoleIn(
+            Long userId,
+            Long tenantId,
+            Collection<RoleType> roles
+    );
+
+    boolean existsByUserIdAndTenantIdAndBranchIdAndRoleIn(
+            Long userId,
+            Long tenantId,
+            Long branchId,
+            Collection<RoleType> roles
+    );
 
     List<UserTenantRole> findByUserId(Long userId);
 

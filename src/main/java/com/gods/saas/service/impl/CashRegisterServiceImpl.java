@@ -8,19 +8,8 @@ import com.gods.saas.domain.dto.response.CashRegisterResponse;
 import com.gods.saas.domain.enums.CashMovementType;
 import com.gods.saas.domain.enums.CashRegisterStatus;
 import com.gods.saas.domain.enums.PaymentMethod;
-import com.gods.saas.domain.model.AppUser;
-import com.gods.saas.domain.model.Branch;
-import com.gods.saas.domain.model.CashMovement;
-import com.gods.saas.domain.model.CashRegister;
-import com.gods.saas.domain.model.Tenant;
-import com.gods.saas.domain.model.TenantSettings;
-import com.gods.saas.domain.repository.AppUserRepository;
-import com.gods.saas.domain.repository.BranchRepository;
-import com.gods.saas.domain.repository.CashMovementRepository;
-import com.gods.saas.domain.repository.CashRegisterRepository;
-import com.gods.saas.domain.repository.SaleRepository;
-import com.gods.saas.domain.repository.TenantRepository;
-import com.gods.saas.domain.repository.TenantSettingsRepository;
+import com.gods.saas.domain.model.*;
+import com.gods.saas.domain.repository.*;
 import com.gods.saas.exception.GlobalExceptionHandler;
 import com.gods.saas.service.impl.impl.CashRegisterService;
 import jakarta.persistence.EntityNotFoundException;
@@ -49,6 +38,7 @@ public class CashRegisterServiceImpl implements CashRegisterService {
     private final BranchRepository branchRepository;
     private final AppUserRepository appUserRepository;
     private final TenantSettingsRepository tenantSettingsRepository;
+    private final UserTenantRoleRepository userTenantRoleRepository;
 
     @Override
     public CashRegisterResponse open(Long tenantId, Long branchId, Long openedByUserId, OpenCashRegisterRequest request) {
@@ -160,20 +150,35 @@ public class CashRegisterServiceImpl implements CashRegisterService {
     }
 
     @Override
-    public CashMovementResponse createMovement(Long tenantId, Long branchId, Long cashRegisterId, Long actorUserId, CashMovementRequest request) {
-        AppUser actor = requireOwnerOrAdmin(actorUserId, tenantId);
+    public CashMovementResponse createMovement(
+            Long tenantId,
+            Long branchId,
+            Long cashRegisterId,
+            Long actorUserId,
+            CashMovementRequest request
+    ) {
+        validateCashActor(actorUserId, tenantId);
+
         CashRegister cashRegister = getOpenCashRegisterInBranch(tenantId, branchId, cashRegisterId);
+
+        AppUser actor = appUserRepository.findById(actorUserId)
+                .orElseThrow(() -> new EntityNotFoundException("Usuario autenticado no encontrado."));
 
         BigDecimal amount = safe(request.getAmount());
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalStateException("El monto debe ser mayor a cero.");
         }
 
-        CashMovementType type = request.getType() == null ? CashMovementType.EXPENSE : request.getType();
+        CashMovementType type = request.getType();
+        if (type == null) {
+            throw new IllegalStateException("Debes seleccionar un tipo de movimiento.");
+        }
+
         AppUser barberUser = resolveBarberUser(tenantId, branchId, request.getBarberUserId(), type);
-        PaymentMethod paymentMethod = request.getPaymentMethod() == null ? PaymentMethod.CASH : request.getPaymentMethod();
-        ZoneId zoneId = getZoneIdForTenant(tenantId);
-        LocalDateTime now = LocalDateTime.now(zoneId);
+
+        PaymentMethod paymentMethod = request.getPaymentMethod() == null
+                ? PaymentMethod.CASH
+                : request.getPaymentMethod();
 
         CashMovement movement = CashMovement.builder()
                 .tenant(cashRegister.getTenant())
@@ -186,16 +191,28 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 .amount(amount)
                 .concept(resolveConcept(type, request.getConcept()))
                 .note(trimToNull(request.getNote()))
-                .movementDate(now)
-                .createdAt(now)
                 .build();
 
         return mapMovementResponse(cashMovementRepository.save(movement));
     }
 
+    private void validateCashActor(Long actorUserId, Long tenantId) {
+        boolean allowed = userTenantRoleRepository.existsByUserIdAndTenantIdAndRoleIn(
+                actorUserId,
+                tenantId,
+                List.of(RoleType.OWNER, RoleType.ADMIN)
+        );
+
+        if (!allowed) {
+            throw new IllegalStateException(
+                    "Solo el dueño o un admin pueden registrar gastos y pagos de caja."
+            );
+        }
+    }
+
     @Override
     public CashMovementResponse updateMovement(Long tenantId, Long branchId, Long movementId, Long actorUserId, CashMovementRequest request) {
-        requireOwnerOrAdmin(actorUserId, tenantId);
+        validateCashActor(actorUserId, tenantId);
 
         CashMovement movement = cashMovementRepository.findByIdAndTenant_Id(movementId, tenantId)
                 .orElseThrow(() -> new IllegalStateException("Movimiento no encontrado."));
@@ -230,7 +247,7 @@ public class CashRegisterServiceImpl implements CashRegisterService {
 
     @Override
     public void deleteMovement(Long tenantId, Long branchId, Long movementId, Long actorUserId) {
-        requireOwnerOrAdmin(actorUserId, tenantId);
+        validateCashActor(actorUserId, tenantId);
 
         CashMovement movement = cashMovementRepository.findByIdAndTenant_Id(movementId, tenantId)
                 .orElseThrow(() -> new IllegalStateException("Movimiento no encontrado."));
@@ -394,16 +411,6 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 .build();
     }
 
-    private AppUser requireOwnerOrAdmin(Long userId, Long tenantId) {
-        AppUser user = appUserRepository.findByIdAndTenant_Id(userId, tenantId)
-                .orElseThrow(() -> new IllegalStateException("Usuario no encontrado."));
-
-        String role = user.getRol() == null ? "" : user.getRol().trim().toUpperCase(Locale.ROOT);
-        if (!"OWNER".equals(role) && !"ADMIN".equals(role)) {
-            throw new IllegalStateException("Solo el dueño o un admin pueden registrar gastos y pagos de caja.");
-        }
-        return user;
-    }
 
     private AppUser resolveBarberUser(Long tenantId, Long branchId, Long barberUserId, CashMovementType type) {
         boolean requiresBarber = type == CashMovementType.ADVANCE_BARBER || type == CashMovementType.PAYMENT_BARBER;
