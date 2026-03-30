@@ -36,8 +36,16 @@ public class RewardRedemptionAdminServiceImpl implements RewardRedemptionAdminSe
 
     @Override
     public RewardRedemptionDetailResponse findByCode(String codigo, Authentication authentication) {
-        System.out.println("imprime codigo {}"+codigo);
+        System.out.println("codigo recibido => [" + codigo + "]");
+        System.out.println("authentication null? => " + (authentication == null));
+
         AuthUserInfo auth = authHelper.getUserInfo(authentication);
+
+        System.out.println("auth userId => " + auth.getUserId());
+        System.out.println("auth role => " + auth.getRole());
+        System.out.println("auth tenantId => " + auth.getTenantId());
+        System.out.println("auth branchId => " + auth.getBranchId());
+
         Long tenantId = auth.getTenantId();
 
         if (tenantId == null) {
@@ -56,7 +64,6 @@ public class RewardRedemptionAdminServiceImpl implements RewardRedemptionAdminSe
 
         return mapToDetail(redemption);
     }
-
     @Override
     @Transactional
     public UseRewardRedemptionResponse useRedemption(Long redemptionId, Authentication authentication) {
