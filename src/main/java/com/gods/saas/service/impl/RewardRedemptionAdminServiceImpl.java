@@ -36,34 +36,44 @@ public class RewardRedemptionAdminServiceImpl implements RewardRedemptionAdminSe
 
     @Override
     public RewardRedemptionDetailResponse findByCode(String codigo, Authentication authentication) {
-        System.out.println("codigo recibido => [" + codigo + "]");
-        System.out.println("authentication null? => " + (authentication == null));
-
-        AuthUserInfo auth = authHelper.getUserInfo(authentication);
-
-        System.out.println("auth userId => " + auth.getUserId());
-        System.out.println("auth role => " + auth.getRole());
-        System.out.println("auth tenantId => " + auth.getTenantId());
-        System.out.println("auth branchId => " + auth.getBranchId());
-
-        Long tenantId = auth.getTenantId();
-
-        if (tenantId == null) {
-            throw new RuntimeException("No se pudo determinar el tenant del usuario");
-        }
-
         String code = codigo == null ? "" : codigo.trim();
+
+        System.out.println("codigo recibido => [" + codigo + "]");
+        System.out.println("codigo normalizado => [" + code + "]");
+        System.out.println("authentication null? => " + (authentication == null));
 
         if (code.isEmpty()) {
             throw new RuntimeException("El código es obligatorio");
         }
 
-        RewardRedemption redemption = rewardRedemptionRepository
-                .findByTenantIdAndCodigoIgnoreCase(tenantId, code)
-                .orElseThrow(() -> new RuntimeException("Código no encontrado"));
+        Long tenantId = null;
+
+        if (authentication != null) {
+            AuthUserInfo auth = authHelper.getUserInfo(authentication);
+
+            System.out.println("auth userId => " + (auth != null ? auth.getUserId() : null));
+            System.out.println("auth role => " + (auth != null ? auth.getRole() : null));
+            System.out.println("auth tenantId => " + (auth != null ? auth.getTenantId() : null));
+            System.out.println("auth branchId => " + (auth != null ? auth.getBranchId() : null));
+
+            tenantId = auth != null ? auth.getTenantId() : null;
+        }
+
+        RewardRedemption redemption;
+
+        if (tenantId != null) {
+            redemption = rewardRedemptionRepository
+                    .findByTenantIdAndCodigoIgnoreCase(tenantId, code)
+                    .orElseThrow(() -> new RuntimeException("Código no encontrado"));
+        } else {
+            redemption = rewardRedemptionRepository
+                    .findByCodigoIgnoreCase(code)
+                    .orElseThrow(() -> new RuntimeException("Código no encontrado"));
+        }
 
         return mapToDetail(redemption);
     }
+
     @Override
     @Transactional
     public UseRewardRedemptionResponse useRedemption(Long redemptionId, Authentication authentication) {
