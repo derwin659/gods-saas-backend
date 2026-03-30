@@ -84,21 +84,18 @@ public class SecurityConfig {
                                 "/**/*.svg"
                         ).permitAll()
 
-                        // PRIMERO las rutas más específicas
                         .requestMatchers("/api/admin/rewards/redemptions/**")
                         .hasAnyRole("OWNER", "ADMIN", "BARBER")
                         .requestMatchers("/api/super-admin/**").hasRole("SUPER_ADMIN")
                         .requestMatchers("/api/internal/users/**").hasAnyRole("OWNER", "ADMIN")
                         .requestMatchers("/api/internal/users/login/**").hasAnyRole("OWNER", "ADMIN")
                         .requestMatchers("/api/internal/me").hasAnyRole("OWNER", "ADMIN", "BARBER")
+                        .requestMatchers("/api/owner/cash-registers/**").hasAnyRole("OWNER", "ADMIN")
                         .requestMatchers("/api/owner/**").hasRole("OWNER")
                         .requestMatchers("/api/cash-register/current").hasAnyRole("OWNER", "BARBER")
                         .requestMatchers("/api/barber/**").hasAnyRole("OWNER", "ADMIN", "BARBER")
                         .requestMatchers("/api/sales/**").hasAnyRole("OWNER", "ADMIN", "BARBER")
                         .requestMatchers("/api/sales").hasAnyRole("OWNER", "ADMIN", "BARBER")
-
-                        // DESPUÉS la ruta general
-
 
                         .anyRequest().authenticated()
                 )

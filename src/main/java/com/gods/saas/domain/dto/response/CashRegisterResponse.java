@@ -5,6 +5,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Builder
@@ -29,4 +30,8 @@ public class CashRegisterResponse {
     private BigDecimal cashSalesTotal;
     private BigDecimal movementsIncome;
     private BigDecimal movementsExpense;
+    private BigDecimal movementsExpenseGeneral;
+    private BigDecimal movementsAdvanceBarber;
+    private BigDecimal movementsPaymentBarber;
+    private List<CashMovementResponse> movements;
 }
