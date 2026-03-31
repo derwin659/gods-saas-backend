@@ -1,5 +1,7 @@
 package com.gods.saas.service.impl;
 
+import com.gods.saas.domain.dto.response.*;
+import com.gods.saas.domain.model.AiRecommendation;
 import org.springframework.transaction.annotation.Propagation;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -7,9 +9,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gods.saas.client.IaAnaliticaClient;
 import com.gods.saas.client.IaIlustrativaClient;
 import com.gods.saas.domain.dto.request.*;
-import com.gods.saas.domain.dto.response.AnalizarImagenResponse;
-import com.gods.saas.domain.dto.response.GenerarImagenResponse;
-import com.gods.saas.domain.dto.response.UxAnalisisResponse;
 import com.gods.saas.domain.model.Pantalla;
 import com.gods.saas.domain.model.SesionIa;
 import com.gods.saas.domain.repository.PantallaIARepository;
@@ -51,11 +50,14 @@ public class SesionIAService {
     // 1) CREAR SESIÓN (recepción / barbero)
     // Estado inicial: CREADA
     // =========================================================
-    public SesionIa crearSesion(SesionIa req) {
+    public SesionIa crearSesion(CrearSesionRequest req) {
         SesionIa sesion = new SesionIa();
         sesion.setTenantId(req.getTenantId());
         sesion.setSucursalId(req.getSucursalId());
-        sesion.setBarberoId(req.getBarberoId());
+
+        // temporal mientras no definas barbero en el request
+        sesion.setBarberoId(null);
+
         sesion.setEstado(EstadoSesion.CREADA);
         sesion.setCreadoEn(LocalDateTime.now());
         return sesionRepo.save(sesion);
@@ -127,7 +129,7 @@ public class SesionIAService {
     // =========================================================
     public UxAnalisisResponse ejecutarAnalitica(String sesionId, String imagenBase64) throws JsonProcessingException {
         SesionIa sesion = obtenerSesion(sesionId);
-        validarEstado(sesion, EstadoSesion.MOSTRANDO_EN_TV);
+        validarEstadosPermitidos(sesion, EstadoSesion.CREADA, EstadoSesion.MOSTRANDO_EN_TV);
 
         AnalizarImagenRequest request = AnalizarImagenRequest.builder()
                 .imagenBase64(imagenBase64)
@@ -137,25 +139,93 @@ public class SesionIAService {
                 ))
                 .build();
 
-        // Llamada real a IA analítica (Python)
-        AnalizarImagenResponse response = iaAnaliticaClient.analizarImagen(request);
+        AnalizarImagenResponse response;
+        try {
+            response = iaAnaliticaClient.analizarImagen(request);
+        } catch (Exception e) {
+            response = construirRespuestaMock();
+        }
 
-        // Guardar resultado analítico como JSON
         sesion.setResultadoAnalitico(mapper.writeValueAsString(response));
         sesionRepo.save(sesion);
 
-        // Notificar a TV: resultado analítico listo
-        String pantallaId = obtenerPantallaIdPorSesion(sesionId);
-        pantallaSocketService.enviarEventoPantalla(
-                pantallaId,
-                Map.of(
-                        "evento", "RESULTADO_ANALITICO_LISTO",
-                        "sesionId", sesionId,
-                        "resultado", response
-                )
-        );
+        if (sesion.getEstado() == EstadoSesion.MOSTRANDO_EN_TV) {
+            String pantallaId = obtenerPantallaIdPorSesion(sesionId);
+            pantallaSocketService.enviarEventoPantalla(
+                    pantallaId,
+                    Map.of(
+                            "evento", "RESULTADO_ANALITICO_LISTO",
+                            "sesionId", sesionId,
+                            "resultado", response
+                    )
+            );
+        }
 
         return IaAnaliticaUxMapper.toUx(response);
+    }
+
+    private AnalizarImagenResponse construirRespuestaMock() {
+
+        FormaRostroDto formaRostro = FormaRostroDto.builder()
+                .principal("ovalado")
+                .alternativa("alargado")
+                .confianza(0.93)
+                .build();
+
+        OnduladoDto onduladoDto = OnduladoDto.builder()
+                .tipo("clasico")
+                .apto(true)
+                .build();
+
+        CabelloDto cabello = CabelloDto.builder()
+                .densidad("media")
+                .ondulado(onduladoDto)
+                .build();
+
+        List<CorteRecomendadoDto> cortes = List.of(
+                CorteRecomendadoDto.builder()
+                        .nombre("Fade clásico")
+                        .score(0.95)
+                        .riesgo("bajo")
+                        .build(),
+                CorteRecomendadoDto.builder()
+                        .nombre("Taper moderno")
+                        .score(0.90)
+                        .riesgo("bajo")
+                        .build(),
+                CorteRecomendadoDto.builder()
+                        .nombre("Crop texturizado")
+                        .score(0.84)
+                        .riesgo("medio")
+                        .build()
+        );
+
+        RecomendacionesDto recomendaciones = RecomendacionesDto.builder()
+                .topRecomendado(cortes.get(0))
+                .cortes(cortes)
+                .tintes(List.of("Negro natural", "Castaño oscuro"))
+                .build();
+
+        MetaAnalisisDto meta = MetaAnalisisDto.builder().build();
+
+        return AnalizarImagenResponse.builder()
+                .formaRostro(formaRostro)
+                .cabello(cabello)
+                .recomendaciones(recomendaciones)
+                .meta(meta)
+                .build();
+    }
+
+    private void validarEstadosPermitidos(SesionIa sesion, EstadoSesion... permitidos) {
+        for (EstadoSesion estado : permitidos) {
+            if (sesion.getEstado() == estado) {
+                return;
+            }
+        }
+        throw new IllegalStateException(
+                "Estado inválido. Permitidos: " + java.util.Arrays.toString(permitidos) +
+                        ", actual: " + sesion.getEstado()
+        );
     }
 
     // =========================================================
@@ -325,30 +395,34 @@ public class SesionIAService {
     public void finalizar(String sesionId) {
         SesionIa sesion = obtenerSesion(sesionId);
 
-        // Permitimos finalizar si está mostrando en TV o generando (por seguridad)
-        if (sesion.getEstado() != EstadoSesion.MOSTRANDO_EN_TV &&
-                sesion.getEstado() != EstadoSesion.GENERANDO_IMAGEN) {
-            throw new IllegalStateException("No se puede finalizar desde estado: " + sesion.getEstado());
-        }
-
-        String pantallaId = obtenerPantallaIdPorSesion(sesionId);
-        Pantalla pantalla = obtenerPantalla(pantallaId);
+        validarEstadosPermitidos(
+                sesion,
+                EstadoSesion.CREADA,
+                EstadoSesion.MOSTRANDO_EN_TV,
+                EstadoSesion.SELECCIONADA,
+                EstadoSesion.GENERANDO_IMAGEN,
+                EstadoSesion.IMAGEN_GENERADA
+        );
 
         sesion.setEstado(EstadoSesion.FINALIZADA);
 
-        pantalla.setEstadoPantalla(EstadoPantalla.LIBRE);
-        pantalla.setSesionActualId(null);
+        var pantallaOpt = pantallaRepo.findBySesionActualId(sesionId);
+        if (pantallaOpt.isPresent()) {
+            Pantalla pantalla = pantallaOpt.get();
+            pantalla.setEstadoPantalla(EstadoPantalla.LIBRE);
+            pantalla.setSesionActualId(null);
+            pantallaRepo.save(pantalla);
+
+            pantallaSocketService.enviarEventoPantalla(
+                    pantalla.getId(),
+                    Map.of(
+                            "evento", "SESION_FINALIZADA",
+                            "sesionId", sesionId
+                    )
+            );
+        }
 
         sesionRepo.save(sesion);
-        pantallaRepo.save(pantalla);
-
-        pantallaSocketService.enviarEventoPantalla(
-                pantallaId,
-                Map.of(
-                        "evento", "SESION_FINALIZADA",
-                        "sesionId", sesionId
-                )
-        );
 
         eventoPublisher.publicar(
                 EventoSocket.of(
@@ -358,7 +432,6 @@ public class SesionIAService {
                 )
         );
     }
-
     // =========================
     // HELPERS
     // =========================

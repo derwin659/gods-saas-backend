@@ -1,6 +1,7 @@
 package com.gods.saas.web.controller;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.gods.saas.domain.dto.request.CrearSesionRequest;
 import com.gods.saas.domain.dto.request.GenerarImagenRequest;
 import com.gods.saas.domain.dto.request.SeleccionClienteRequest;
 import com.gods.saas.domain.dto.response.SeleccionClienteResponse;
@@ -23,7 +24,7 @@ public class IaSesionController {
     // 1️⃣ CREAR SESIÓN (recepción / barbero)
     // =====================================================
     @PostMapping("/create")
-    public SesionIa crearSesion(@RequestBody SesionIa request) {
+    public SesionIa crearSesion(@RequestBody CrearSesionRequest request) {
         return sesionService.crearSesion(request);
     }
 
@@ -50,7 +51,7 @@ public class IaSesionController {
 
     // =====================================================
     // 4️⃣ IA ANALÍTICA (rostro, recomendaciones)
-    // Requiere: MOSTRANDO_EN_TV
+
     // =====================================================
     @PostMapping("/{sesionId}/analitica")
     public UxAnalisisResponse ejecutarAnalitica(
@@ -99,4 +100,5 @@ public class IaSesionController {
     public void finalizar(@PathVariable String sesionId) {
         sesionService.finalizar(sesionId);
     }
+
 }
