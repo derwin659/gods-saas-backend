@@ -22,7 +22,7 @@ public class SesionIa {
     @Column(name = "sucursal_id", nullable = false)
     private Long sucursalId;
 
-    @Column(name = "barbero_id", nullable = false)
+    @Column(name = "barbero_id", nullable = true)
     private Long barberoId;
 
     @Enumerated(EnumType.STRING)
@@ -58,4 +58,3 @@ public class SesionIa {
         }
     }
 }
-

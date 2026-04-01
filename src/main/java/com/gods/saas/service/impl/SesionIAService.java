@@ -52,11 +52,12 @@ public class SesionIAService {
     // =========================================================
     public SesionIa crearSesion(CrearSesionRequest req) {
         SesionIa sesion = new SesionIa();
+
+
         sesion.setTenantId(req.getTenantId());
         sesion.setSucursalId(req.getSucursalId());
-
+        sesion.setBarberoId(req.getBarberoId()); // puede ser null
         // temporal mientras no definas barbero en el request
-        sesion.setBarberoId(null);
 
         sesion.setEstado(EstadoSesion.CREADA);
         sesion.setCreadoEn(LocalDateTime.now());
