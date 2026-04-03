@@ -9,7 +9,7 @@ import lombok.*;
 @Builder
 public class TinteRequest {
 
-    private boolean aplicar;
+    private Boolean aplicar;
 
     private String color;
 }

@@ -1,7 +1,23 @@
 spring:
-  profiles:
-    active: prod   # 👈 por defecto local
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+  task:
+    scheduling:
+      pool:
+        size: 2
+  jpa:
+    hibernate:
+      ddl-auto: none
+    show-sql: false
+    properties:
+      hibernate.format_sql: false
+      hibernate.jdbc.time_zone: UTC
+    open-in-view: false
 
+  profiles:
+    active: prod
 
   messages:
     basename: messages
@@ -11,6 +27,13 @@ spring:
     pathmatch:
       matching-strategy: ant_path_matcher
 
+logging:
+  level:
+    org.hibernate.SQL: ERROR
+
+server:
+  port: ${PORT:8080}
+
 tv:
   secret: TV_SECRET_ABC123
 
@@ -18,8 +41,19 @@ ia:
   analitica:
     url: http://localhost:8000
   ilustrativa:
-    url: https://nys55pq05jnimb-8003.proxy.runpod.net
-
+    url: ${IA_ILUSTRATIVA_URL:https://jkk2k4gmtanxo8-8000.proxy.runpod.net}
+    health-path: /health
+    generate-path: /generar
+    timeout-seconds: 600
 jwt:
   secret: "XJ9mA72kLq84HbUTpQwensF53vDb1ZyWRtMUa6C0xVgYpN4rKjBsfE8LdQPTh29J"
-  expiration-ms:  2592000000
+  expiration-ms: 2592000000
+
+runpod:
+  enabled: ${RUNPOD_ENABLED:true}
+  api-key: ${RUNPOD_API_KEY:}
+  pod-id: ${RUNPOD_POD_ID:}
+  api-base-url: ${RUNPOD_API_BASE_URL:https://rest.runpod.io/v1}
+  inactivity-minutes: ${RUNPOD_INACTIVITY_MINUTES:15}
+  health-poll-interval-millis: ${RUNPOD_HEALTH_POLL_INTERVAL_MILLIS:5000}
+  health-timeout-seconds: ${RUNPOD_HEALTH_TIMEOUT_SECONDS:600}

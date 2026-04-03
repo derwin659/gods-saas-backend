@@ -19,3 +19,6 @@ logging:
 
 server:
   port: ${PORT:8080}
+
+runpod:
+  enabled: ${RUNPOD_ENABLED:true}

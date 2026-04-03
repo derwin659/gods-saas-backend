@@ -9,7 +9,7 @@ import lombok.*;
 @Builder
 public class OnduladoRequest {
 
-    private boolean aplicar;
+    private Boolean aplicar;
 
     private String tipo; // ondulado | semi_ondulado
 }
