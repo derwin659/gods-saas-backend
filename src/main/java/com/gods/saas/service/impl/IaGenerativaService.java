@@ -91,6 +91,7 @@ public class IaGenerativaService {
                     colorTinte
             );
 
+            System.out.println("IA REQUEST FINAL -> " + generarImagenRequest);
             GenerarImagenResponse response = iaIlustrativaClient.generarImagen(generarImagenRequest);
 
             if (response == null || response.getImagenes() == null) {
@@ -139,6 +140,7 @@ public class IaGenerativaService {
 
         CorteDTO corteDTO = new CorteDTO();
         corteDTO.setNombre(request.getCorte().getNombre().trim());
+        corteDTO.setTipo("corte");
 
         OnduladoDTO onduladoDTO = null;
         if (aplicarOndulado) {
