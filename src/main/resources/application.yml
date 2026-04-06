@@ -41,7 +41,7 @@ ia:
   analitica:
     url: http://localhost:8000
   ilustrativa:
-    url: ${IA_ILUSTRATIVA_URL:https://jkk2k4gmtanxo8-8000.proxy.runpod.net}
+    url: ${IA_ILUSTRATIVA_URL:https://jca1p4h50s2n8s-8000.proxy.runpod.net}
     health-path: /health
     generate-path: /generar
     timeout-seconds: 600
