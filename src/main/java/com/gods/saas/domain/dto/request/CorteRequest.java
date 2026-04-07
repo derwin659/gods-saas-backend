@@ -10,5 +10,6 @@ import lombok.*;
 public class CorteRequest {
 
     private String nombre;
+    private String tipo;
 }
 

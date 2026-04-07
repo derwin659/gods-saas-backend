@@ -18,6 +18,7 @@ import java.util.UUID;
 public class IaGenerativaService {
 
     private final IaIlustrativaClient iaIlustrativaClient;
+    private final AiPodOrchestratorService aiPodOrchestratorService;
 
     public GenerarPreviewResponse generarPreview(GenerarPreviewRequest request) {
 
@@ -93,29 +94,40 @@ public class IaGenerativaService {
                     colorTinte
             );
 
-            log.info("IA REQUEST FINAL -> " + generarImagenRequest.toString());
-            GenerarImagenResponse response = iaIlustrativaClient.generarImagen(generarImagenRequest);
-            log.info("IA RESPONSE FINAL -> " + response.toString());
-            if (response == null || response.getImagenes() == null) {
+            log.info("IA REQUEST FINAL -> {}", generarImagenRequest);
+
+            aiPodOrchestratorService.ensurePodReady();
+            aiPodOrchestratorService.onRequestStart();
+
+            try {
+                GenerarImagenResponse response = iaIlustrativaClient.generarImagen(generarImagenRequest);
+
+                log.info("IA RESPONSE FINAL -> {}", response);
+
+                if (response == null || response.getImagenes() == null) {
+                    return GenerarPreviewResponse.builder()
+                            .estado("ERROR")
+                            .mensaje("La IA ilustrativa no devolvió imágenes")
+                            .build();
+                }
+
                 return GenerarPreviewResponse.builder()
-                        .estado("ERROR")
-                        .mensaje("La IA ilustrativa no devolvió imágenes")
+                        .estado("OK")
+                        .mensaje(buildMensaje(corte, aplicarOndulado, tipoOndulado, aplicarTinte, colorTinte))
+                        .imagenes(
+                                ImagenesPreview.builder()
+                                        .frontal(response.getImagenes().getFrontal())
+                                        .lateral(response.getImagenes().getLateral())
+                                        .trasera(response.getImagenes().getTrasera())
+                                        .build()
+                        )
                         .build();
+            } finally {
+                aiPodOrchestratorService.onRequestEnd();
             }
 
-            return GenerarPreviewResponse.builder()
-                    .estado("OK")
-                    .mensaje(buildMensaje(corte, aplicarOndulado, tipoOndulado, aplicarTinte, colorTinte))
-                    .imagenes(
-                            ImagenesPreview.builder()
-                                    .frontal(response.getImagenes().getFrontal())
-                                    .lateral(response.getImagenes().getLateral())
-                                    .trasera(response.getImagenes().getTrasera())
-                                    .build()
-                    )
-                    .build();
-
         } catch (Exception e) {
+            log.error("Error generando preview ilustrativa", e);
             return GenerarPreviewResponse.builder()
                     .estado("ERROR")
                     .mensaje("No se pudo generar la vista previa: " + e.getMessage())
@@ -126,8 +138,14 @@ public class IaGenerativaService {
     public GenerarImagenResponse generarImagenReal(GenerarImagenRequest request) {
         validarGenerarImagenRequest(request);
 
+        aiPodOrchestratorService.ensurePodReady();
+        aiPodOrchestratorService.onRequestStart();
 
-        return iaIlustrativaClient.generarImagen(request);
+        try {
+            return iaIlustrativaClient.generarImagen(request);
+        } finally {
+            aiPodOrchestratorService.onRequestEnd();
+        }
     }
 
     private GenerarImagenRequest mapToGenerarImagenRequest(
