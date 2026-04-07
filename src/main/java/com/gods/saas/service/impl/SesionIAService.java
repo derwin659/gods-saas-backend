@@ -190,7 +190,7 @@ public class SesionIAService {
                         .riesgo("bajo")
                         .build(),
                 CorteRecomendadoDto.builder()
-                        .nombre("Taper moderno")
+                        .nombre("MID_FADE")
                         .score(0.90)
                         .riesgo("bajo")
                         .build(),
