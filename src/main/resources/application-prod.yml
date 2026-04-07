@@ -22,3 +22,11 @@ server:
 
 runpod:
   enabled: ${RUNPOD_ENABLED:true}
+
+
+feign:
+  client:
+    config:
+      default:
+        connectTimeout: 60000
+        readTimeout: 600000
