@@ -6,6 +6,7 @@ import com.gods.saas.domain.dto.response.GenerarImagenResponse;
 import com.gods.saas.domain.dto.response.GenerarPreviewResponse;
 import com.gods.saas.domain.dto.response.ImagenesPreview;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -13,6 +14,7 @@ import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class IaGenerativaService {
 
     private final IaIlustrativaClient iaIlustrativaClient;
@@ -91,9 +93,9 @@ public class IaGenerativaService {
                     colorTinte
             );
 
-            System.out.println("IA REQUEST FINAL -> " + generarImagenRequest);
+            log.info("IA REQUEST FINAL -> " + generarImagenRequest.toString());
             GenerarImagenResponse response = iaIlustrativaClient.generarImagen(generarImagenRequest);
-
+            log.info("IA RESPONSE FINAL -> " + response.toString());
             if (response == null || response.getImagenes() == null) {
                 return GenerarPreviewResponse.builder()
                         .estado("ERROR")
@@ -123,6 +125,8 @@ public class IaGenerativaService {
 
     public GenerarImagenResponse generarImagenReal(GenerarImagenRequest request) {
         validarGenerarImagenRequest(request);
+
+
         return iaIlustrativaClient.generarImagen(request);
     }
 
@@ -140,7 +144,7 @@ public class IaGenerativaService {
 
         CorteDTO corteDTO = new CorteDTO();
         corteDTO.setNombre(request.getCorte().getNombre().trim());
-        corteDTO.setTipo("corte");
+        corteDTO.setTipo(request.getCorte().getNombre().trim());
 
         OnduladoDTO onduladoDTO = null;
         if (aplicarOndulado) {
