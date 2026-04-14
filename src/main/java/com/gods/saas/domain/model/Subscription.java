@@ -84,16 +84,8 @@ public class Subscription {
 
     @PrePersist
     public void prePersist() {
-        LocalDateTime now = LocalDateTime.now();
-        if (createdAt == null) createdAt = now;
-        if (updatedAt == null) updatedAt = now;
         if (diasGracia == null) diasGracia = 0;
         if (billingCycle == null) billingCycle = "MONTHLY";
         if (currency == null) currency = "USD";
-    }
-
-    @PreUpdate
-    public void preUpdate() {
-        updatedAt = LocalDateTime.now();
     }
 }

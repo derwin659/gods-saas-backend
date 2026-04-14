@@ -1,6 +1,5 @@
 package com.gods.saas.service.impl;
 
-import com.gods.saas.domain.dto.request.ApprovePaymentRequest;
 import com.gods.saas.domain.dto.request.ApprovesPaymentRequest;
 import com.gods.saas.domain.dto.request.RejectPaymentRequest;
 import com.gods.saas.domain.dto.response.SuperAdminPaymentResponse;
@@ -19,12 +18,15 @@ import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 
 @Service
 @RequiredArgsConstructor
 @Transactional
 public class SuperAdminPaymentServiceImpl implements SuperAdminPaymentService {
+
+    private static final String DEFAULT_TIMEZONE = "America/Lima";
 
     private final SubscriptionPaymentRepository paymentRepository;
     private final SubscriptionRepository subscriptionRepository;
@@ -71,8 +73,10 @@ public class SuperAdminPaymentServiceImpl implements SuperAdminPaymentService {
                 subscription.getBillingCycle()
         );
 
+        LocalDateTime now = nowLima();
+
         payment.setStatus("APPROVED");
-        payment.setReviewedAt(LocalDateTime.now());
+        payment.setReviewedAt(now);
         payment.setReviewedByUserId(
                 request != null && request.getApprovedBy() != null && !request.getApprovedBy().isBlank()
                         ? 1L
@@ -84,8 +88,6 @@ public class SuperAdminPaymentServiceImpl implements SuperAdminPaymentService {
         }
 
         paymentRepository.save(payment);
-
-        LocalDateTime now = LocalDateTime.now();
 
         subscription.setPlan(requestedPlan);
         subscription.setBillingCycle(requestedBillingCycle);
@@ -119,8 +121,10 @@ public class SuperAdminPaymentServiceImpl implements SuperAdminPaymentService {
             throw new IllegalStateException("Solo se pueden rechazar pagos en estado PENDING");
         }
 
+        LocalDateTime now = nowLima();
+
         payment.setStatus("REJECTED");
-        payment.setReviewedAt(LocalDateTime.now());
+        payment.setReviewedAt(now);
         payment.setReviewedByUserId(
                 request != null && request.getRejectedBy() != null && !request.getRejectedBy().isBlank()
                         ? 1L
@@ -144,7 +148,7 @@ public class SuperAdminPaymentServiceImpl implements SuperAdminPaymentService {
                 .plan(payment.getRequestedPlan())
                 .billingCycle(payment.getRequestedBillingCycle())
                 .amount(payment.getAmount())
-                .currency(null) // tu entidad SubscriptionPayment no tiene currency
+                .currency(null)
                 .operationNumber(payment.getOperationNumber())
                 .payerName(payment.getPayerName())
                 .status(payment.getStatus())
@@ -192,7 +196,7 @@ public class SuperAdminPaymentServiceImpl implements SuperAdminPaymentService {
                 subscription.setAiEnabled(true);
                 subscription.setLoyaltyEnabled(true);
                 subscription.setPromotionsEnabled(true);
-                subscription.setCustomRewardsEnabled(true); // 🔥
+                subscription.setCustomRewardsEnabled(true);
             }
             default -> {
                 subscription.setMaxBranches(1);
@@ -201,8 +205,12 @@ public class SuperAdminPaymentServiceImpl implements SuperAdminPaymentService {
                 subscription.setAiEnabled(false);
                 subscription.setLoyaltyEnabled(true);
                 subscription.setPromotionsEnabled(false);
-                subscription.setCustomRewardsEnabled(false); // 🔥
+                subscription.setCustomRewardsEnabled(false);
             }
         }
+    }
+
+    private LocalDateTime nowLima() {
+        return LocalDateTime.now(ZoneId.of(DEFAULT_TIMEZONE));
     }
 }

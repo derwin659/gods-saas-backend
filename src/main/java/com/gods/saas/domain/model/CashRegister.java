@@ -80,16 +80,7 @@ public class CashRegister {
 
     @PrePersist
     public void prePersist() {
-        LocalDateTime now = LocalDateTime.now();
-        if (createdAt == null) createdAt = now;
-        if (updatedAt == null) updatedAt = now;
-        if (openedAt == null) openedAt = now;
         if (status == null) status = CashRegisterStatus.OPEN;
         if (openingAmount == null) openingAmount = BigDecimal.ZERO;
-    }
-
-    @PreUpdate
-    public void preUpdate() {
-        updatedAt = LocalDateTime.now();
     }
 }

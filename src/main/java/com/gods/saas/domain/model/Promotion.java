@@ -93,15 +93,7 @@ public class Promotion {
 
     @PrePersist
     public void prePersist() {
-        LocalDateTime now = LocalDateTime.now();
-        if (createdAt == null) createdAt = now;
-        if (updatedAt == null) updatedAt = now;
         if (redirectType == null) redirectType = PromotionRedirectType.NONE;
         if (ordenVisual == null) ordenVisual = 0;
-    }
-
-    @PreUpdate
-    public void preUpdate() {
-        updatedAt = LocalDateTime.now();
     }
 }

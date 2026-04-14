@@ -15,6 +15,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
@@ -23,6 +24,9 @@ import java.util.Optional;
 @RequiredArgsConstructor
 @Transactional
 public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
+
+    private static final String DEFAULT_TIMEZONE = "America/Lima";
+
     private final TenantSettingsRepository tenantSettingsRepository;
     private final TenantRepository tenantRepository;
     private final SubscriptionRepository subscriptionRepository;
@@ -30,7 +34,7 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
     private final AppUserRepository appUserRepository;
     private final PasswordEncoder passwordEncoder;
     private final UserTenantRoleRepository userTenantRoleRepository;
-    private final BranchRepository  branchRepository;
+    private final BranchRepository branchRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -58,7 +62,7 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
             throw new IllegalArgumentException("Ya existe un usuario con ese email: " + request.getOwnerEmail());
         }
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = nowLima();
 
         String plan = safeUpper(request.getPlan(), "STARTER");
         String billingCycle = safeUpper(request.getBillingCycle(), "MONTHLY");
@@ -67,7 +71,6 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
 
         String estado = trialDays > 0 ? "TRIAL" : "ACTIVE";
 
-        // 1. TENANT
         Tenant tenant = new Tenant();
         tenant.setNombre(request.getBusinessName());
         tenant.setOwnerName(request.getOwnerName());
@@ -79,7 +82,6 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
         tenant.setFechaActualizacion(now);
         tenant = tenantRepository.save(tenant);
 
-        // 2. BRANCH PRINCIPAL
         Branch branch = new Branch();
         branch.setTenant(tenant);
         branch.setNombre(
@@ -97,10 +99,9 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
         branch.setFechaCreacion(now);
         branch = branchRepository.save(branch);
 
-        // 3. OWNER
         AppUser owner = new AppUser();
         owner.setTenant(tenant);
-        owner.setBranch(branch); // clave
+        owner.setBranch(branch);
         owner.setNombre(request.getOwnerName());
         owner.setEmail(request.getOwnerEmail().trim().toLowerCase());
         owner.setPhone(request.getOwnerPhone());
@@ -111,15 +112,13 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
         owner.setFechaActualizacion(now);
         owner = appUserRepository.save(owner);
 
-        // 4. USER_TENANT_ROLES
         UserTenantRole role = new UserTenantRole();
         role.setUser(owner);
         role.setTenant(tenant);
         role.setRole(RoleType.OWNER);
-        role.setBranch(branch); // clave
+        role.setBranch(branch);
         userTenantRoleRepository.save(role);
 
-        // 5. SUBSCRIPTION
         Subscription subscription = new Subscription();
         subscription.setTenantId(tenant.getId());
         subscription.setPlan(plan);
@@ -145,11 +144,10 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
 
         subscriptionRepository.save(subscription);
 
-        // 6. TENANT_SETTINGS
         TenantSettings settings = new TenantSettings();
         settings.setTenant(tenant);
         settings.setLanguage("es");
-        settings.setTimezone("America/Lima");
+        settings.setTimezone(DEFAULT_TIMEZONE);
         settings.setCurrency(currency);
         settings.setScheduleConfig(new HashMap<>());
         settings.setCreatedAt(now);
@@ -164,8 +162,10 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("Tenant no encontrado: " + tenantId));
 
+        LocalDateTime now = nowLima();
+
         tenant.setActive(true);
-        tenant.setFechaActualizacion(LocalDateTime.now());
+        tenant.setFechaActualizacion(now);
         tenantRepository.save(tenant);
 
         Optional<Subscription> subOpt = subscriptionRepository.findById(tenantId);
@@ -180,6 +180,7 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
             subscriptionRepository.save(sub);
         }
     }
+
     private String generateTenantCode(String businessName) {
         String base = businessName
                 .toUpperCase()
@@ -201,13 +202,16 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
 
         return code;
     }
+
     @Override
     public void suspend(Long tenantId) {
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("Tenant no encontrado: " + tenantId));
 
+        LocalDateTime now = nowLima();
+
         tenant.setActive(false);
-        tenant.setFechaActualizacion(LocalDateTime.now());
+        tenant.setFechaActualizacion(now);
         tenantRepository.save(tenant);
 
         Optional<Subscription> subOpt = subscriptionRepository.findById(tenantId);
@@ -246,7 +250,7 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
                         : "Cambio manual de plan por Super Admin"
         );
 
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = nowLima();
         subscription.setFechaInicio(now);
         subscription.setFechaRenovacion(calculateEndDate(now, newBillingCycle, 0));
         subscription.setFechaFin(calculateEndDate(now, newBillingCycle, 0));
@@ -254,14 +258,13 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
         applyPlanLimits(subscription, newPlan);
 
         subscriptionRepository.save(subscription);
+
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("Marca no encontrada: " + tenantId));
 
-        if (tenant != null) {
-            tenant.setActive(true);
-            tenant.setFechaActualizacion(now);
-            tenantRepository.save(tenant);
-        }
+        tenant.setActive(true);
+        tenant.setFechaActualizacion(now);
+        tenantRepository.save(tenant);
     }
 
     @Override
@@ -349,7 +352,7 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
                 subscription.setAiEnabled(false);
                 subscription.setLoyaltyEnabled(true);
                 subscription.setPromotionsEnabled(true);
-                subscription.setCustomRewardsEnabled(true); //
+                subscription.setCustomRewardsEnabled(true);
             }
             case "GODS_AI" -> {
                 subscription.setMaxBranches(10);
@@ -358,7 +361,7 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
                 subscription.setAiEnabled(true);
                 subscription.setLoyaltyEnabled(true);
                 subscription.setPromotionsEnabled(true);
-                subscription.setCustomRewardsEnabled(true); //
+                subscription.setCustomRewardsEnabled(true);
             }
             default -> {
                 subscription.setMaxBranches(1);
@@ -367,8 +370,12 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
                 subscription.setAiEnabled(false);
                 subscription.setLoyaltyEnabled(true);
                 subscription.setPromotionsEnabled(false);
-                subscription.setCustomRewardsEnabled(false); // 🔥
+                subscription.setCustomRewardsEnabled(false);
             }
         }
+    }
+
+    private LocalDateTime nowLima() {
+        return LocalDateTime.now(ZoneId.of(DEFAULT_TIMEZONE));
     }
 }

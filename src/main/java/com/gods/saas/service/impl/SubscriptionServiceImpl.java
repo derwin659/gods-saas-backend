@@ -4,10 +4,8 @@ import com.gods.saas.domain.dto.request.ReportPaymentRequest;
 import com.gods.saas.domain.dto.response.SubscriptionCurrentResponse;
 import com.gods.saas.domain.model.Subscription;
 import com.gods.saas.domain.model.SubscriptionPayment;
-import com.gods.saas.domain.repository.AppUserRepository;
-import com.gods.saas.domain.repository.BranchRepository;
-import com.gods.saas.domain.repository.SubscriptionPaymentRepository;
-import com.gods.saas.domain.repository.SuscriptionRepository;
+import com.gods.saas.domain.model.TenantSettings;
+import com.gods.saas.domain.repository.*;
 import com.gods.saas.exception.BusinessException;
 import com.gods.saas.service.impl.impl.SubscriptionService;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +13,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Locale;
 
@@ -22,12 +21,14 @@ import java.util.Locale;
 @RequiredArgsConstructor
 public class SubscriptionServiceImpl implements SubscriptionService {
 
+    private static final String DEFAULT_TIMEZONE = "America/Lima";
     private static final String STATUS_ACTIVE = "ACTIVE";
     private static final String STATUS_TRIAL = "TRIAL";
     private static final String STATUS_PENDING_REVIEW = "PENDING_REVIEW";
     private static final String STATUS_APPROVED = "APPROVED";
     private static final String STATUS_REJECTED = "REJECTED";
 
+    private final TenantSettingsRepository tenantSettingsRepository;
     private final SuscriptionRepository subscriptionRepository;
     private final SubscriptionPaymentRepository paymentRepository;
     private final BranchRepository branchRepository;
@@ -103,7 +104,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
     @Override
     public Subscription createStarterTrial(Long tenantId) {
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = nowForTenant(tenantId);
 
         Subscription subscription = Subscription.builder()
                 .tenantId(tenantId)
@@ -131,12 +132,29 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         return subscriptionRepository.save(subscription);
     }
 
+    private ZoneId getZoneIdForTenant(Long tenantId) {
+        String timezone = tenantSettingsRepository.findByTenant_Id(tenantId)
+                .map(TenantSettings::getTimezone)
+                .filter(tz -> tz != null && !tz.isBlank())
+                .orElse(DEFAULT_TIMEZONE);
+
+        try {
+            return ZoneId.of(timezone);
+        } catch (Exception e) {
+            return ZoneId.of(DEFAULT_TIMEZONE);
+        }
+    }
+
+    private LocalDateTime nowForTenant(Long tenantId) {
+        return LocalDateTime.now(getZoneIdForTenant(tenantId));
+    }
+
     @Override
     public Subscription changePlan(Long tenantId, String plan) {
         Subscription sub = getCurrentSubscriptionOrThrow(tenantId);
 
         String normalizedPlan = normalizePlan(plan);
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = nowForTenant(tenantId);
 
         applyPlanConfig(sub, normalizedPlan);
 
@@ -199,7 +217,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     public SubscriptionPayment reportManualPayment(Long tenantId, ReportPaymentRequest request) {
         Subscription sub = getCurrentSubscriptionOrThrow(tenantId);
 
-        paymentRepository.findTopByTenantIdAndStatusOrderByCreatedAtDesc(tenantId, "PENDING_REVIEW")
+        paymentRepository.findTopByTenantIdAndStatusOrderByCreatedAtDesc(tenantId, STATUS_PENDING_REVIEW)
                 .ifPresent(p -> {
                     throw new BusinessException(
                             "PAYMENT_ALREADY_PENDING",
@@ -215,6 +233,8 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         double expectedAmount = calculateExpectedAmount(requestedPlan, billingCycle);
         validateReportedAmount(request.getAmount(), expectedAmount);
 
+        LocalDateTime now = nowForTenant(tenantId);
+
         SubscriptionPayment payment = SubscriptionPayment.builder()
                 .tenantId(tenantId)
                 .subscriptionId(sub.getSubId())
@@ -226,11 +246,11 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 .payerName(trimToNull(request.getPayerName()))
                 .payerPhone(trimToNull(request.getPayerPhone()))
                 .notes(trimToNull(request.getNotes()))
-                .status("PENDING_REVIEW")
-                .createdAt(LocalDateTime.now())
+                .status(STATUS_PENDING_REVIEW)
+                .createdAt(now)
                 .build();
 
-        sub.setUpdatedAt(LocalDateTime.now());
+        sub.setUpdatedAt(now);
         sub.setObservaciones("Pago reportado manualmente pendiente de revisión. Operación: " + request.getOperationNumber());
         subscriptionRepository.save(sub);
 
@@ -253,7 +273,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         }
 
         Subscription sub = getCurrentSubscriptionOrThrow(payment.getTenantId());
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = nowForTenant(payment.getTenantId());
 
         applyPlanConfig(sub, payment.getRequestedPlan());
 
@@ -293,9 +313,10 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         }
 
         Subscription sub = getCurrentSubscriptionOrThrow(payment.getTenantId());
+        LocalDateTime now = nowForTenant(payment.getTenantId());
 
         payment.setStatus(STATUS_REJECTED);
-        payment.setReviewedAt(LocalDateTime.now());
+        payment.setReviewedAt(now);
         payment.setReviewedByUserId(reviewedByUserId);
 
         String note = trimToNull(reason);
@@ -308,7 +329,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         }
 
         sub.setEstado(isExpired(sub) ? "EXPIRED" : STATUS_ACTIVE);
-        sub.setUpdatedAt(LocalDateTime.now());
+        sub.setUpdatedAt(now);
         sub.setObservaciones("Pago rechazado manualmente. Operación: " + payment.getOperationNumber());
 
         subscriptionRepository.save(sub);
@@ -347,13 +368,15 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         }
 
         int diasGracia = subscription.getDiasGracia() == null ? 0 : subscription.getDiasGracia();
-        return LocalDateTime.now().isBefore(subscription.getFechaFin().plusDays(diasGracia));
+        return nowForTenant(subscription.getTenantId())
+                .isBefore(subscription.getFechaFin().plusDays(diasGracia));
     }
 
     private boolean isExpired(Subscription subscription) {
         if (subscription == null || subscription.getFechaFin() == null) return true;
         int diasGracia = subscription.getDiasGracia() == null ? 0 : subscription.getDiasGracia();
-        return !LocalDateTime.now().isBefore(subscription.getFechaFin().plusDays(diasGracia));
+        return !nowForTenant(subscription.getTenantId())
+                .isBefore(subscription.getFechaFin().plusDays(diasGracia));
     }
 
     private String normalizePlan(String plan) {

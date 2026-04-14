@@ -40,6 +40,8 @@ public class CashRegisterServiceImpl implements CashRegisterService {
     private final TenantSettingsRepository tenantSettingsRepository;
     private final UserTenantRoleRepository userTenantRoleRepository;
 
+
+
     @Override
     public CashRegisterResponse open(Long tenantId, Long branchId, Long openedByUserId, OpenCashRegisterRequest request) {
         autoCloseOpenRegisterIfExpired(tenantId, branchId);
@@ -157,6 +159,9 @@ public class CashRegisterServiceImpl implements CashRegisterService {
             Long actorUserId,
             CashMovementRequest request
     ) {
+        ZoneId zoneId = getZoneIdForTenant(tenantId);
+        LocalDateTime now = LocalDateTime.now(zoneId);
+
         validateCashActor(actorUserId, tenantId);
 
         CashRegister cashRegister = getOpenCashRegisterInBranch(tenantId, branchId, cashRegisterId);
@@ -191,6 +196,8 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 .amount(amount)
                 .concept(resolveConcept(type, request.getConcept()))
                 .note(trimToNull(request.getNote()))
+                .movementDate(now)
+                .createdAt(now)
                 .build();
 
         return mapMovementResponse(cashMovementRepository.save(movement));

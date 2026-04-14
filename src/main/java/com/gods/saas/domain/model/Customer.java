@@ -91,16 +91,6 @@ public class Customer {
 
     @PrePersist
     void prePersist() {
-        LocalDateTime now = LocalDateTime.now();
-
-        if (fechaRegistro == null) {
-            fechaRegistro = now;
-        }
-
-        if (fechaActualizacion == null) {
-            fechaActualizacion = now;
-        }
-
         if (puntosDisponibles == null) {
             puntosDisponibles = 0;
         }
@@ -128,8 +118,6 @@ public class Customer {
 
     @PreUpdate
     void preUpdate() {
-        fechaActualizacion = LocalDateTime.now();
-
         if (activo == null) {
             activo = true;
         }
