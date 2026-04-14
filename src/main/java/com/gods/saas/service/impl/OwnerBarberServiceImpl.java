@@ -4,6 +4,7 @@ import com.gods.saas.domain.dto.request.BarberCreateRequest;
 import com.gods.saas.domain.dto.request.BarberStatusRequest;
 import com.gods.saas.domain.dto.request.BarberUpdateRequest;
 import com.gods.saas.domain.dto.response.BarberResponse;
+import com.gods.saas.domain.enums.SalaryFrequency;
 import com.gods.saas.domain.model.AppUser;
 import com.gods.saas.domain.model.Branch;
 import com.gods.saas.domain.model.RoleType;
@@ -21,6 +22,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 
@@ -43,6 +46,45 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
         return users.stream()
                 .map(this::toResponse)
                 .toList();
+    }
+
+    private void applyCompensationModel(
+            AppUser user,
+            Boolean salaryMode,
+            BigDecimal commissionPercentage,
+            SalaryFrequency salaryFrequency,
+            BigDecimal fixedSalaryAmount,
+            LocalDate salaryStartDate
+    ) {
+        boolean isSalary = Boolean.TRUE.equals(salaryMode);
+        user.setSalaryMode(isSalary);
+
+        if (isSalary) {
+            if (fixedSalaryAmount == null || fixedSalaryAmount.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new BusinessException("Debes ingresar un sueldo fijo válido.");
+            }
+            if (salaryFrequency == null) {
+                throw new BusinessException("Debes seleccionar la periodicidad del sueldo.");
+            }
+
+            user.setFixedSalaryAmount(fixedSalaryAmount);
+            user.setSalaryFrequency(salaryFrequency);
+            user.setSalaryStartDate(salaryStartDate);
+
+            user.setCommissionScheme(null);
+            user.setCommissionPercentage(null);
+        } else {
+            if (commissionPercentage == null || commissionPercentage.compareTo(BigDecimal.ZERO) <= 0) {
+                throw new BusinessException("Debes ingresar un porcentaje de comisión válido.");
+            }
+
+            user.setCommissionPercentage(commissionPercentage);
+            user.setCommissionScheme("STANDARD");
+
+            user.setFixedSalaryAmount(null);
+            user.setSalaryFrequency(null);
+            user.setSalaryStartDate(null);
+        }
     }
 
     @Override
@@ -82,10 +124,16 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
                 .rol("BARBER")
                 .activo(request.getActivo() != null ? request.getActivo() : true)
                 .fechaCreacion(LocalDateTime.now())
-                .salaryMode(false)
-                .commissionScheme(null)
-                .commissionPercentage(null)
                 .build();
+
+        applyCompensationModel(
+                user,
+                request.getSalaryMode(),
+                request.getCommissionPercentage(),
+                request.getSalaryFrequency(),
+                request.getFixedSalaryAmount(),
+                request.getSalaryStartDate()
+        );
 
         AppUser saved = appUserRepository.save(user);
 
@@ -148,6 +196,15 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
             userTenantRoleRepository.save(role);
         }
 
+        applyCompensationModel(
+                barber,
+                request.getSalaryMode(),
+                request.getCommissionPercentage(),
+                request.getSalaryFrequency(),
+                request.getFixedSalaryAmount(),
+                request.getSalaryStartDate()
+        );
+
         return toResponse(saved);
     }
 
@@ -178,6 +235,11 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
                 .activo(user.getActivo())
                 .branchId(user.getBranch() != null ? user.getBranch().getId() : null)
                 .branchNombre(user.getBranch() != null ? user.getBranch().getNombre() : null)
+                .salaryMode(user.getSalaryMode())
+                .commissionPercentage(user.getCommissionPercentage())
+                .salaryFrequency(user.getSalaryFrequency() != null ? user.getSalaryFrequency().name() : null)
+                .fixedSalaryAmount(user.getFixedSalaryAmount())
+                .salaryStartDate(user.getSalaryStartDate())
                 .build();
     }
 
