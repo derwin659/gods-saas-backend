@@ -10,6 +10,7 @@ import org.springframework.stereotype.Repository;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface BarberPaymentRepository extends JpaRepository<BarberPayment, Long> {
@@ -71,4 +72,8 @@ public interface BarberPaymentRepository extends JpaRepository<BarberPayment, Lo
             @Param("fromDateTime") java.time.LocalDateTime fromDateTime,
             @Param("toDateTime") java.time.LocalDateTime toDateTime
     );
+
+    boolean existsByCashMovement_Id(Long cashMovementId);
+
+    Optional<BarberPayment> findByCashMovement_Id(Long cashMovementId);
 }

@@ -75,11 +75,20 @@ public class CustomerCutHistory {
 
     @PrePersist
     void prePersist() {
-        // no asignar fechas aquí
+        LocalDateTime now = LocalDateTime.now();
+        if (createdAt == null) {
+            createdAt = now;
+        }
+        if (updatedAt == null) {
+            updatedAt = now;
+        }
+        if (fechaCorte == null) {
+            fechaCorte = now;
+        }
     }
 
     @PreUpdate
     void preUpdate() {
-        // no asignar fechas aquí
+        updatedAt = LocalDateTime.now();
     }
 }

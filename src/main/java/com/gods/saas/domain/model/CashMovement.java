@@ -34,10 +34,16 @@ public class CashMovement {
     @JoinColumn(name = "cash_register_id", nullable = false)
     private CashRegister cashRegister;
 
+    /**
+     * Usuario que registró el movimiento.
+     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id")
     private AppUser user;
 
+    /**
+     * Barbero involucrado si aplica (adelanto/pago).
+     */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "barber_user_id")
     private AppUser barberUser;
@@ -67,8 +73,10 @@ public class CashMovement {
 
     @PrePersist
     public void prePersist() {
-        if (amount == null) {
-            amount = BigDecimal.ZERO;
-        }
+
+        LocalDateTime now = LocalDateTime.now();
+        if (movementDate == null) movementDate = now;
+        if (createdAt == null) createdAt = now;
+        if (amount == null) amount = BigDecimal.ZERO;
     }
 }

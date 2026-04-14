@@ -39,6 +39,7 @@ public class CashRegisterServiceImpl implements CashRegisterService {
     private final AppUserRepository appUserRepository;
     private final TenantSettingsRepository tenantSettingsRepository;
     private final UserTenantRoleRepository userTenantRoleRepository;
+    private final BarberPaymentRepository barberPaymentRepository;
 
 
 
@@ -265,6 +266,9 @@ public class CashRegisterServiceImpl implements CashRegisterService {
         if (cashRegister.getStatus() != CashRegisterStatus.OPEN) {
             throw new IllegalStateException("Solo puedes eliminar movimientos de una caja abierta.");
         }
+
+        barberPaymentRepository.findByCashMovement_Id(movementId)
+                .ifPresent(barberPaymentRepository::delete);
 
         cashMovementRepository.delete(movement);
     }
