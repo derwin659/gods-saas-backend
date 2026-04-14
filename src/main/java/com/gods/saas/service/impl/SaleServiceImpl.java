@@ -429,6 +429,10 @@ public class SaleServiceImpl implements SaleService {
     }
 
     private boolean isHaircutService(ServiceEntity service) {
+        if (service == null) {
+            return false;
+        }
+
         String categoria = service.getCategoria() == null
                 ? ""
                 : service.getCategoria().trim().toUpperCase();
@@ -437,10 +441,32 @@ public class SaleServiceImpl implements SaleService {
                 ? ""
                 : service.getNombre().trim().toUpperCase();
 
+        if (categoria.contains("BARBA")
+                || nombre.contains("BARBA")
+                || nombre.contains("AFEITADO")
+                || nombre.contains("BIGOTE")
+                || nombre.contains("CEJA")
+                || nombre.contains("CEJAS")
+                || nombre.contains("RAPADAS")
+                || nombre.contains("RAPADA")
+                || nombre.contains("TINTE")
+                || nombre.contains("TINTES")
+                || nombre.contains("ONDULACION")
+                || nombre.contains("ONDULADO")
+                || nombre.contains("PERFILADO")) {
+            return false;
+        }
+
         return "CORTE".equals(categoria)
                 || "HAIRCUT".equals(categoria)
                 || nombre.contains("CORTE")
                 || nombre.contains("FADE")
-                || nombre.contains("TAPER");
+                || nombre.contains("TAPER")
+                || nombre.contains("DEGRADADO")
+                || nombre.contains("CLASICO")
+                || nombre.contains("CLÁSICO")
+                || nombre.contains("BUZZ")
+                || nombre.contains("CROP")
+                || nombre.contains("MULLET");
     }
 }
