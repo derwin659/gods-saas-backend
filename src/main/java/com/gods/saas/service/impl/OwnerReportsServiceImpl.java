@@ -3,6 +3,7 @@ package com.gods.saas.service.impl;
 import com.gods.saas.domain.dto.response.*;
 
 import com.gods.saas.domain.model.Subscription;
+import com.gods.saas.domain.repository.CashMovementRepository;
 import com.gods.saas.domain.repository.SaleRepository;
 import com.gods.saas.domain.repository.SubscriptionRepository;
 import com.gods.saas.domain.repository.projection.BarberSaleDetailProjection;
@@ -23,6 +24,85 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
 
     private final SaleRepository saleRepository;
     private final SubscriptionRepository subscriptionRepository;
+    private final CashMovementRepository cashMovementRepository;
+
+    @Override
+    public ProfitabilityReportResponse getProfitabilityReport(
+            Long tenantId,
+            Long branchId,
+            LocalDate from,
+            LocalDate to
+    ) {
+        validateAdvancedReportsAllowed(tenantId);
+
+        LocalDateTime start = startOfDay(from);
+        LocalDateTime end = endInclusive(to);
+
+        BigDecimal totalSales = nvl(saleRepository.getTotalSalesByRange(tenantId, branchId, start, end));
+        BigDecimal cashSales = nvl(saleRepository.getCashSalesByRange(tenantId, branchId, start, end));
+        BigDecimal nonCashSales = totalSales.subtract(cashSales);
+
+        BigDecimal operationalExpenses = nvl(
+                cashMovementRepository.sumGeneralExpensesByRange(tenantId, branchId, start, end)
+        );
+
+        BigDecimal barberAdvances = nvl(
+                cashMovementRepository.sumBarberAdvancesByRange(tenantId, branchId, start, end)
+        );
+
+        BigDecimal barberPayments = nvl(
+                cashMovementRepository.sumBarberPaymentsByRange(tenantId, branchId, start, end)
+        );
+
+        BigDecimal netProfit = totalSales
+                .subtract(operationalExpenses)
+                .subtract(barberAdvances)
+                .subtract(barberPayments);
+
+        BigDecimal profitMargin = BigDecimal.ZERO;
+        if (totalSales.compareTo(BigDecimal.ZERO) > 0) {
+            profitMargin = netProfit
+                    .multiply(new BigDecimal("100"))
+                    .divide(totalSales, 2, RoundingMode.HALF_UP);
+        }
+
+        List<DailyProfitabilityPointResponse> daily = cashMovementRepository
+                .getDailyProfitability(tenantId, branchId, start, end, to)
+                .stream()
+                .map(p -> {
+                    BigDecimal dailySales = nvl(p.getTotalSales());
+                    BigDecimal dailyExpenses = nvl(p.getOperationalExpenses());
+                    BigDecimal dailyAdvances = nvl(p.getBarberAdvances());
+                    BigDecimal dailyPayments = nvl(p.getBarberPayments());
+
+                    BigDecimal dailyProfit = dailySales
+                            .subtract(dailyExpenses)
+                            .subtract(dailyAdvances)
+                            .subtract(dailyPayments);
+
+                    return DailyProfitabilityPointResponse.builder()
+                            .date(p.getReportDate())
+                            .totalSales(dailySales)
+                            .operationalExpenses(dailyExpenses)
+                            .barberAdvances(dailyAdvances)
+                            .barberPayments(dailyPayments)
+                            .netProfit(dailyProfit)
+                            .build();
+                })
+                .toList();
+
+        return ProfitabilityReportResponse.builder()
+                .totalSales(totalSales)
+                .cashSales(cashSales)
+                .nonCashSales(nonCashSales)
+                .operationalExpenses(operationalExpenses)
+                .barberAdvances(barberAdvances)
+                .barberPayments(barberPayments)
+                .netProfit(netProfit)
+                .profitMargin(profitMargin)
+                .dailyProfitability(daily)
+                .build();
+    }
 
     @Override
     public OwnerSalesReportResponse getSalesReport(

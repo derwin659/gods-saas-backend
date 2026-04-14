@@ -6,6 +6,15 @@ import java.util.List;
 
 public interface OwnerReportsService {
 
+
+    ProfitabilityReportResponse getProfitabilityReport(
+            Long tenantId,
+            Long branchId,
+            LocalDate from,
+            LocalDate to
+    );
+
+
     OwnerSalesReportResponse getSalesReport(
             Long tenantId,
             Long branchId,

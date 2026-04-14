@@ -349,4 +349,40 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
             LocalDateTime from,
             LocalDateTime to
     );
+
+
+    @Query("""
+    select coalesce(sum(si.subtotal), 0)
+    from SaleItem si
+    join si.sale s
+    where s.tenant.id = :tenantId
+      and (:branchId is null or s.branch.id = :branchId)
+      and si.barberUser.id = :barberUserId
+      and s.fechaCreacion >= :start
+      and s.fechaCreacion < :end
+    """)
+    BigDecimal sumBarberItemSalesByRange(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("barberUserId") Long barberUserId,
+            @Param("start") java.time.LocalDateTime start,
+            @Param("end") java.time.LocalDateTime end
+    );
+
+
+    @Query("""
+    select coalesce(sum(s.total), 0)
+    from Sale s
+    where s.tenant.id = :tenantId
+      and (:branchId is null or s.branch.id = :branchId)
+      and upper(trim(coalesce(s.metodoPago, ''))) in ('EFECTIVO', 'CASH')
+      and s.fechaCreacion >= :start
+      and s.fechaCreacion < :end
+    """)
+    BigDecimal getCashSalesByRange(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
 }

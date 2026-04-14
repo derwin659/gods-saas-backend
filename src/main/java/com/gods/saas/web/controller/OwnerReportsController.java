@@ -18,6 +18,17 @@ public class OwnerReportsController {
 
     private final OwnerReportsService ownerReportsService;
 
+    @GetMapping("/profitability")
+    public ProfitabilityReportResponse getProfitabilityReport(
+            Authentication authentication,
+            @RequestParam(required = false) Long branchId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        Long tenantId = extractTenantId(authentication);
+        return ownerReportsService.getProfitabilityReport(tenantId, branchId, from, to);
+    }
+
     @GetMapping("/sales")
     public OwnerSalesReportResponse getSalesReport(
             Authentication authentication,

@@ -1,5 +1,6 @@
 package com.gods.saas.domain.model;
 
+import com.gods.saas.domain.enums.SalaryFrequency;
 import jakarta.persistence.*;
 import lombok.*;
 import org.springframework.security.core.GrantedAuthority;
@@ -7,6 +8,7 @@ import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.Collection;
 import java.util.List;
@@ -85,6 +87,16 @@ public class AppUser implements UserDetails {
 
     @Column(name = "commission_percentage", precision = 5, scale = 2)
     private BigDecimal commissionPercentage;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "salary_frequency", length = 20)
+    private SalaryFrequency salaryFrequency;
+
+    @Column(name = "fixed_salary_amount", precision = 12, scale = 2)
+    private BigDecimal fixedSalaryAmount;
+
+    @Column(name = "salary_start_date")
+    private LocalDate salaryStartDate;
 
     // ============================================================
     // SPRING SECURITY METHODS (IMPORTANTES)
