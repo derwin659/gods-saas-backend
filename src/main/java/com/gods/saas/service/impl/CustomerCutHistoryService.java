@@ -52,19 +52,33 @@ public class CustomerCutHistoryService {
                 .findTopByTenant_IdAndSale_Id(sale.getTenant().getId(), sale.getId())
                 .orElseGet(CustomerCutHistory::new);
 
+        String safeCutName = clean(cutType);
+        if (safeCutName == null || safeCutName.isBlank()) {
+            safeCutName = buildCutName(serviceItems);
+        }
+        if (safeCutName == null || safeCutName.isBlank()) {
+            safeCutName = "Servicio realizado";
+        }
+
+        String safeCutDescription = buildCutDescription(serviceItems);
+
+        String safeObservations = clean(cutObservations);
+        if (safeObservations == null || safeObservations.isBlank()) {
+            safeObservations = resolveObservations(sale);
+        }
+
         history.setTenant(sale.getTenant());
         history.setBranch(sale.getBranch());
         history.setCustomer(sale.getCustomer());
         history.setBarberUser(resolvePrincipalBarber(sale, serviceItems));
         history.setAppointment(sale.getAppointment());
         history.setSale(sale);
-        history.setCutName(buildCutName(serviceItems));
-        history.setCutDescription(buildCutDescription(serviceItems));
-        history.setObservations(resolveObservations(sale));
-        history.setFechaCorte(sale.getFechaCreacion() != null ? sale.getFechaCreacion() : LocalDateTime.now());
-        history.setCutName(clean(cutType));
+        history.setCutName(safeCutName);
+        history.setCutDescription(safeCutDescription);
         history.setCutDetail(clean(cutDetail));
-        history.setObservations(clean(cutObservations));
+        history.setObservations(safeObservations);
+        history.setFechaCorte(sale.getFechaCreacion() != null ? sale.getFechaCreacion() : LocalDateTime.now());
+
         customerCutHistoryRepository.save(history);
     }
 
