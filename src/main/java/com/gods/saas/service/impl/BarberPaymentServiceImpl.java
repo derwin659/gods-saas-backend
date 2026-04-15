@@ -16,6 +16,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Locale;
 
@@ -24,12 +25,15 @@ import java.util.Locale;
 @Transactional
 public class BarberPaymentServiceImpl implements BarberPaymentService {
 
+    private static final String DEFAULT_TIMEZONE = "America/Lima";
+
     private final BarberPaymentRepository barberPaymentRepository;
     private final CashRegisterRepository cashRegisterRepository;
     private final CashMovementRepository cashMovementRepository;
     private final SaleRepository saleRepository;
     private final AppUserRepository appUserRepository;
     private final UserTenantRoleRepository userTenantRoleRepository;
+    private final TenantSettingsRepository tenantSettingsRepository;
 
     @Override
     @Transactional(readOnly = true)
@@ -88,7 +92,6 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 .periodFrom(periodFrom)
                 .periodTo(periodTo)
                 .baseSales(salesBase)
-
                 .percentageApplied(salaryMode ? null : commissionPercentage)
                 .commissionAmount(commissionAmount)
                 .salaryAmount(salaryAmount)
@@ -150,6 +153,9 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
         String concept = "Pago barbero " + fullName(barber)
                 + " [" + request.getPeriodFrom() + " a " + request.getPeriodTo() + "]";
 
+        ZoneId zoneId = getZoneIdForTenant(tenantId);
+        LocalDateTime now = LocalDateTime.now(zoneId);
+
         CashMovement movement = CashMovement.builder()
                 .tenant(cashRegister.getTenant())
                 .branch(cashRegister.getBranch())
@@ -161,6 +167,8 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 .amount(amountPaid)
                 .concept(concept)
                 .note(trimToNull(request.getNote()))
+                .movementDate(now)
+                .createdAt(now)
                 .build();
 
         movement = cashMovementRepository.save(movement);
@@ -192,6 +200,7 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 .cashMovement(movement)
                 .concept(concept)
                 .note(trimToNull(request.getNote()))
+                .createdAt(now)
                 .build();
 
         entity = barberPaymentRepository.save(entity);
@@ -326,7 +335,6 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 .divide(BigDecimal.valueOf(daysInMonth), 2, RoundingMode.HALF_UP);
     }
 
-
     private void normalizeCompensationModel(AppUser user) {
         boolean salaryMode = Boolean.TRUE.equals(user.getSalaryMode());
 
@@ -345,6 +353,19 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
             user.setFixedSalaryAmount(null);
             user.setSalaryFrequency(null);
             user.setSalaryStartDate(null);
+        }
+    }
+
+    private ZoneId getZoneIdForTenant(Long tenantId) {
+        String timezone = tenantSettingsRepository.findByTenant_Id(tenantId)
+                .map(TenantSettings::getTimezone)
+                .filter(tz -> tz != null && !tz.isBlank())
+                .orElse(DEFAULT_TIMEZONE);
+
+        try {
+            return ZoneId.of(timezone);
+        } catch (Exception e) {
+            return ZoneId.of(DEFAULT_TIMEZONE);
         }
     }
 }
