@@ -35,6 +35,7 @@ public class OwnerAgendaServiceImpl implements OwnerAgendaService {
                         .customerId(a.getCustomer() != null ? a.getCustomer().getId() : null)
                         .serviceId(a.getService() != null ? a.getService().getId() : null)
                         .barberUserId(a.getUser() != null ? a.getUser().getId() : null)
+                        .branchId(a.getBranch() != null ? a.getBranch().getId() : null)
                         .fecha(a.getFecha() != null ? a.getFecha().toString() : null)
                         .hora(a.getHoraInicio() != null ? a.getHoraInicio().format(timeFormatter) : "")
                         .horaFin(a.getHoraFin() != null ? a.getHoraFin().format(timeFormatter) : "")

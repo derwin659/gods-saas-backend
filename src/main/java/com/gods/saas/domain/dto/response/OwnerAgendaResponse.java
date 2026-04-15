@@ -14,6 +14,7 @@ public class OwnerAgendaResponse {
     private Long customerId;
     private Long serviceId;
     private Long barberUserId;
+    private Long branchId;
 
     private String fecha;
     private String hora;
