@@ -27,17 +27,31 @@ public class BarberAgendaServiceImpl implements BarberAgendaService {
                 );
 
         return rows.stream()
-                .map(r -> BarberAgendaItemResponse.builder()
-                        .appointmentId(r.getAppointmentId())
-                        .customerId(r.getCustomerId())
-                        .cliente(defaultText(r.getCliente(), "Cliente"))
-                        .telefono(r.getTelefono())
-                        .servicio(defaultText(r.getServicio(), "Servicio"))
-                        .estado(defaultText(r.getEstado(), "RESERVADO"))
-                        .fecha(r.getFecha() != null ? r.getFecha().toString() : null)
-                        .hora(r.getHoraInicio() != null ? r.getHoraInicio().format(hourFmt) : "")
-                        .horaFin(r.getHoraFin() != null ? r.getHoraFin().format(hourFmt) : null)
-                        .build())
+                .map(r -> {
+                    System.out.println(
+                            "BARBER AGENDA ROW => appointmentId=" + r.getAppointmentId()
+                                    + ", customerId=" + r.getCustomerId()
+                                    + ", cliente=" + r.getCliente()
+                                    + ", telefono=" + r.getTelefono()
+                                    + ", servicio=" + r.getServicio()
+                                    + ", estado=" + r.getEstado()
+                                    + ", fecha=" + r.getFecha()
+                                    + ", horaInicio=" + r.getHoraInicio()
+                                    + ", horaFin=" + r.getHoraFin()
+                    );
+
+                    return BarberAgendaItemResponse.builder()
+                            .appointmentId(r.getAppointmentId())
+                            .customerId(r.getCustomerId())
+                            .cliente(defaultText(r.getCliente(), "Cliente"))
+                            .telefono(r.getTelefono())
+                            .servicio(defaultText(r.getServicio(), "Servicio"))
+                            .estado(defaultText(r.getEstado(), "RESERVADO"))
+                            .fecha(r.getFecha() != null ? r.getFecha().toString() : null)
+                            .hora(r.getHoraInicio() != null ? r.getHoraInicio().format(hourFmt) : "")
+                            .horaFin(r.getHoraFin() != null ? r.getHoraFin().format(hourFmt) : null)
+                            .build();
+                })
                 .toList();
     }
 

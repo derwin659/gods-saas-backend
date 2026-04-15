@@ -36,6 +36,7 @@ public class BarberAgendaController {
         System.out.println("AUTH PRINCIPAL => " + authentication.getPrincipal());
         System.out.println("AUTH DETAILS   => " + authentication.getDetails());
         System.out.println("AUTH NAME      => " + authentication.getName());
+        System.out.println("BRANCHID     => " + branchId);
 
         List<BarberAgendaItemResponse> items = barberAgendaService.getAgenda(
                 tenantId,
