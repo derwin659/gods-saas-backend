@@ -3,6 +3,7 @@ package com.gods.saas.service.impl;
 import com.gods.saas.domain.dto.AppUserResponse;
 import com.gods.saas.domain.dto.CrearUsuarioRequest;
 import com.gods.saas.domain.dto.request.BootstrapOwnerRequest;
+import com.gods.saas.domain.dto.request.ChangePasswordRequest;
 import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.AppUserRepository;
 import com.gods.saas.domain.repository.BranchRepository;
@@ -12,11 +13,13 @@ import com.gods.saas.security.TenantContext;
 import com.gods.saas.service.impl.impl.SubscriptionService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -39,6 +42,92 @@ public class UserService {
                 .noneMatch(a -> a.getAuthority().equals("ROLE_OWNER"))) {
             throw new AccessDeniedException("Solo OWNER puede realizar esta acción");
         }
+    }
+
+    public void changeMyPassword(Long userId, ChangePasswordRequest req) {
+        if (req == null) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Solicitud inválida"
+            );
+        }
+
+        String currentPassword = req.getCurrentPassword() == null
+                ? ""
+                : req.getCurrentPassword().trim();
+
+        String newPassword = req.getNewPassword() == null
+                ? ""
+                : req.getNewPassword().trim();
+
+        String confirmPassword = req.getConfirmPassword() == null
+                ? ""
+                : req.getConfirmPassword().trim();
+
+        if (currentPassword.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "La contraseña actual es obligatoria"
+            );
+        }
+
+        if (newPassword.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "La nueva contraseña es obligatoria"
+            );
+        }
+
+        if (confirmPassword.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Debes confirmar la nueva contraseña"
+            );
+        }
+
+        if (!newPassword.equals(confirmPassword)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "La nueva contraseña y su confirmación no coinciden"
+            );
+        }
+
+        if (newPassword.length() < 6) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "La nueva contraseña debe tener al menos 6 caracteres"
+            );
+        }
+
+        AppUser user = getById(userId);
+
+        if (user.getPasswordHash() == null || user.getPasswordHash().isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "El usuario no tiene contraseña configurada"
+            );
+        }
+
+        boolean matches = passwordEncoder.matches(currentPassword, user.getPasswordHash());
+
+        if (!matches) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "La contraseña actual es incorrecta"
+            );
+        }
+
+        if (passwordEncoder.matches(newPassword, user.getPasswordHash())) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "La nueva contraseña no puede ser igual a la actual"
+            );
+        }
+
+        user.setPasswordHash(passwordEncoder.encode(newPassword));
+        user.setFechaActualizacion(LocalDateTime.now());
+
+        userRepository.save(user);
     }
 
     public String hashPassword(String rawPassword) {
