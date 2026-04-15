@@ -7,6 +7,7 @@ import com.gods.saas.domain.repository.AppointmentRepository;
 import com.gods.saas.service.impl.impl.OwnerAgendaService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
@@ -18,10 +19,11 @@ public class OwnerAgendaServiceImpl implements OwnerAgendaService {
 
     private final AppointmentRepository appointmentRepository;
 
+    @Transactional
     @Override
     public List<OwnerAgendaResponse> getAgendaDelDia(Long tenantId, Long branchId, LocalDate fecha) {
         final List<Appointment> appointments =
-                appointmentRepository.findByTenant_IdAndBranch_IdAndFechaOrderByHoraInicioAsc(
+                appointmentRepository.findOwnerAgendaByTenantBranchAndFecha(
                         tenantId, branchId, fecha
                 );
 
@@ -41,8 +43,8 @@ public class OwnerAgendaServiceImpl implements OwnerAgendaService {
                         .servicio(a.getService() != null ? a.getService().getNombre() : "Servicio")
                         .barbero(a.getUser() != null ? a.getUser().getNombre() : "Sin asignar")
                         .estado(a.getEstado() != null ? a.getEstado() : "RESERVADO")
-                        .build()
-                )
+                        .build())
                 .toList();
     }
+
 }

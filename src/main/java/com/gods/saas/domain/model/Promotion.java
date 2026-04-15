@@ -85,7 +85,7 @@ public class Promotion {
     @Column(name = "orden_visual", nullable = false)
     private Integer ordenVisual;
 
-    @Column(name = "creado_en", nullable = false)
+    @Column(name = "creado_en", nullable = false, updatable = false)
     private LocalDateTime createdAt;
 
     @Column(name = "actualizado_en", nullable = false)
@@ -93,7 +93,24 @@ public class Promotion {
 
     @PrePersist
     public void prePersist() {
-        if (redirectType == null) redirectType = PromotionRedirectType.NONE;
-        if (ordenVisual == null) ordenVisual = 0;
+        LocalDateTime now = LocalDateTime.now();
+
+        if (redirectType == null) {
+            redirectType = PromotionRedirectType.NONE;
+        }
+        if (ordenVisual == null) {
+            ordenVisual = 0;
+        }
+        if (createdAt == null) {
+            createdAt = now;
+        }
+        if (updatedAt == null) {
+            updatedAt = now;
+        }
+    }
+
+    @PreUpdate
+    public void preUpdate() {
+        updatedAt = LocalDateTime.now();
     }
 }
