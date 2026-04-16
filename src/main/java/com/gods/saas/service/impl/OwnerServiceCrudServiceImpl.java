@@ -44,16 +44,28 @@ public class OwnerServiceCrudServiceImpl implements OwnerServiceCrudService {
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("Tenant no encontrado"));
 
+        String nombreLimpio = request.nombre() == null ? null : request.nombre().trim();
+
+        if (nombreLimpio == null || nombreLimpio.isBlank()) {
+            throw new IllegalArgumentException("El nombre del servicio es obligatorio");
+        }
+        System.out.println("TENANT ID CREATE SERVICE => " + tenantId);
+        System.out.println("SERVICE NAME CREATE => " + request.nombre());
+        System.out.println("SERVICE NAME CREATE => " + nombreLimpio);
+
         boolean exists = serviceRepository.existsByTenant_IdAndNombreIgnoreCase(
-                tenantId, request.nombre().trim()
+                tenantId, nombreLimpio
         );
+        System.out.println("EXISTS => " + exists);
+
+
         if (exists) {
-            throw new IllegalArgumentException("Ya existe un servicio con ese nombre");
+            throw new IllegalArgumentException("Ya existe un servicio con ese nombre en esta barbería");
         }
 
         ServiceEntity service = new ServiceEntity();
         service.setTenant(tenant);
-        service.setNombre(request.nombre().trim());
+        service.setNombre(nombreLimpio);
         service.setDescripcion(trimToNull(request.descripcion()));
         service.setDuracionMinutos(request.duracionMinutos());
         service.setPrecio(request.precio().doubleValue());
@@ -62,7 +74,6 @@ public class OwnerServiceCrudServiceImpl implements OwnerServiceCrudService {
 
         return toResponse(serviceRepository.save(service));
     }
-
     @Override
     public ServiceResponse update(Long tenantId, Long serviceId, ServiceRequest request) {
         ServiceEntity service = getServiceOrThrow(tenantId, serviceId);
