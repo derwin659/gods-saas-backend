@@ -2,6 +2,7 @@ package com.gods.saas.domain.model;
 
 import jakarta.persistence.*;
 import lombok.*;
+
 import java.time.LocalDate;
 import java.time.LocalTime;
 
@@ -27,8 +28,8 @@ public class Appointment {
     @JoinColumn(name = "branch_id", nullable = false)
     private Branch branch;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "customer_id", nullable = false)
+    @ManyToOne(fetch = FetchType.LAZY, optional = true)
+    @JoinColumn(name = "customer_id", nullable = true)
     private Customer customer;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = true)
@@ -40,10 +41,13 @@ public class Appointment {
     private ServiceEntity service;
 
     private LocalDate fecha;
+
     @Column(name = "hora_inicio")
     private LocalTime horaInicio;
+
     @Column(name = "hora_fin")
     private LocalTime horaFin;
+
     private String estado;
     private String notas;
 }
