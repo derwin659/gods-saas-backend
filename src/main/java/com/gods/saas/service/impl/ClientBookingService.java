@@ -5,6 +5,7 @@ import com.gods.saas.domain.dto.response.*;
 import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.*;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +17,7 @@ import java.util.List;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class ClientBookingService {
 
     private static final LocalTime DEFAULT_OPENING_TIME = LocalTime.of(8, 0);
@@ -49,29 +51,54 @@ public class ClientBookingService {
             String date,
             Long barberId
     ) {
+        log.info("BOOKING AVAILABILITY START => tenantId={}, branchId={}, serviceId={}, date={}, barberId={}",
+                tenantId, branchId, serviceId, date, barberId);
+
         LocalDate fecha = LocalDate.parse(date);
         validateBookingDate(fecha);
 
         Branch branch = branchRepository.findById(branchId)
                 .orElseThrow(() -> new RuntimeException("Sucursal no encontrada"));
 
+        log.info("BRANCH FOUND => branchId={}, tenantId={}",
+                branch.getId(),
+                branch.getTenant() != null ? branch.getTenant().getId() : null);
+
         if (!branch.getTenant().getId().equals(tenantId)) {
+            log.warn("BRANCH TENANT MISMATCH => expectedTenantId={}, branchTenantId={}",
+                    tenantId, branch.getTenant().getId());
             throw new RuntimeException("La sucursal no pertenece al tenant");
         }
 
         ServiceEntity service = serviceRepository.findById(serviceId)
                 .orElseThrow(() -> new RuntimeException("Servicio no encontrado"));
 
+        log.info("SERVICE FOUND => serviceId={}, tenantId={}, duracionMinutos={}",
+                service.getId(),
+                service.getTenant() != null ? service.getTenant().getId() : null,
+                service.getDuracionMinutos());
+
         if (!service.getTenant().getId().equals(tenantId)) {
+            log.warn("SERVICE TENANT MISMATCH => expectedTenantId={}, serviceTenantId={}",
+                    tenantId, service.getTenant().getId());
             throw new RuntimeException("El servicio no pertenece al tenant");
         }
 
         int duracion = getServiceDuration(service);
         List<String> slots = new ArrayList<>();
 
+        log.info("SERVICE DURATION RESOLVED => {} minutos", duracion);
+
         if (barberId != null) {
             AppUser barber = appUserRepository.findByIdAndTenant_Id(barberId, tenantId)
                     .orElseThrow(() -> new RuntimeException("Barbero no encontrado"));
+
+            log.info("BARBER FOUND => barberId={}, nombre={} {}, barberBranchId={}, tenantId={}",
+                    barber.getId(),
+                    barber.getNombre(),
+                    barber.getApellido(),
+                    barber.getBranch() != null ? barber.getBranch().getId() : null,
+                    barber.getTenant() != null ? barber.getTenant().getId() : null);
 
             validateBarberBranch(barber, branchId);
 
@@ -79,7 +106,13 @@ public class ClientBookingService {
                     tenantId, branchId, barberId, fecha
             );
 
+            log.info("BARBER AVAILABILITY RESULT => barberId={}, fecha={}, dayOfWeek={}, found={}",
+                    barberId, fecha, fecha.getDayOfWeek().getValue(), availability != null);
+
             if (availability == null) {
+                log.warn("NO WORKING AVAILABILITY FOUND => tenantId={}, branchId={}, barberId={}, fecha={}, dayOfWeek={}",
+                        tenantId, branchId, barberId, fecha, fecha.getDayOfWeek().getValue());
+
                 return BookingAvailabilityResponse.builder()
                         .date(date)
                         .slots(List.of())
@@ -90,13 +123,21 @@ public class ClientBookingService {
             LocalTime cierre = availability.getEndTime();
             LocalTime current = normalizeStartTime(fecha, apertura);
 
+            log.info("BARBER SCHEDULE WINDOW => barberId={}, apertura={}, cierre={}, normalizedStart={}",
+                    barberId, apertura, cierre, current);
+
             while (!current.plusMinutes(duracion).isAfter(cierre)) {
                 LocalTime candidateStart = current;
                 LocalTime candidateEnd = current.plusMinutes(duracion);
 
-                if (isBarberAvailableConsideringAllRules(
+                boolean available = isBarberAvailableConsideringAllRules(
                         tenantId, branchId, barberId, fecha, candidateStart, candidateEnd
-                )) {
+                );
+
+                log.info("BARBER SLOT EVAL => barberId={}, fecha={}, start={}, end={}, available={}",
+                        barberId, fecha, candidateStart, candidateEnd, available);
+
+                if (available) {
                     slots.add(candidateStart.toString());
                 }
 
@@ -105,12 +146,25 @@ public class ClientBookingService {
         } else {
             List<AppUser> barberos = getActiveBranchBarbers(tenantId, branchId);
 
+            log.info("ACTIVE BRANCH BARBERS => branchId={}, count={}, barberIds={}",
+                    branchId,
+                    barberos.size(),
+                    barberos.stream().map(AppUser::getId).toList());
+
             List<AppUser> availableBarbersForDay = barberos.stream()
                     .filter(b -> getWorkingAvailabilityOrNull(tenantId, branchId, b.getId(), fecha) != null)
                     .sorted(Comparator.comparing(AppUser::getId))
                     .toList();
 
+            log.info("AVAILABLE BARBERS FOR DAY => fecha={}, count={}, barberIds={}",
+                    fecha,
+                    availableBarbersForDay.size(),
+                    availableBarbersForDay.stream().map(AppUser::getId).toList());
+
             if (availableBarbersForDay.isEmpty()) {
+                log.warn("NO AVAILABLE BARBERS FOR DAY => tenantId={}, branchId={}, fecha={}",
+                        tenantId, branchId, fecha);
+
                 return BookingAvailabilityResponse.builder()
                         .date(date)
                         .slots(List.of())
@@ -131,6 +185,9 @@ public class ClientBookingService {
 
             LocalTime current = normalizeStartTime(fecha, apertura);
 
+            log.info("GLOBAL SCHEDULE WINDOW => fecha={}, apertura={}, cierre={}, normalizedStart={}",
+                    fecha, apertura, cierre, current);
+
             while (!current.plusMinutes(duracion).isAfter(cierre)) {
                 LocalTime candidateStart = current;
                 LocalTime candidateEnd = current.plusMinutes(duracion);
@@ -140,6 +197,9 @@ public class ClientBookingService {
                                 tenantId, branchId, b.getId(), fecha, candidateStart, candidateEnd
                         ));
 
+                log.info("ANY BARBER SLOT EVAL => fecha={}, start={}, end={}, anyAvailable={}",
+                        fecha, candidateStart, candidateEnd, anyAvailable);
+
                 if (anyAvailable) {
                     slots.add(candidateStart.toString());
                 }
@@ -148,12 +208,14 @@ public class ClientBookingService {
             }
         }
 
+        log.info("BOOKING AVAILABILITY END => tenantId={}, branchId={}, serviceId={}, date={}, barberId={}, slotsCount={}, slots={}",
+                tenantId, branchId, serviceId, date, barberId, slots.size(), slots);
+
         return BookingAvailabilityResponse.builder()
                 .date(date)
                 .slots(slots)
                 .build();
     }
-
     @Transactional
     public CreateAppointmentResponse createAppointment(
             Long tenantId,
@@ -257,20 +319,29 @@ public class ClientBookingService {
             LocalTime horaInicio,
             LocalTime horaFin
     ) {
+        log.info("VALIDATING BARBER SLOT => tenantId={}, branchId={}, barberId={}, fecha={}, horaInicio={}, horaFin={}",
+                tenantId, branchId, barberId, fecha, horaInicio, horaFin);
+
         BarberAvailability availability = getWorkingAvailabilityOrNull(tenantId, branchId, barberId, fecha);
         if (availability == null) {
+            log.warn("SLOT REJECTED => no working availability");
             return false;
         }
 
         if (horaInicio.isBefore(availability.getStartTime()) || horaFin.isAfter(availability.getEndTime())) {
+            log.warn("SLOT REJECTED => out of availability range. startTime={}, endTime={}, availabilityStart={}, availabilityEnd={}",
+                    horaInicio, horaFin, availability.getStartTime(), availability.getEndTime());
             return false;
         }
 
         if (isBlockedByManualBlock(tenantId, branchId, barberId, fecha, horaInicio, horaFin)) {
+            log.warn("SLOT REJECTED => blocked by manual block");
             return false;
         }
 
         if (fecha.equals(LocalDate.now()) && !horaInicio.isAfter(LocalTime.now())) {
+            log.warn("SLOT REJECTED => time is in the past. now={}, slotStart={}",
+                    LocalTime.now(), horaInicio);
             return false;
         }
 
@@ -283,7 +354,14 @@ public class ClientBookingService {
                 horaFin
         );
 
-        return conflicts == 0;
+        log.info("APPOINTMENT CONFLICT CHECK => barberId={}, fecha={}, horaInicio={}, horaFin={}, conflicts={}",
+                barberId, fecha, horaInicio, horaFin, conflicts);
+
+        boolean available = conflicts == 0;
+        log.info("SLOT FINAL RESULT => barberId={}, fecha={}, horaInicio={}, horaFin={}, available={}",
+                barberId, fecha, horaInicio, horaFin, available);
+
+        return available;
     }
 
     private BarberAvailability getWorkingAvailabilityOrNull(
@@ -292,15 +370,43 @@ public class ClientBookingService {
             Long barberId,
             LocalDate fecha
     ) {
-        return barberAvailabilityRepository
+        int dayOfWeek = fecha.getDayOfWeek().getValue();
+
+        log.info("SEARCH WORKING AVAILABILITY => tenantId={}, branchId={}, barberId={}, fecha={}, dayOfWeek={}",
+                tenantId, branchId, barberId, fecha, dayOfWeek);
+
+        var optionalAvailability = barberAvailabilityRepository
                 .findByTenant_IdAndBranch_IdAndBarber_IdAndDayOfWeek(
                         tenantId,
                         branchId,
                         barberId,
-                        fecha.getDayOfWeek().getValue()
-                )
-                .filter(a -> Boolean.TRUE.equals(a.getIsWorking()))
-                .orElse(null);
+                        dayOfWeek
+                );
+
+        if (optionalAvailability.isEmpty()) {
+            log.warn("RAW AVAILABILITY NOT FOUND => tenantId={}, branchId={}, barberId={}, dayOfWeek={}",
+                    tenantId, branchId, barberId, dayOfWeek);
+            return null;
+        }
+
+        BarberAvailability availability = optionalAvailability.get();
+
+        log.info("RAW AVAILABILITY FOUND => id={}, barberId={}, branchId={}, dayOfWeek={}, isWorking={}, startTime={}, endTime={}",
+                availability.getId(),
+                availability.getBarber() != null ? availability.getBarber().getId() : null,
+                availability.getBranch() != null ? availability.getBranch().getId() : null,
+                availability.getDayOfWeek(),
+                availability.getIsWorking(),
+                availability.getStartTime(),
+                availability.getEndTime());
+
+        if (!Boolean.TRUE.equals(availability.getIsWorking())) {
+            log.warn("AVAILABILITY EXISTS BUT NOT WORKING => id={}, barberId={}, dayOfWeek={}",
+                    availability.getId(), barberId, dayOfWeek);
+            return null;
+        }
+
+        return availability;
     }
 
     private boolean isBlockedByManualBlock(
@@ -316,24 +422,57 @@ public class ClientBookingService {
                         tenantId, branchId, barberId, fecha
                 );
 
-        return blocks.stream().anyMatch(b ->
+        log.info("MANUAL BLOCKS FOUND => barberId={}, fecha={}, blocksCount={}",
+                barberId, fecha, blocks.size());
+
+        for (BarberTimeBlock b : blocks) {
+            log.info("BLOCK DETAIL => id={}, allDay={}, startTime={}, endTime={}, reason={}",
+                    b.getId(), b.getAllDay(), b.getStartTime(), b.getEndTime(), b.getReason());
+        }
+
+        boolean blocked = blocks.stream().anyMatch(b ->
                 b.getStartTime() != null &&
                         b.getEndTime() != null &&
                         horaInicio.isBefore(b.getEndTime()) &&
                         horaFin.isAfter(b.getStartTime())
         );
+
+        log.info("MANUAL BLOCK RESULT => barberId={}, fecha={}, horaInicio={}, horaFin={}, blocked={}",
+                barberId, fecha, horaInicio, horaFin, blocked);
+
+        return blocked;
     }
 
     private List<AppUser> getActiveBranchBarbers(Long tenantId, Long branchId) {
-        return appUserRepository.findByTenant_IdAndRolAndActivoTrue(tenantId, "BARBER")
-                .stream()
+        List<AppUser> allBarbers = appUserRepository.findByTenant_IdAndRolAndActivoTrue(tenantId, "BARBER");
+
+        log.info("ALL ACTIVE TENANT BARBERS => tenantId={}, count={}, barberIds={}",
+                tenantId,
+                allBarbers.size(),
+                allBarbers.stream().map(AppUser::getId).toList());
+
+        List<AppUser> filtered = allBarbers.stream()
                 .filter(b -> b.getBranch() != null && b.getBranch().getId().equals(branchId))
                 .sorted(Comparator.comparing(AppUser::getId))
                 .toList();
+
+        log.info("ACTIVE BRANCH BARBERS FILTERED => branchId={}, count={}, barberIds={}",
+                branchId,
+                filtered.size(),
+                filtered.stream().map(AppUser::getId).toList());
+
+        return filtered;
     }
 
     private void validateBarberBranch(AppUser barber, Long branchId) {
+        Long barberBranchId = barber.getBranch() != null ? barber.getBranch().getId() : null;
+
+        log.info("VALIDATING BARBER BRANCH => barberId={}, barberBranchId={}, requestedBranchId={}",
+                barber.getId(), barberBranchId, branchId);
+
         if (barber.getBranch() == null || !barber.getBranch().getId().equals(branchId)) {
+            log.warn("BARBER BRANCH MISMATCH => barberId={}, barberBranchId={}, requestedBranchId={}",
+                    barber.getId(), barberBranchId, branchId);
             throw new RuntimeException("El barbero no pertenece a la sucursal seleccionada");
         }
     }
