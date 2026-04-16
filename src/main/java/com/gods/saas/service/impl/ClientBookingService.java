@@ -11,6 +11,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -23,6 +24,7 @@ public class ClientBookingService {
     private static final LocalTime DEFAULT_OPENING_TIME = LocalTime.of(8, 0);
     private static final LocalTime DEFAULT_CLOSING_TIME = LocalTime.of(21, 0);
     private static final int SLOT_INTERVAL_MINUTES = 15;
+    private static final ZoneId BUSINESS_ZONE = ZoneId.of("America/Lima");
 
     private final BranchRepository branchRepository;
     private final ServiceRepository serviceRepository;
@@ -216,6 +218,7 @@ public class ClientBookingService {
                 .slots(slots)
                 .build();
     }
+
     @Transactional
     public CreateAppointmentResponse createAppointment(
             Long tenantId,
@@ -339,9 +342,12 @@ public class ClientBookingService {
             return false;
         }
 
-        if (fecha.equals(LocalDate.now()) && !horaInicio.isAfter(LocalTime.now())) {
-            log.warn("SLOT REJECTED => time is in the past. now={}, slotStart={}",
-                    LocalTime.now(), horaInicio);
+        LocalDate today = LocalDate.now(BUSINESS_ZONE);
+        LocalTime now = LocalTime.now(BUSINESS_ZONE);
+
+        if (fecha.equals(today) && !horaInicio.isAfter(now)) {
+            log.warn("SLOT REJECTED => time is in the past. zone={}, now={}, slotStart={}",
+                    BUSINESS_ZONE, now, horaInicio);
             return false;
         }
 
@@ -484,24 +490,34 @@ public class ClientBookingService {
     }
 
     private void validateBookingDate(LocalDate fecha) {
-        if (fecha.isBefore(LocalDate.now())) {
+        LocalDate today = LocalDate.now(BUSINESS_ZONE);
+
+        if (fecha.isBefore(today)) {
             throw new RuntimeException("No se puede reservar en una fecha pasada");
         }
     }
 
     private void validateTimeNotPast(LocalDate fecha, LocalTime horaInicio) {
-        if (fecha.equals(LocalDate.now()) && !horaInicio.isAfter(LocalTime.now())) {
+        LocalDate today = LocalDate.now(BUSINESS_ZONE);
+        LocalTime now = LocalTime.now(BUSINESS_ZONE);
+
+        if (fecha.equals(today) && !horaInicio.isAfter(now)) {
             throw new RuntimeException("No se puede reservar una hora pasada");
         }
     }
 
     private LocalTime normalizeStartTime(LocalDate fecha, LocalTime apertura) {
-        if (!fecha.equals(LocalDate.now())) {
+        LocalDate today = LocalDate.now(BUSINESS_ZONE);
+
+        if (!fecha.equals(today)) {
             return apertura;
         }
 
-        LocalTime now = LocalTime.now();
+        LocalTime now = LocalTime.now(BUSINESS_ZONE);
         LocalTime rounded = roundUpToNextSlot(now);
+
+        log.info("NORMALIZE START TIME => fecha={}, today={}, nowLima={}, rounded={}, apertura={}",
+                fecha, today, now, rounded, apertura);
 
         if (rounded.isBefore(apertura)) {
             return apertura;
@@ -515,7 +531,6 @@ public class ClientBookingService {
         int remainder = minute % SLOT_INTERVAL_MINUTES;
         int minutesToAdd = remainder == 0 ? SLOT_INTERVAL_MINUTES : SLOT_INTERVAL_MINUTES - remainder;
 
-        LocalTime rounded = time.withSecond(0).withNano(0).plusMinutes(minutesToAdd);
-        return rounded;
+        return time.withSecond(0).withNano(0).plusMinutes(minutesToAdd);
     }
 }
