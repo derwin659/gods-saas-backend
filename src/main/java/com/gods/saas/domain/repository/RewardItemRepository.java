@@ -10,6 +10,8 @@ import java.util.Optional;
 @Repository
 public interface RewardItemRepository extends JpaRepository<RewardItem, Long> {
 
+    long countByTenant_Id(Long tenantId);
+
     List<RewardItem> findByTenant_IdAndActivoTrueOrderByPuntosRequeridosAsc(Long tenantId);
 
     Optional<RewardItem> findByIdAndTenant_IdAndActivoTrue(Long rewardId, Long tenantId);

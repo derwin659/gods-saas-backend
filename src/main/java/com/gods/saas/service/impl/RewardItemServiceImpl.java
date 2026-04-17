@@ -20,41 +20,45 @@ import java.util.List;
 @Transactional
 public class RewardItemServiceImpl implements RewardItemService {
 
+    private static final int STARTER_MAX_REWARDS = 5;
+
     private final RewardItemRepository repository;
     private final TenantRepository tenantRepository;
     private final SubscriptionRepository subscriptionRepository;
 
     @Override
     public List<RewardItemResponse> getAll(Long tenantId, Boolean onlyActive) {
-
-
         List<RewardItem> list = Boolean.TRUE.equals(onlyActive)
                 ? repository.findByTenant_IdAndActivoTrueOrderByNombreAsc(tenantId)
                 : repository.findByTenant_IdOrderByNombreAsc(tenantId);
 
-        return list.stream().map(this::map).toList();
+        return list.stream()
+                .map(this::map)
+                .toList();
     }
 
     @Override
     public RewardItemResponse create(Long tenantId, RewardItemRequest request) {
-        validateCustomRewardsAllowed(tenantId);
+        validateCustomRewardsCreateAllowed(tenantId);
+
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new RuntimeException("Tenant no encontrado"));
 
+        validate(request);
 
-        if (repository.existsByTenant_IdAndNombreIgnoreCase(tenantId, request.getNombre())) {
+        String nombre = request.getNombre().trim();
+
+        if (repository.existsByTenant_IdAndNombreIgnoreCase(tenantId, nombre)) {
             throw new RuntimeException("Ya existe un premio con ese nombre");
         }
 
-        validate(request);
-
         RewardItem entity = RewardItem.builder()
                 .tenant(tenant)
-                .nombre(request.getNombre().trim())
-                .descripcion(request.getDescripcion())
+                .nombre(nombre)
+                .descripcion(trimToNull(request.getDescripcion()))
                 .puntosRequeridos(request.getPuntosRequeridos())
                 .stock(request.getStock())
-                .imagenUrl(request.getImagenUrl())
+                .imagenUrl(trimToNull(request.getImagenUrl()))
                 .activo(request.getActivo() != null ? request.getActivo() : true)
                 .build();
 
@@ -63,41 +67,41 @@ public class RewardItemServiceImpl implements RewardItemService {
 
     @Override
     public RewardItemResponse update(Long tenantId, Long id, RewardItemRequest request) {
+        validateCustomRewardsFeatureAllowed(tenantId);
 
-        validateCustomRewardsAllowed(tenantId);
         RewardItem entity = repository.findByIdAndTenant_Id(id, tenantId)
-                .orElseThrow(() -> new RuntimeException("No encontrado"));
-
-
-        if (repository.existsByTenant_IdAndNombreIgnoreCaseAndIdNot(
-                tenantId, request.getNombre(), id)) {
-            throw new RuntimeException("Nombre duplicado");
-        }
-
+                .orElseThrow(() -> new RuntimeException("Premio no encontrado"));
 
         validate(request);
 
-        entity.setNombre(request.getNombre());
-        entity.setDescripcion(request.getDescripcion());
+        String nombre = request.getNombre().trim();
+
+        if (repository.existsByTenant_IdAndNombreIgnoreCaseAndIdNot(tenantId, nombre, id)) {
+            throw new RuntimeException("Nombre duplicado");
+        }
+
+        entity.setNombre(nombre);
+        entity.setDescripcion(trimToNull(request.getDescripcion()));
         entity.setPuntosRequeridos(request.getPuntosRequeridos());
         entity.setStock(request.getStock());
-        entity.setImagenUrl(request.getImagenUrl());
-        entity.setActivo(request.getActivo());
+        entity.setImagenUrl(trimToNull(request.getImagenUrl()));
+        entity.setActivo(request.getActivo() != null ? request.getActivo() : true);
 
         return map(repository.save(entity));
     }
 
     @Override
     public void delete(Long tenantId, Long id) {
-        validateCustomRewardsAllowed(tenantId);
+        validateCustomRewardsFeatureAllowed(tenantId);
+
         RewardItem entity = repository.findByIdAndTenant_Id(id, tenantId)
-                .orElseThrow(() -> new RuntimeException("No encontrado"));
+                .orElseThrow(() -> new RuntimeException("Premio no encontrado"));
 
         repository.delete(entity);
     }
 
     private void validate(RewardItemRequest request) {
-        if (request.getNombre() == null || request.getNombre().isEmpty()) {
+        if (request.getNombre() == null || request.getNombre().trim().isEmpty()) {
             throw new RuntimeException("Nombre obligatorio");
         }
 
@@ -113,21 +117,47 @@ public class RewardItemServiceImpl implements RewardItemService {
     private RewardItemResponse map(RewardItem e) {
         return new RewardItemResponse(
                 e.getId(),
-                e.getNombre(),            // titulo
+                e.getNombre(),
                 e.getDescripcion(),
-                e.getPuntosRequeridos(), // costoPuntos
-                false                    // destacado (lo puedes agregar luego)
+                e.getPuntosRequeridos(),
+                false
         );
     }
 
-
-    private void validateCustomRewardsAllowed(Long tenantId) {
+    private void validateCustomRewardsFeatureAllowed(Long tenantId) {
         Subscription subscription = subscriptionRepository
                 .findTopByTenantIdOrderByFechaInicioDesc(tenantId)
                 .orElseThrow(() -> new RuntimeException("Suscripción no encontrada"));
 
         if (subscription.getCustomRewardsEnabled() == null || !subscription.getCustomRewardsEnabled()) {
-            throw new RuntimeException("Tu plan actual no permite crear o editar premios personalizados");
+            throw new RuntimeException("Tu plan actual no permite gestionar premios personalizados");
         }
+    }
+
+    private void validateCustomRewardsCreateAllowed(Long tenantId) {
+        Subscription subscription = subscriptionRepository
+                .findTopByTenantIdOrderByFechaInicioDesc(tenantId)
+                .orElseThrow(() -> new RuntimeException("Suscripción no encontrada"));
+
+        if (subscription.getCustomRewardsEnabled() == null || !subscription.getCustomRewardsEnabled()) {
+            throw new RuntimeException("Tu plan actual no permite gestionar premios personalizados");
+        }
+
+        if ("STARTER".equalsIgnoreCase(subscription.getPlan())) {
+            long totalRewards = repository.countByTenant_Id(tenantId);
+
+            if (totalRewards >= STARTER_MAX_REWARDS) {
+                throw new RuntimeException("El plan STARTER permite hasta 5 premios");
+            }
+        }
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
     }
 }
