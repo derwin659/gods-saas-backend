@@ -71,7 +71,7 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
             user.setSalaryFrequency(salaryFrequency);
             user.setSalaryStartDate(salaryStartDate);
 
-            user.setCommissionScheme(null);
+            user.setCommissionScheme("SALARY");
             user.setCommissionPercentage(null);
         } else {
             if (commissionPercentage == null || commissionPercentage.compareTo(BigDecimal.ZERO) <= 0) {
@@ -79,7 +79,7 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
             }
 
             user.setCommissionPercentage(commissionPercentage);
-            user.setCommissionScheme("STANDARD");
+            user.setCommissionScheme("PERCENTAGE");
 
             user.setFixedSalaryAmount(null);
             user.setSalaryFrequency(null);
