@@ -204,8 +204,8 @@ public class SuperAdminPaymentServiceImpl implements SuperAdminPaymentService {
                 subscription.setMaxAdmins(1);
                 subscription.setAiEnabled(false);
                 subscription.setLoyaltyEnabled(true);
-                subscription.setPromotionsEnabled(false);
-                subscription.setCustomRewardsEnabled(false);
+                subscription.setPromotionsEnabled(true);
+                subscription.setCustomRewardsEnabled(true);
             }
         }
     }
