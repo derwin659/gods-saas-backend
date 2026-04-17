@@ -375,16 +375,18 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
     private LocalDateTime endInclusive(LocalDate date) {
         return date.plusDays(1).atStartOfDay().minusNanos(1);
     }
-
     private void validateAdvancedReportsAllowed(Long tenantId) {
         Subscription subscription = subscriptionRepository
                 .findTopByTenantIdOrderByFechaInicioDesc(tenantId)
                 .orElseThrow(() -> new RuntimeException("Suscripción no encontrada"));
 
-        String plan = subscription.getPlan() == null ? "" : subscription.getPlan().trim().toUpperCase();
+        String estado = subscription.getEstado() == null
+                ? ""
+                : subscription.getEstado().trim().toUpperCase();
 
-        if ("STARTER".equals(plan)) {
-            throw new RuntimeException("Tu plan actual no permite acceder a reportes avanzados");
+        if (!"ACTIVE".equals(estado) && !"TRIAL".equals(estado) && !"PENDING_REVIEW".equals(estado)) {
+            throw new RuntimeException("Tu suscripción no permite acceder a reportes");
         }
     }
+
 }
