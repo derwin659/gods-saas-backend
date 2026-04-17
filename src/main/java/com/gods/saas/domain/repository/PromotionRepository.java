@@ -11,6 +11,7 @@ import java.util.Optional;
 
 public interface PromotionRepository extends JpaRepository<Promotion, Long> {
     List<Promotion> findByTenant_IdOrderByOrdenVisualAscCreatedAtDesc(Long tenantId);
+    long countByTenant_Id(Long tenantId);
 
     Optional<Promotion> findByIdAndTenant_Id(Long id, Long tenantId);
 

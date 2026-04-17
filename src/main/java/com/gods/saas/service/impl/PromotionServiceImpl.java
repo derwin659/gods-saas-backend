@@ -18,6 +18,7 @@ import java.util.List;
 @RequiredArgsConstructor
 @Transactional
 public class PromotionServiceImpl implements PromotionService {
+
     private final SubscriptionRepository subscriptionRepository;
     private final CustomerRepository customerRepository;
     private final LoyaltyAccountRepository loyaltyAccountRepository;
@@ -70,8 +71,9 @@ public class PromotionServiceImpl implements PromotionService {
 
     @Override
     public PromotionResponse createPromotion(Long tenantId, PromotionRequest request) {
-        validatePromotionsAllowed(tenantId);
-        var tenant = tenantRepository.findById(tenantId)
+        validatePromotionsCreateAllowed(tenantId);
+
+        Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("Tenant no encontrado"));
 
         Branch branch = resolveBranch(tenantId, request.getBranchId());
@@ -106,7 +108,8 @@ public class PromotionServiceImpl implements PromotionService {
 
     @Override
     public PromotionResponse updatePromotion(Long tenantId, Long promotionId, PromotionRequest request) {
-        validatePromotionsAllowed(tenantId);
+        validatePromotionsFeatureAllowed(tenantId);
+
         Promotion promotion = promotionRepository.findByIdAndTenant_Id(promotionId, tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("Promoción no encontrada"));
 
@@ -139,7 +142,8 @@ public class PromotionServiceImpl implements PromotionService {
 
     @Override
     public PromotionResponse togglePromotion(Long tenantId, Long promotionId) {
-        validatePromotionsAllowed(tenantId);
+        validatePromotionsFeatureAllowed(tenantId);
+
         Promotion promotion = promotionRepository.findByIdAndTenant_Id(promotionId, tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("Promoción no encontrada"));
 
@@ -150,7 +154,8 @@ public class PromotionServiceImpl implements PromotionService {
 
     @Override
     public void deletePromotion(Long tenantId, Long promotionId) {
-        validatePromotionsAllowed(tenantId);
+        validatePromotionsFeatureAllowed(tenantId);
+
         Promotion promotion = promotionRepository.findByIdAndTenant_Id(promotionId, tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("Promoción no encontrada"));
 
@@ -166,12 +171,14 @@ public class PromotionServiceImpl implements PromotionService {
             throw new IllegalArgumentException("El tipo de promoción es obligatorio");
         }
 
-        if (p.getFechaInicio() != null && p.getFechaFin() != null &&
-                p.getFechaFin().isBefore(p.getFechaInicio())) {
+        if (p.getFechaInicio() != null
+                && p.getFechaFin() != null
+                && p.getFechaFin().isBefore(p.getFechaInicio())) {
             throw new IllegalArgumentException("La fecha fin no puede ser menor a la fecha inicio");
         }
 
-        if (p.isSoloClientesConPuntos() && (p.getPuntosMinimos() == null || p.getPuntosMinimos() < 1)) {
+        if (p.isSoloClientesConPuntos()
+                && (p.getPuntosMinimos() == null || p.getPuntosMinimos() < 1)) {
             throw new IllegalArgumentException("Debes indicar puntos mínimos válidos");
         }
 
@@ -180,8 +187,37 @@ public class PromotionServiceImpl implements PromotionService {
         }
     }
 
+    private void validatePromotionsFeatureAllowed(Long tenantId) {
+        Subscription subscription = subscriptionRepository
+                .findTopByTenantIdOrderByFechaInicioDesc(tenantId)
+                .orElseThrow(() -> new RuntimeException("Suscripción no encontrada"));
+
+        if (!subscription.isPromotionsEnabled()) {
+            throw new RuntimeException("Tu plan actual no permite gestionar promociones");
+        }
+    }
+
+    private void validatePromotionsCreateAllowed(Long tenantId) {
+        Subscription subscription = subscriptionRepository
+                .findTopByTenantIdOrderByFechaInicioDesc(tenantId)
+                .orElseThrow(() -> new RuntimeException("Suscripción no encontrada"));
+
+        if (!subscription.isPromotionsEnabled()) {
+            throw new RuntimeException("Tu plan actual no permite gestionar promociones");
+        }
+
+        if ("STARTER".equalsIgnoreCase(subscription.getPlan())) {
+            long totalPromotions = promotionRepository.countByTenant_Id(tenantId);
+            if (totalPromotions >= 5) {
+                throw new RuntimeException("El plan STARTER permite hasta 5 promociones");
+            }
+        }
+    }
+
     private Branch resolveBranch(Long tenantId, Long branchId) {
-        if (branchId == null) return null;
+        if (branchId == null) {
+            return null;
+        }
 
         return branchRepository.findById(branchId)
                 .filter(branch -> branch.getTenant() != null && branch.getTenant().getId().equals(tenantId))
@@ -236,17 +272,5 @@ public class PromotionServiceImpl implements PromotionService {
 
     private String trim(String value) {
         return value == null ? null : value.trim();
-    }
-
-
-
-    private void validatePromotionsAllowed(Long tenantId) {
-        Subscription subscription = subscriptionRepository
-                .findTopByTenantIdOrderByFechaInicioDesc(tenantId)
-                .orElseThrow(() -> new RuntimeException("Suscripción no encontrada"));
-
-        if (!subscription.isPromotionsEnabled()) {
-            throw new RuntimeException("Tu plan actual no permite gestionar promociones");
-        }
     }
 }
