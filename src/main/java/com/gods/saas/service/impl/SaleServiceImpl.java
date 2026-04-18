@@ -237,7 +237,7 @@ public class SaleServiceImpl implements SaleService {
                         hasText(request.getCutDetail()) ||
                         hasText(request.getCutObservations());
 
-        if (hasHaircutService && !hasText(request.getCutType())) {
+        if (hasHaircutService && !hasCutData) {
             throw new RuntimeException("Debes registrar el corte realizado.");
         }
 
@@ -289,11 +289,12 @@ public class SaleServiceImpl implements SaleService {
         sale.setItems(items);
 
         Sale savedSale = saleRepository.save(sale);
+
         customerCutHistoryService.registerFromSale(
                 savedSale,
-                request.getCutType(),
-                request.getCutDetail(),
-                request.getCutObservations()
+                clean(request.getCutType()),
+                clean(request.getCutDetail()),
+                clean(request.getCutObservations())
         );
 
         for (int i = 0; i < savedSale.getItems().size(); i++) {
@@ -315,7 +316,6 @@ public class SaleServiceImpl implements SaleService {
                             .build()
             );
         }
-
 
         int puntosGanados = 0;
         int puntosDisponibles = 0;
@@ -386,11 +386,7 @@ public class SaleServiceImpl implements SaleService {
             if (item.getCantidad() == null || item.getCantidad() <= 0) {
                 throw new RuntimeException("La cantidad debe ser mayor a 0");
             }
-
-
         }
-
-
     }
 
     private String normalizarMetodoPago(String metodoPago) {
