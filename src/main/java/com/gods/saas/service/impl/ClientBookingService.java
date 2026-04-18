@@ -4,6 +4,7 @@ import com.gods.saas.domain.dto.request.CreateAppointmentRequest;
 import com.gods.saas.domain.dto.response.*;
 import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.*;
+import com.gods.saas.service.impl.impl.NotificationService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -33,6 +34,7 @@ public class ClientBookingService {
     private final CustomerRepository customerRepository;
     private final BarberAvailabilityRepository barberAvailabilityRepository;
     private final BarberTimeBlockRepository barberTimeBlockRepository;
+    private final NotificationService notificationService;
 
     public BookingBootstrapResponse getBootstrap(Long tenantId) {
         List<Branch> branches = branchRepository.findByTenant_IdAndActivoTrue(tenantId);
@@ -287,6 +289,9 @@ public class ClientBookingService {
                 .build();
 
         Appointment saved = appointmentRepository.save(appointment);
+        notificationService.notifyBookingCreated(saved);
+
+
 
         return CreateAppointmentResponse.builder()
                 .appointmentId(saved.getId())

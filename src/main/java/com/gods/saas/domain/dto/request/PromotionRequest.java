@@ -21,7 +21,7 @@ public class PromotionRequest {
     private String iconName;
     private String priceText;
     private String ctaLabel;
-
+    private Boolean sendNotification;
     private PromotionRedirectType redirectType;
     private String redirectValue;
 

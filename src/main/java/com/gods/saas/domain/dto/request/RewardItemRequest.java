@@ -10,4 +10,5 @@ public class RewardItemRequest {
     private Integer stock;
     private String imagenUrl;
     private Boolean activo;
+    private Boolean sendNotification;
 }

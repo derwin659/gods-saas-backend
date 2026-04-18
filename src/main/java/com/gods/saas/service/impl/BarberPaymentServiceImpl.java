@@ -7,6 +7,7 @@ import com.gods.saas.domain.enums.*;
 import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.*;
 import com.gods.saas.service.impl.impl.BarberPaymentService;
+import com.gods.saas.service.impl.impl.NotificationService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -34,6 +35,7 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
     private final AppUserRepository appUserRepository;
     private final UserTenantRoleRepository userTenantRoleRepository;
     private final TenantSettingsRepository tenantSettingsRepository;
+    private final NotificationService notificationService;
 
     @Override
     @Transactional(readOnly = true)
@@ -203,9 +205,11 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 .createdAt(now)
                 .build();
 
-        entity = barberPaymentRepository.save(entity);
 
-        return map(entity);
+
+        BarberPayment saved = barberPaymentRepository.save(entity);
+        notificationService.notifyBarberPaymentCreated(saved);
+        return map(saved);
     }
 
     @Override

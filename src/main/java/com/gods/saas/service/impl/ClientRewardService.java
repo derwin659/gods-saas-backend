@@ -3,6 +3,7 @@ package com.gods.saas.service.impl;
 import com.gods.saas.domain.dto.response.RedeemRewardResponse;
 import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.*;
+import com.gods.saas.service.impl.impl.NotificationService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
@@ -20,6 +21,7 @@ public class ClientRewardService {
     private final RewardItemRepository rewardItemRepository;
     private final RewardRedemptionRepository rewardRedemptionRepository;
     private final LoyaltyMovementRepository loyaltyMovementRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public RedeemRewardResponse redeemReward(Authentication authentication, Long rewardId) {
@@ -93,7 +95,7 @@ public class ClientRewardService {
                 .build();
 
         loyaltyMovementRepository.save(movement);
-
+        notificationService.notifyRewardRedeemed(redemption, customer, reward);
         return new RedeemRewardResponse(
                 true,
                 "Canje realizado correctamente",

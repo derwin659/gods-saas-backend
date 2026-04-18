@@ -6,6 +6,7 @@ import com.gods.saas.domain.dto.response.PromotionResponse;
 import com.gods.saas.domain.enums.PromotionRedirectType;
 import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.*;
+import com.gods.saas.service.impl.impl.NotificationService;
 import com.gods.saas.service.impl.impl.PromotionService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,7 @@ public class PromotionServiceImpl implements PromotionService {
     private final PromotionRepository promotionRepository;
     private final TenantRepository tenantRepository;
     private final BranchRepository branchRepository;
+    private final NotificationService notificationService;
 
     @Override
     @Transactional(readOnly = true)
@@ -103,7 +105,13 @@ public class PromotionServiceImpl implements PromotionService {
 
         validatePromotion(promotion);
 
-        return toOwnerResponse(promotionRepository.save(promotion));
+        Promotion saved = promotionRepository.save(promotion);
+
+        if (Boolean.TRUE.equals(request.getSendNotification())) {
+            notificationService.notifyPromotionCreated(saved, true);
+        }
+
+        return toOwnerResponse(saved);
     }
 
     @Override

@@ -27,6 +27,7 @@ import com.gods.saas.domain.repository.SaleRepository;
 import com.gods.saas.domain.repository.ServiceRepository;
 import com.gods.saas.domain.repository.TenantRepository;
 import com.gods.saas.service.impl.impl.LoyaltyService;
+import com.gods.saas.service.impl.impl.NotificationService;
 import com.gods.saas.service.impl.impl.SaleService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -58,6 +59,7 @@ public class SaleServiceImpl implements SaleService {
     private final CashRegisterRepository cashRegisterRepository;
     private final TenantTimeService tenantTimeService;
     private final CustomerCutHistoryService customerCutHistoryService;
+    private final NotificationService notificationService;
 
     @Override
     public SaleResponse crearVenta(CreateSaleRequest request) {
@@ -339,7 +341,7 @@ public class SaleServiceImpl implements SaleService {
                     ? updated.getPuntosDisponibles()
                     : 0;
         }
-
+        notificationService.notifyPointsEarned(customer, puntosGanados, sale.getId());
         return SaleResponse.builder()
                 .saleId(savedSale.getId())
                 .cashRegisterId(savedSale.getCashRegister() != null ? savedSale.getCashRegister().getId() : null)

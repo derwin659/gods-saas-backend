@@ -8,6 +8,7 @@ import com.gods.saas.domain.model.Tenant;
 import com.gods.saas.domain.repository.RewardItemRepository;
 import com.gods.saas.domain.repository.SubscriptionRepository;
 import com.gods.saas.domain.repository.TenantRepository;
+import com.gods.saas.service.impl.impl.NotificationService;
 import com.gods.saas.service.impl.impl.RewardItemService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +26,7 @@ public class RewardItemServiceImpl implements RewardItemService {
     private final RewardItemRepository repository;
     private final TenantRepository tenantRepository;
     private final SubscriptionRepository subscriptionRepository;
+    private final NotificationService notificationService;
 
     @Override
     public List<RewardItemResponse> getAll(Long tenantId, Boolean onlyActive) {
@@ -61,8 +63,14 @@ public class RewardItemServiceImpl implements RewardItemService {
                 .imagenUrl(trimToNull(request.getImagenUrl()))
                 .activo(request.getActivo() != null ? request.getActivo() : true)
                 .build();
+        RewardItem saved = repository.save(entity);
 
-        return map(repository.save(entity));
+        if (Boolean.TRUE.equals(request.getSendNotification())) {
+            notificationService.notifyRewardCreated(saved, true);
+        }
+
+        return map(saved);
+
     }
 
     @Override
