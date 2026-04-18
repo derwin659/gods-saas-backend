@@ -2,7 +2,6 @@ package com.gods.saas.service.impl;
 
 import com.gods.saas.domain.dto.response.CustomerCutHistoryResponse;
 import com.gods.saas.domain.model.AppUser;
-import com.gods.saas.domain.model.Customer;
 import com.gods.saas.domain.model.CustomerCutHistory;
 import com.gods.saas.domain.model.Sale;
 import com.gods.saas.domain.model.SaleItem;
@@ -20,8 +19,6 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
-import static io.jsonwebtoken.lang.Strings.clean;
-
 @Service
 @RequiredArgsConstructor
 public class CustomerCutHistoryService {
@@ -30,9 +27,11 @@ public class CustomerCutHistoryService {
     private final CustomerRepository customerRepository;
 
     @Transactional
-    public void registerFromSale(Sale sale, String cutType,
+    public void registerFromSale(Sale sale,
+                                 String cutType,
                                  String cutDetail,
                                  String cutObservations) {
+
         if (sale == null || sale.getId() == null || sale.getCustomer() == null) {
             return;
         }
@@ -48,23 +47,41 @@ public class CustomerCutHistoryService {
             return;
         }
 
+        String safeCutType = clean(cutType);
+        String safeCutDetail = clean(cutDetail);
+        String safeCutObservations = clean(cutObservations);
+
+        boolean hasManualCutData =
+                hasText(safeCutType) ||
+                        hasText(safeCutDetail) ||
+                        hasText(safeCutObservations);
+
         CustomerCutHistory history = customerCutHistoryRepository
                 .findTopByTenant_IdAndSale_Id(sale.getTenant().getId(), sale.getId())
                 .orElseGet(CustomerCutHistory::new);
 
-        String safeCutName = clean(cutType);
-        if (safeCutName == null || safeCutName.isBlank()) {
-            safeCutName = buildCutName(serviceItems);
+        String safeCutName = safeCutType;
+        if (!hasText(safeCutName)) {
+            safeCutName = hasText(safeCutDetail) ? safeCutDetail : buildCutName(serviceItems);
         }
-        if (safeCutName == null || safeCutName.isBlank()) {
+        if (!hasText(safeCutName)) {
             safeCutName = "Servicio realizado";
         }
 
-        String safeCutDescription = buildCutDescription(serviceItems);
+        String safeCutDescription = hasText(safeCutDetail)
+                ? safeCutDetail
+                : buildCutDescription(serviceItems);
 
-        String safeObservations = clean(cutObservations);
-        if (safeObservations == null || safeObservations.isBlank()) {
+        String safeObservations = safeCutObservations;
+        if (!hasText(safeObservations)) {
             safeObservations = resolveObservations(sale);
+        }
+
+        if (!hasManualCutData
+                && !hasText(safeCutName)
+                && !hasText(safeCutDescription)
+                && !hasText(safeObservations)) {
+            return;
         }
 
         history.setTenant(sale.getTenant());
@@ -75,7 +92,7 @@ public class CustomerCutHistoryService {
         history.setSale(sale);
         history.setCutName(safeCutName);
         history.setCutDescription(safeCutDescription);
-        history.setCutDetail(clean(cutDetail));
+        history.setCutDetail(safeCutDetail);
         history.setObservations(safeObservations);
         history.setFechaCorte(sale.getFechaCreacion() != null ? sale.getFechaCreacion() : LocalDateTime.now());
 
@@ -149,14 +166,14 @@ public class CustomerCutHistoryService {
                 .collect(Collectors.toCollection(LinkedHashSet::new));
 
         if (names.isEmpty()) {
-            return "Servicio realizado";
+            return null;
         }
 
         return String.join(" + ", names);
     }
 
     private String buildCutDescription(List<SaleItem> serviceItems) {
-        return serviceItems.stream()
+        String description = serviceItems.stream()
                 .map(item -> {
                     String serviceName = item.getService() != null ? item.getService().getNombre() : null;
                     String barberName = item.getBarberUser() != null ? item.getBarberUser().getNombre() : null;
@@ -176,6 +193,8 @@ public class CustomerCutHistoryService {
                 .filter(text -> !text.isBlank())
                 .distinct()
                 .collect(Collectors.joining(" | "));
+
+        return hasText(description) ? description : null;
     }
 
     private String resolveObservations(Sale sale) {
@@ -185,6 +204,14 @@ public class CustomerCutHistoryService {
             return sale.getAppointment().getNotas().trim();
         }
         return null;
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.trim().isEmpty();
+    }
+
+    private String clean(String value) {
+        return hasText(value) ? value.trim() : null;
     }
 
     @Transactional
