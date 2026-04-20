@@ -310,4 +310,6 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     );
 
     List<Appointment> findByFecha(LocalDate fecha);
+
+
 }

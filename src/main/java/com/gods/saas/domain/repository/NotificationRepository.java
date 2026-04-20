@@ -6,6 +6,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
@@ -23,4 +24,11 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
             String referenceType,
             Long referenceId
     );
+    Optional<Notification> findByIdAndTenant_IdAndCustomer_Id(Long id, Long tenantId, Long customerId);
+
+    Optional<Notification> findByIdAndTenant_IdAndUser_Id(Long id, Long tenantId, Long userId);
+
+    List<Notification> findByTenant_IdAndUser_IdAndIsReadFalse(Long tenantId, Long userId);
+
+    List<Notification> findByTenant_IdAndCustomer_IdAndIsReadFalse(Long tenantId, Long customerId);
 }
