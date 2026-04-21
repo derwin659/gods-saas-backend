@@ -30,3 +30,7 @@ feign:
       default:
         connectTimeout: 60000
         readTimeout: 600000
+
+
+firebase:
+  enabled: true
