@@ -24,7 +24,6 @@ import java.util.Locale;
 @RequiredArgsConstructor
 @Transactional
 @Slf4j
-@Profile("dev")
 public class NotificationDispatchServiceImpl implements NotificationDispatchService {
 
     private final NotificationDeliveryRepository notificationDeliveryRepository;
