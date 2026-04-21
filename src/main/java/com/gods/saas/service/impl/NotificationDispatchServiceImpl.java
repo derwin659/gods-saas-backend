@@ -12,13 +12,13 @@ import com.gods.saas.service.impl.impl.PushNotificationSender;
 import com.gods.saas.service.impl.impl.WhatsappNotificationSender;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -30,6 +30,20 @@ public class NotificationDispatchServiceImpl implements NotificationDispatchServ
     private final SubscriptionRepository subscriptionRepository;
     private final PushNotificationSender pushNotificationSender;
     private final WhatsappNotificationSender whatsappNotificationSender;
+
+    private static final Set<String> BASIC_PUSH_TYPES = Set.of(
+            "BOOKING_CREATED",
+            "BOOKING_REMINDER_60",
+            "BOOKING_REMINDER_30",
+            "POINTS_EARNED",
+            "REWARD_REDEEMED",
+            "BARBER_PAYMENT_CREATED"
+    );
+
+    private static final Set<String> PREMIUM_PUSH_TYPES = Set.of(
+            "PROMOTION_CREATED",
+            "REWARD_CREATED"
+    );
 
     @Override
     public void processPendingPush() {
@@ -85,17 +99,19 @@ public class NotificationDispatchServiceImpl implements NotificationDispatchServ
         }
 
         Long tenantId = notification.getTenant().getId();
+        String type = notification.getType() != null ? notification.getType().name() : "";
 
-        if (!isProOrGodsAi(tenantId)) {
+        if (!canUsePushForType(tenantId, type)) {
             delivery.setStatus(NotificationDeliveryStatus.SKIPPED);
-            delivery.setErrorMessage("Push premium disponible solo para plan PRO o GODS_AI");
+            delivery.setErrorMessage("Push no disponible para este tipo de evento en el plan actual");
             notificationDeliveryRepository.save(delivery);
 
             log.info(
-                    "DISPATCH PUSH SKIPPED => deliveryId={}, notificationId={}, tenantId={}",
+                    "DISPATCH PUSH SKIPPED => deliveryId={}, notificationId={}, tenantId={}, type={}",
                     delivery.getId(),
                     notification.getId(),
-                    tenantId
+                    tenantId,
+                    type
             );
             return;
         }
@@ -153,6 +169,18 @@ public class NotificationDispatchServiceImpl implements NotificationDispatchServ
         }
 
         notificationDeliveryRepository.save(delivery);
+    }
+
+    private boolean canUsePushForType(Long tenantId, String type) {
+        if (BASIC_PUSH_TYPES.contains(type)) {
+            return true;
+        }
+
+        if (PREMIUM_PUSH_TYPES.contains(type)) {
+            return isProOrGodsAi(tenantId);
+        }
+
+        return isProOrGodsAi(tenantId);
     }
 
     private boolean isProOrGodsAi(Long tenantId) {
