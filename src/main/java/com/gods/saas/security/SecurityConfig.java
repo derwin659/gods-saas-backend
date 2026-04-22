@@ -96,6 +96,9 @@ public class SecurityConfig {
                         .requestMatchers("/api/owner/device-tokens/**")
                         .hasAnyRole("OWNER", "ADMIN", "BARBER", "CASHIER")
 
+                        .requestMatchers("/api/owner/notifications/**")
+                        .hasAnyRole("OWNER", "ADMIN", "BARBER", "CASHIER")
+
                         .requestMatchers("/api/clients/device-tokens/**")
                         .authenticated()
 
