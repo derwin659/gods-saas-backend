@@ -22,11 +22,12 @@ public class OwnerBarberTimeBlockController {
     @PostMapping
     public ResponseEntity<Map<String, String>> createBlock(
             @RequestHeader("Authorization") String authHeader,
-            @RequestBody CreateBarberTimeBlockRequest request
+            @RequestBody CreateBarberTimeBlockRequest request,
+            @RequestParam(value = "branchId", required = false) Long branchIdParam
     ) {
         Map<String, Object> claims = getClaims(authHeader);
         Long tenantId = ((Number) claims.get("tenantId")).longValue();
-        Long branchId = ((Number) claims.get("branchId")).longValue();
+        Long branchId = resolveBranchId(claims, branchIdParam);
 
         ownerBarberTimeBlockService.createBlock(tenantId, branchId, request);
 
@@ -36,29 +37,44 @@ public class OwnerBarberTimeBlockController {
     @GetMapping
     public ResponseEntity<List<BarberTimeBlockResponse>> listBlocks(
             @RequestHeader("Authorization") String authHeader,
-            @RequestParam Long barberUserId
+            @RequestParam Long barberUserId,
+            @RequestParam(value = "branchId", required = false) Long branchIdParam
     ) {
         Map<String, Object> claims = getClaims(authHeader);
         Long tenantId = ((Number) claims.get("tenantId")).longValue();
-        Long branchId = ((Number) claims.get("branchId")).longValue();
+        Long branchId = resolveBranchId(claims, branchIdParam);
 
         return ResponseEntity.ok(
                 ownerBarberTimeBlockService.listBlocks(tenantId, branchId, barberUserId)
         );
     }
 
-    @DeleteMapping("/{id}")
+    @DeleteMapping("/{blockId}")
     public ResponseEntity<Map<String, String>> deleteBlock(
             @RequestHeader("Authorization") String authHeader,
-            @PathVariable Long id
+            @PathVariable Long blockId,
+            @RequestParam(value = "branchId", required = false) Long branchIdParam
     ) {
         Map<String, Object> claims = getClaims(authHeader);
         Long tenantId = ((Number) claims.get("tenantId")).longValue();
-        Long branchId = ((Number) claims.get("branchId")).longValue();
+        Long branchId = resolveBranchId(claims, branchIdParam);
 
-        ownerBarberTimeBlockService.deleteBlock(tenantId, branchId, id);
+        ownerBarberTimeBlockService.deleteBlock(tenantId, branchId, blockId);
 
         return ResponseEntity.ok(Map.of("message", "Bloqueo eliminado correctamente"));
+    }
+
+    private Long resolveBranchId(Map<String, Object> claims, Long branchIdParam) {
+        if (branchIdParam != null) {
+            return branchIdParam;
+        }
+
+        Object branchIdClaim = claims.get("branchId");
+        if (branchIdClaim == null) {
+            throw new RuntimeException("No se encontró la sucursal activa");
+        }
+
+        return ((Number) branchIdClaim).longValue();
     }
 
     private Map<String, Object> getClaims(String authHeader) {

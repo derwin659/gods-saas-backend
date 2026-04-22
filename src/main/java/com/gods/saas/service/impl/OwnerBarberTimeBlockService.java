@@ -8,6 +8,7 @@ import com.gods.saas.domain.model.Branch;
 import com.gods.saas.domain.repository.AppUserRepository;
 import com.gods.saas.domain.repository.BarberTimeBlockRepository;
 import com.gods.saas.domain.repository.BranchRepository;
+import com.gods.saas.domain.repository.UserTenantRoleRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,6 +25,7 @@ public class OwnerBarberTimeBlockService {
     private final BarberTimeBlockRepository barberTimeBlockRepository;
     private final AppUserRepository appUserRepository;
     private final BranchRepository branchRepository;
+    private final UserTenantRoleRepository userTenantRoleRepository;
 
     @Transactional
     public void createBlock(Long tenantId, Long branchId, CreateBarberTimeBlockRequest request) {
@@ -34,10 +36,16 @@ public class OwnerBarberTimeBlockService {
         AppUser barber = appUserRepository.findByIdAndTenant_Id(request.getBarberUserId(), tenantId)
                 .orElseThrow(() -> new RuntimeException("Barbero no encontrado"));
 
-        Branch branch = branchRepository.findById(branchId)
+        Branch branch = branchRepository.findByIdAndTenant_Id(branchId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Sucursal no encontrada"));
 
-        if (barber.getBranch() == null || !barber.getBranch().getId().equals(branchId)) {
+        boolean belongsToBranch = userTenantRoleRepository.existsByUser_IdAndTenant_IdAndBranch_Id(
+                barber.getId(),
+                tenantId,
+                branchId
+        );
+
+        if (!belongsToBranch) {
             throw new RuntimeException("El barbero no pertenece a esta sucursal");
         }
 
@@ -71,6 +79,19 @@ public class OwnerBarberTimeBlockService {
     public List<BarberTimeBlockResponse> listBlocks(Long tenantId, Long branchId, Long barberUserId) {
         appUserRepository.findByIdAndTenant_Id(barberUserId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Barbero no encontrado"));
+
+        Branch branch = branchRepository.findByIdAndTenant_Id(branchId, tenantId)
+                .orElseThrow(() -> new RuntimeException("Sucursal no encontrada"));
+
+        boolean belongsToBranch = userTenantRoleRepository.existsByUser_IdAndTenant_IdAndBranch_Id(
+                barberUserId,
+                tenantId,
+                branch.getId()
+        );
+
+        if (!belongsToBranch) {
+            throw new RuntimeException("El barbero no pertenece a esta sucursal");
+        }
 
         return barberTimeBlockRepository
                 .findByTenant_IdAndBranch_IdAndBarber_IdOrderByBlockDateAscStartTimeAsc(

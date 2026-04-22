@@ -8,7 +8,6 @@ import java.util.Optional;
 
 public interface BranchRepository extends JpaRepository<Branch, Long> {
 
-
     List<Branch> findByTenant_IdAndActivoTrueOrderByNombreAsc(Long tenantId);
     List<Branch> findByTenant_IdAndActivoTrue(Long tenantId);
     long countByTenantId(Long tenantId);

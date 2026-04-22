@@ -64,5 +64,10 @@ public interface UserTenantRoleRepository extends JpaRepository<UserTenantRole, 
             @Param("tenantId") Long tenantId
     );
 
+    List<UserTenantRole> findByTenant_IdAndBranch_Id(Long tenantId, Long branchId);
+
+
+    boolean existsByUser_IdAndTenant_IdAndBranch_Id(Long userId, Long tenantId, Long branchId);
+
 }
 

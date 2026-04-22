@@ -9,11 +9,13 @@ import com.gods.saas.domain.model.Branch;
 import com.gods.saas.domain.repository.AppUserRepository;
 import com.gods.saas.domain.repository.BarberAvailabilityRepository;
 import com.gods.saas.domain.repository.BranchRepository;
+import com.gods.saas.domain.repository.UserTenantRoleRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.Comparator;
 import java.util.List;
 
@@ -24,6 +26,7 @@ public class OwnerBarberAvailabilityService {
     private final BarberAvailabilityRepository barberAvailabilityRepository;
     private final AppUserRepository appUserRepository;
     private final BranchRepository branchRepository;
+    private final UserTenantRoleRepository userTenantRoleRepository;
 
     @Transactional
     public void saveAvailability(Long tenantId, Long branchId, SaveBarberAvailabilityRequest request) {
@@ -38,10 +41,16 @@ public class OwnerBarberAvailabilityService {
         AppUser barber = appUserRepository.findByIdAndTenant_Id(request.getBarberUserId(), tenantId)
                 .orElseThrow(() -> new RuntimeException("Barbero no encontrado"));
 
-        Branch branch = branchRepository.findById(branchId)
+        Branch branch = branchRepository.findByIdAndTenant_Id(branchId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Sucursal no encontrada"));
 
-        if (barber.getBranch() == null || !barber.getBranch().getId().equals(branchId)) {
+        boolean belongsToBranch = userTenantRoleRepository.existsByUser_IdAndTenant_IdAndBranch_Id(
+                barber.getId(),
+                tenantId,
+                branchId
+        );
+
+        if (!belongsToBranch) {
             throw new RuntimeException("El barbero no pertenece a esta sucursal");
         }
 
@@ -74,8 +83,8 @@ public class OwnerBarberAvailabilityService {
                     .barber(barber)
                     .dayOfWeek(day.getDayOfWeek())
                     .isWorking(isWorking)
-                    .startTime(isWorking ? day.getStartTime() : java.time.LocalTime.of(0, 0))
-                    .endTime(isWorking ? day.getEndTime() : java.time.LocalTime.of(0, 0))
+                    .startTime(isWorking ? day.getStartTime() : LocalTime.of(0, 0))
+                    .endTime(isWorking ? day.getEndTime() : LocalTime.of(0, 0))
                     .createdAt(LocalDateTime.now())
                     .updatedAt(LocalDateTime.now())
                     .build();
@@ -88,6 +97,19 @@ public class OwnerBarberAvailabilityService {
     public List<BarberAvailabilityDayResponse> getAvailability(Long tenantId, Long branchId, Long barberUserId) {
         appUserRepository.findByIdAndTenant_Id(barberUserId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Barbero no encontrado"));
+
+        Branch branch = branchRepository.findByIdAndTenant_Id(branchId, tenantId)
+                .orElseThrow(() -> new RuntimeException("Sucursal no encontrada"));
+
+        boolean belongsToBranch = userTenantRoleRepository.existsByUser_IdAndTenant_IdAndBranch_Id(
+                barberUserId,
+                tenantId,
+                branch.getId()
+        );
+
+        if (!belongsToBranch) {
+            throw new RuntimeException("El barbero no pertenece a esta sucursal");
+        }
 
         return barberAvailabilityRepository
                 .findByTenant_IdAndBranch_IdAndBarber_IdOrderByDayOfWeekAscStartTimeAsc(
