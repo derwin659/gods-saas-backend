@@ -13,4 +13,12 @@ public interface MarketingCampaignRepository extends JpaRepository<MarketingCamp
     List<MarketingCampaign> findByTenant_IdAndEnabledTrue(Long tenantId);
 
     Optional<MarketingCampaign> findByTenant_IdAndCode(Long tenantId, String code);
+
+
+    List<MarketingCampaign> findByTenant_IdOrderByCreatedAtDesc(Long tenantId);
+
+
+    Optional<MarketingCampaign> findByIdAndTenant_Id(Long id, Long tenantId);
+
+    boolean existsByTenant_IdAndCode(Long tenantId, String code);
 }
