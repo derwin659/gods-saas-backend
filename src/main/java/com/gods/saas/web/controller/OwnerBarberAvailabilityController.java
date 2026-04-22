@@ -26,7 +26,7 @@ public class OwnerBarberAvailabilityController {
             @RequestParam(value = "branchId", required = false) Long branchIdParam
     ) {
         Map<String, Object> claims = getClaims(authHeader);
-        Long tenantId = ((Number) claims.get("tenantId")).longValue();
+        Long tenantId = extractRequiredLong(claims, "tenantId");
         Long branchId = resolveBranchId(claims, branchIdParam);
 
         ownerBarberAvailabilityService.saveAvailability(tenantId, branchId, request);
@@ -41,7 +41,7 @@ public class OwnerBarberAvailabilityController {
             @RequestParam(value = "branchId", required = false) Long branchIdParam
     ) {
         Map<String, Object> claims = getClaims(authHeader);
-        Long tenantId = ((Number) claims.get("tenantId")).longValue();
+        Long tenantId = extractRequiredLong(claims, "tenantId");
         Long branchId = resolveBranchId(claims, branchIdParam);
 
         return ResponseEntity.ok(
@@ -53,17 +53,28 @@ public class OwnerBarberAvailabilityController {
         if (branchIdParam != null) {
             return branchIdParam;
         }
+        return extractRequiredLong(claims, "branchId");
+    }
 
-        Object branchIdClaim = claims.get("branchId");
-        if (branchIdClaim == null) {
-            throw new RuntimeException("No se encontró la sucursal activa");
+    private Long extractRequiredLong(Map<String, Object> claims, String key) {
+        Object value = claims.get(key);
+        if (value == null) {
+            throw new RuntimeException("No se encontró '" + key + "' en el token");
         }
-
-        return ((Number) branchIdClaim).longValue();
+        if (!(value instanceof Number)) {
+            throw new RuntimeException("El claim '" + key + "' no tiene un formato válido");
+        }
+        return ((Number) value).longValue();
     }
 
     private Map<String, Object> getClaims(String authHeader) {
-        String token = authHeader.replace("Bearer ", "");
+        if (authHeader == null || authHeader.isBlank() || !authHeader.startsWith("Bearer ")) {
+            throw new RuntimeException("Token JWT no enviado o inválido");
+        }
+        String token = authHeader.substring(7).trim();
+        if (token.isEmpty()) {
+            throw new RuntimeException("Token JWT vacío");
+        }
         return jwtService.extractAllClaims(token);
     }
 }
