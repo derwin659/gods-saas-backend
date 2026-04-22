@@ -18,6 +18,24 @@ import java.util.Optional;
 public interface SaleRepository extends JpaRepository<Sale, Long> {
 
     @Query(value = """
+        SELECT
+            c.customer_id AS customerId,
+            c.nombre AS nombre,
+            c.telefono AS telefono,
+            MAX(s.fecha_creacion) AS ultimaVisita
+        FROM customer c
+        JOIN sale s
+          ON s.customer_id = c.customer_id
+        WHERE c.tenant_id = :tenantId
+          AND s.tenant_id = :tenantId
+          AND c.customer_id IS NOT NULL
+        GROUP BY c.customer_id, c.nombre, c.telefono
+        HAVING MAX(s.fecha_creacion) <= NOW() - CAST((:daysInactive || ' days') AS interval)
+        ORDER BY MAX(s.fecha_creacion) ASC
+        """, nativeQuery = true)
+    List<CustomerCampaignAudienceProjection> findInactiveCustomers(Long tenantId, Integer daysInactive);
+
+    @Query(value = """
     select
         cast(s.fecha_creacion as date) as saleDate,
         coalesce(sum(s.total), 0) as totalSales,

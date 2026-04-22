@@ -103,6 +103,7 @@ public class SecurityConfig {
                         .authenticated()
 
                         .requestMatchers("/api/owner/cash-registers/**").hasAnyRole("OWNER", "ADMIN")
+                        .requestMatchers("/api/owner/marketing-campaigns/**").hasRole("OWNER")
                         .requestMatchers("/api/owner/**").hasRole("OWNER")
 
                         .requestMatchers("/api/cash-register/current").hasAnyRole("OWNER", "BARBER")
