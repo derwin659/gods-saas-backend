@@ -29,7 +29,7 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
         WHERE c.tenant_id = :tenantId
           AND s.tenant_id = :tenantId
           AND c.customer_id IS NOT NULL
-        GROUP BY c.customer_id, c.nombre, c.telefono
+        GROUP BY c.customer_id, c.nombres, c.telefono
         HAVING MAX(s.fecha_creacion) <= NOW() - CAST((:daysInactive || ' days') AS interval)
         ORDER BY MAX(s.fecha_creacion) ASC
         """, nativeQuery = true)
