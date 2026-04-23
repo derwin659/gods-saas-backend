@@ -4,10 +4,7 @@ import com.gods.saas.domain.dto.request.*;
 import com.gods.saas.domain.dto.response.SaleItemResponse;
 import com.gods.saas.domain.dto.response.SaleResponse;
 import com.gods.saas.domain.enums.CashRegisterStatus;
-import com.gods.saas.domain.model.AppUser;
-import com.gods.saas.domain.model.Appointment;
-import com.gods.saas.domain.model.Customer;
-import com.gods.saas.domain.model.Sale;
+import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.*;
 import com.gods.saas.service.impl.impl.CashSaleService;
 import com.gods.saas.service.impl.impl.LoyaltyService;
@@ -35,6 +32,8 @@ public class CashSaleServiceImpl implements CashSaleService {
     private final SaleService saleService;
     private final CustomerRepository customerRepository;
     private final SaleItemRepository saleItemRepository;
+    private final ProductRepository productRepository;
+    private final StockMovementRepository stockMovementRepository;
     private final TenantTimeService tenantTimeService;
     private final CustomerCutHistoryService customerCutHistoryService;
     private final LoyaltyService loyaltyService;
@@ -211,10 +210,7 @@ public class CashSaleServiceImpl implements CashSaleService {
                 .changeAmount(safe(sale.getChangeAmount()))
                 .fechaCreacion(sale.getFechaCreacion())
                 .puntosGanados(puntosGanados == null ? 0 : puntosGanados)
-
-                // 🔥 ESTA ES LA CLAVE
                 .barberName(resolveBarberName(sale))
-
                 .items(
                         sale.getItems() == null
                                 ? List.of()
@@ -235,6 +231,7 @@ public class CashSaleServiceImpl implements CashSaleService {
                 )
                 .build();
     }
+
     private BigDecimal safe(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
     }
@@ -266,7 +263,6 @@ public class CashSaleServiceImpl implements CashSaleService {
         return null;
     }
 
-
     @Override
     @Transactional
     public void deleteSale(Long tenantId, Long branchId, Long userId, Long saleId) {
@@ -281,28 +277,67 @@ public class CashSaleServiceImpl implements CashSaleService {
             throw new RuntimeException("Solo se puede eliminar una venta con caja abierta");
         }
 
-        // 1) revertir puntos si esta venta generó fidelización
+        restoreProductStockFromSale(sale);
+
         if (sale.getCustomer() != null) {
-            AppUser actor = sale.getUser(); // si luego quieres, aquí puedes usar el userId autenticado
+            AppUser actor = sale.getUser();
             loyaltyService.revertSalePoints(sale.getTenant(), sale.getCustomer(), actor, sale);
         }
 
-        // 2) borrar historial ligado a la venta
         customerCutHistoryService.deleteBySale(tenantId, saleId);
 
-        // 3) revertir cita si esta venta salió de una cita
         if (sale.getAppointment() != null) {
             sale.getAppointment().setEstado("CONFIRMADO");
             appointmentRepository.save(sale.getAppointment());
         }
 
-        // 4) borrar items
         if (sale.getItems() != null && !sale.getItems().isEmpty()) {
             saleItemRepository.deleteAll(sale.getItems());
             sale.getItems().clear();
         }
 
-        // 5) borrar venta
         saleRepository.delete(sale);
+    }
+
+    private void restoreProductStockFromSale(Sale sale) {
+        if (sale.getItems() == null || sale.getItems().isEmpty()) {
+            return;
+        }
+
+        LocalDateTime movementTime = tenantTimeService.now(sale.getTenant().getId());
+
+        for (SaleItem item : sale.getItems()) {
+            if (item.getProduct() == null) {
+                continue;
+            }
+
+            Product product = productRepository.findByIdAndTenant_Id(item.getProduct().getId(), sale.getTenant().getId())
+                    .orElseThrow(() -> new RuntimeException("Producto no encontrado al restaurar stock"));
+
+            int stockAnterior = product.getStockActual() == null ? 0 : product.getStockActual();
+            int cantidad = item.getCantidad() == null ? 0 : item.getCantidad();
+            int stockNuevo = stockAnterior + cantidad;
+
+            product.setStockActual(stockNuevo);
+            productRepository.save(product);
+
+            StockMovement movement = StockMovement.builder()
+                    .tenant(sale.getTenant())
+                    .branch(sale.getBranch())
+                    .product(product)
+                    .sale(sale)
+                    .user(sale.getUser())
+                    .tipoMovimiento("DEVOLUCION")
+                    .cantidad(cantidad)
+                    .stockAnterior(stockAnterior)
+                    .stockNuevo(stockNuevo)
+                    .costoUnitario(item.getCostoUnitario())
+                    .precioUnitario(item.getPrecioUnitario())
+                    .observacion("Restitución automática por eliminación de venta #" + sale.getId())
+                    .fechaCreacion(movementTime)
+                    .build();
+
+            stockMovementRepository.save(movement);
+        }
     }
 }

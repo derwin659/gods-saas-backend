@@ -5,27 +5,8 @@ import com.gods.saas.domain.dto.request.SaleItemRequest;
 import com.gods.saas.domain.dto.response.SaleItemResponse;
 import com.gods.saas.domain.dto.response.SaleResponse;
 import com.gods.saas.domain.enums.CashRegisterStatus;
-import com.gods.saas.domain.model.AppUser;
-import com.gods.saas.domain.model.Appointment;
-import com.gods.saas.domain.model.Branch;
-import com.gods.saas.domain.model.CashRegister;
-import com.gods.saas.domain.model.Customer;
-import com.gods.saas.domain.model.LoyaltyAccount;
-import com.gods.saas.domain.model.Product;
-import com.gods.saas.domain.model.Sale;
-import com.gods.saas.domain.model.SaleItem;
-import com.gods.saas.domain.model.ServiceEntity;
-import com.gods.saas.domain.model.Tenant;
-import com.gods.saas.domain.repository.AppUserRepository;
-import com.gods.saas.domain.repository.AppointmentRepository;
-import com.gods.saas.domain.repository.BranchRepository;
-import com.gods.saas.domain.repository.CashRegisterRepository;
-import com.gods.saas.domain.repository.CustomerRepository;
-import com.gods.saas.domain.repository.LoyaltyAccountRepository;
-import com.gods.saas.domain.repository.ProductRepository;
-import com.gods.saas.domain.repository.SaleRepository;
-import com.gods.saas.domain.repository.ServiceRepository;
-import com.gods.saas.domain.repository.TenantRepository;
+import com.gods.saas.domain.model.*;
+import com.gods.saas.domain.repository.*;
 import com.gods.saas.service.impl.impl.LoyaltyService;
 import com.gods.saas.service.impl.impl.NotificationService;
 import com.gods.saas.service.impl.impl.SaleService;
@@ -57,6 +38,7 @@ public class SaleServiceImpl implements SaleService {
     private final AppointmentRepository appointmentRepository;
     private final LoyaltyAccountRepository loyaltyAccountRepository;
     private final CashRegisterRepository cashRegisterRepository;
+    private final StockMovementRepository stockMovementRepository;
     private final TenantTimeService tenantTimeService;
     private final CustomerCutHistoryService customerCutHistoryService;
     private final NotificationService notificationService;
@@ -147,6 +129,8 @@ public class SaleServiceImpl implements SaleService {
                 throw new RuntimeException("Cada item debe tener solo serviceId o productId, no ambos");
             }
 
+            Product selectedProduct = null;
+
             if (itemRequest.getServiceId() != null) {
                 ServiceEntity service = serviceRepository.findById(itemRequest.getServiceId())
                         .orElseThrow(() -> new RuntimeException(
@@ -158,6 +142,8 @@ public class SaleServiceImpl implements SaleService {
                 }
 
                 item.setService(service);
+                item.setTipoItem("SERVICE");
+                item.setNombreItem(clean(service.getNombre()) != null ? clean(service.getNombre()) : "Servicio");
 
                 if (precioUnitario.compareTo(BigDecimal.ZERO) <= 0) {
                     precioUnitario = BigDecimal.valueOf(service.getPrecio())
@@ -166,20 +152,29 @@ public class SaleServiceImpl implements SaleService {
             }
 
             if (itemRequest.getProductId() != null) {
-                Product product = productRepository.findById(itemRequest.getProductId())
+                Product product = productRepository.findByIdAndTenant_Id(itemRequest.getProductId(), tenant.getId())
                         .orElseThrow(() -> new RuntimeException(
                                 "Producto no encontrado: " + itemRequest.getProductId()
                         ));
 
-                if (!product.getTenant().getId().equals(tenant.getId())) {
-                    throw new RuntimeException("El producto no pertenece al tenant");
+                if (!Boolean.TRUE.equals(product.getActivo())) {
+                    throw new RuntimeException("El producto está inactivo: " + product.getNombre());
+                }
+
+                int stockActual = product.getStockActual() == null ? 0 : product.getStockActual();
+                boolean permiteVentaSinStock = Boolean.TRUE.equals(product.getPermiteVentaSinStock());
+
+                if (!permiteVentaSinStock && stockActual < cantidad) {
+                    throw new RuntimeException("Stock insuficiente para el producto: " + product.getNombre());
                 }
 
                 item.setProduct(product);
+                item.setTipoItem("PRODUCT");
+                item.setNombreItem(clean(product.getNombre()) != null ? clean(product.getNombre()) : "Producto");
+                selectedProduct = product;
 
                 if (precioUnitario.compareTo(BigDecimal.ZERO) <= 0) {
-                    precioUnitario = BigDecimal.valueOf(product.getPrecio())
-                            .setScale(2, RoundingMode.HALF_UP);
+                    precioUnitario = resolveProductSalePrice(product);
                 }
             }
 
@@ -209,6 +204,21 @@ public class SaleServiceImpl implements SaleService {
 
             item.setPrecioUnitario(precioUnitario);
             item.setSubtotal(subtotalItem);
+
+            if (item.getService() != null) {
+                item.setCostoUnitario(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+                item.setGanancia(subtotalItem);
+            }
+
+            if (selectedProduct != null) {
+                BigDecimal costoUnitario = safe(selectedProduct.getPrecioCompra()).setScale(2, RoundingMode.HALF_UP);
+                BigDecimal ganancia = subtotalItem.subtract(
+                        costoUnitario.multiply(BigDecimal.valueOf(cantidad)).setScale(2, RoundingMode.HALF_UP)
+                ).setScale(2, RoundingMode.HALF_UP);
+
+                item.setCostoUnitario(costoUnitario);
+                item.setGanancia(ganancia);
+            }
 
             items.add(item);
             subtotalVenta = subtotalVenta.add(subtotalItem);
@@ -292,6 +302,8 @@ public class SaleServiceImpl implements SaleService {
 
         Sale savedSale = saleRepository.save(sale);
 
+        registerProductStockMovements(savedSale, tenant, branch, user);
+
         customerCutHistoryService.registerFromSale(
                 savedSale,
                 clean(request.getCutType()),
@@ -341,7 +353,9 @@ public class SaleServiceImpl implements SaleService {
                     ? updated.getPuntosDisponibles()
                     : 0;
         }
-        notificationService.notifyPointsEarned(customer, puntosGanados, sale.getId());
+
+        notificationService.notifyPointsEarned(customer, puntosGanados, savedSale.getId());
+
         return SaleResponse.builder()
                 .saleId(savedSale.getId())
                 .cashRegisterId(savedSale.getCashRegister() != null ? savedSale.getCashRegister().getId() : null)
@@ -361,6 +375,56 @@ public class SaleServiceImpl implements SaleService {
                 .puntosDisponibles(puntosDisponibles)
                 .items(itemResponses)
                 .build();
+    }
+
+    private void registerProductStockMovements(Sale savedSale, Tenant tenant, Branch branch, AppUser user) {
+        if (savedSale.getItems() == null || savedSale.getItems().isEmpty()) {
+            return;
+        }
+
+        for (SaleItem savedItem : savedSale.getItems()) {
+            if (savedItem.getProduct() == null) {
+                continue;
+            }
+
+            Product product = savedItem.getProduct();
+            int stockAnterior = product.getStockActual() == null ? 0 : product.getStockActual();
+            int cantidadVendida = savedItem.getCantidad() == null ? 0 : savedItem.getCantidad();
+            int stockNuevo = stockAnterior - cantidadVendida;
+
+            product.setStockActual(stockNuevo);
+            productRepository.save(product);
+
+            StockMovement movement = StockMovement.builder()
+                    .tenant(tenant)
+                    .branch(branch)
+                    .product(product)
+                    .sale(savedSale)
+                    .user(user)
+                    .tipoMovimiento("VENTA")
+                    .cantidad(cantidadVendida)
+                    .stockAnterior(stockAnterior)
+                    .stockNuevo(stockNuevo)
+                    .costoUnitario(savedItem.getCostoUnitario())
+                    .precioUnitario(savedItem.getPrecioUnitario())
+                    .observacion("Salida automática por venta #" + savedSale.getId())
+                    .fechaCreacion(savedSale.getFechaCreacion())
+                    .build();
+
+            stockMovementRepository.save(movement);
+        }
+    }
+
+    private BigDecimal resolveProductSalePrice(Product product) {
+        if (product.getPrecioVenta() != null && product.getPrecioVenta().compareTo(BigDecimal.ZERO) > 0) {
+            return product.getPrecioVenta().setScale(2, RoundingMode.HALF_UP);
+        }
+
+        if (product.getPrecio() != null && product.getPrecio() > 0) {
+            return BigDecimal.valueOf(product.getPrecio()).setScale(2, RoundingMode.HALF_UP);
+        }
+
+        return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
     }
 
     private void validarRequest(CreateSaleRequest request) {
