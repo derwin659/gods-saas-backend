@@ -36,18 +36,17 @@ public class AccountController {
                 Map.of("message", "Contraseña actualizada correctamente")
         );
     }
-
-    @DeleteMapping("/delete")
+    @PostMapping("/delete")
     public ResponseEntity<DeleteAccountResponse> deleteMyAccount(
+            Authentication authentication,
             @RequestBody DeleteMyAccountRequest request
     ) {
-        if (request == null || request.getCustomerId() == null) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cliente inválido");
-        }
+        Long userId = extractUserId(authentication);
 
-        customerService.deleteMyCustomerAccount(
-                request.getCustomerId(),
-                request.getConfirmation()
+        userService.deleteMyInternalAccount(
+                userId,
+                request != null ? request.getCurrentPassword() : null,
+                request != null ? request.getConfirmation() : null
         );
 
         return ResponseEntity.ok(
@@ -57,6 +56,8 @@ public class AccountController {
                         .build()
         );
     }
+
+
 
     private Long extractUserId(Authentication authentication) {
         if (authentication == null || authentication.getPrincipal() == null) {
