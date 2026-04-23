@@ -37,6 +37,8 @@ public class CashSaleServiceImpl implements CashSaleService {
     private final TenantTimeService tenantTimeService;
     private final CustomerCutHistoryService customerCutHistoryService;
     private final LoyaltyService loyaltyService;
+    private final BranchRepository branchRepository;
+    private final AppUserRepository userRepository;
 
     @Override
     public SaleResponse createCashSale(Long tenantId, Long branchId, Long userId, CreateCashSaleRequest request) {
@@ -277,7 +279,7 @@ public class CashSaleServiceImpl implements CashSaleService {
             throw new RuntimeException("Solo se puede eliminar una venta con caja abierta");
         }
 
-        restoreProductStockFromSale(sale);
+        restoreProductStockFromSale(tenantId, branchId, userId, sale);
 
         if (sale.getCustomer() != null) {
             AppUser actor = sale.getUser();
@@ -299,19 +301,36 @@ public class CashSaleServiceImpl implements CashSaleService {
         saleRepository.delete(sale);
     }
 
-    private void restoreProductStockFromSale(Sale sale) {
+    private void restoreProductStockFromSale(Long tenantId, Long branchId, Long userId, Sale sale) {
         if (sale.getItems() == null || sale.getItems().isEmpty()) {
             return;
         }
 
-        LocalDateTime movementTime = tenantTimeService.now(sale.getTenant().getId());
+        Branch branch = branchRepository.findById(branchId)
+                .orElseThrow(() -> new RuntimeException("Sede no encontrada"));
+
+        if (!branch.getTenant().getId().equals(tenantId)) {
+            throw new RuntimeException("La sede no pertenece al tenant");
+        }
+
+        AppUser user = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        if (!user.getTenant().getId().equals(tenantId)) {
+            throw new RuntimeException("El usuario no pertenece al tenant");
+        }
+
+        LocalDateTime movementTime = tenantTimeService.now(tenantId);
 
         for (SaleItem item : sale.getItems()) {
             if (item.getProduct() == null) {
                 continue;
             }
 
-            Product product = productRepository.findByIdAndTenant_Id(item.getProduct().getId(), sale.getTenant().getId())
+            Product product = productRepository.findByIdAndTenant_Id(
+                            item.getProduct().getId(),
+                            tenantId
+                    )
                     .orElseThrow(() -> new RuntimeException("Producto no encontrado al restaurar stock"));
 
             int stockAnterior = product.getStockActual() == null ? 0 : product.getStockActual();
@@ -323,10 +342,10 @@ public class CashSaleServiceImpl implements CashSaleService {
 
             StockMovement movement = StockMovement.builder()
                     .tenant(sale.getTenant())
-                    .branch(sale.getBranch())
+                    .branch(branch)
                     .product(product)
                     .sale(sale)
-                    .user(sale.getUser())
+                    .user(user)
                     .tipoMovimiento("DEVOLUCION")
                     .cantidad(cantidad)
                     .stockAnterior(stockAnterior)
