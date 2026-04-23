@@ -9,9 +9,11 @@ import java.util.Optional;
 public interface ProductRepository  extends JpaRepository<Product, Long> {
     Optional<Product> findByIdAndTenant_Id(Long id, Long tenantId);
 
+    List<Product> findByTenant_IdOrderByNombreAsc(Long tenantId);
 
+    List<Product> findByTenant_IdAndStockActualLessThanEqualOrderByStockActualAsc(Long tenantId, Integer stockActual);
 
     List<Product> findByTenant_IdAndActivoTrueOrderByNombreAsc(Long tenantId);
 
-    List<Product> findByTenant_IdAndStockActualLessThanEqualOrderByStockActualAsc(Long tenantId, Integer stockActual);
+
 }
