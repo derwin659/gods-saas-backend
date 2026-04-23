@@ -7,6 +7,8 @@ import lombok.Setter;
 @Setter
 public class DeleteMyAccountRequest {
 
+    private Long customerId;
+    private Long tenantId;
     private String currentPassword;
     private String confirmation;
 }

@@ -4,11 +4,14 @@ import com.gods.saas.domain.dto.request.ChangePasswordRequest;
 import com.gods.saas.domain.dto.request.DeleteMyAccountRequest;
 import com.gods.saas.domain.dto.response.DeleteAccountResponse;
 import com.gods.saas.domain.model.AppUser;
+import com.gods.saas.service.impl.CustomerService;
 import com.gods.saas.service.impl.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 
@@ -18,6 +21,7 @@ import java.util.Map;
 public class AccountController {
 
     private final UserService userService;
+    private final CustomerService customerService;
 
     @PostMapping("/change-password")
     public ResponseEntity<?> changePassword(
@@ -33,17 +37,17 @@ public class AccountController {
         );
     }
 
-    @DeleteMapping
+    @DeleteMapping("/me")
     public ResponseEntity<DeleteAccountResponse> deleteMyAccount(
-            Authentication authentication,
             @RequestBody DeleteMyAccountRequest request
     ) {
-        Long userId = extractUserId(authentication);
+        if (request == null || request.getCustomerId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cliente inválido");
+        }
 
-        userService.deleteMyInternalAccount(
-                userId,
-                request != null ? request.getCurrentPassword() : null,
-                request != null ? request.getConfirmation() : null
+        customerService.deleteMyCustomerAccount(
+                request.getCustomerId(),
+                request.getConfirmation()
         );
 
         return ResponseEntity.ok(
