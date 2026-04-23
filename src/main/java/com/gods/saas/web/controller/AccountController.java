@@ -7,11 +7,9 @@ import com.gods.saas.domain.model.AppUser;
 import com.gods.saas.service.impl.CustomerService;
 import com.gods.saas.service.impl.UserService;
 import lombok.RequiredArgsConstructor;
-import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
-import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 
