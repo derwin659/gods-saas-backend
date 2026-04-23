@@ -24,6 +24,8 @@ import org.springframework.web.server.ResponseStatusException;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
@@ -130,6 +132,81 @@ public class UserService {
         userRepository.save(user);
     }
 
+    @Transactional
+    public void deleteMyInternalAccount(Long userId, String currentPassword, String confirmation) {
+        if (userId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Usuario inválido");
+        }
+
+        final String confirm = confirmation == null ? "" : confirmation.trim().toUpperCase();
+        if (!Objects.equals(confirm, "ELIMINAR")) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Debes confirmar la eliminación escribiendo ELIMINAR"
+            );
+        }
+
+        AppUser user = userRepository.findByIdWithTenant(userId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Usuario no encontrado"));
+
+        if (!Boolean.TRUE.equals(user.getActivo())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La cuenta ya fue eliminada");
+        }
+
+        String role = user.getRol() == null ? "" : user.getRol().trim().toUpperCase(Locale.ROOT);
+
+        if ("OWNER".equals(role)) {
+            long ownersActivos = userRepository.countActiveByTenantIdAndRoles(
+                    user.getTenant().getId(),
+                    List.of("OWNER")
+            );
+
+            if (ownersActivos <= 1) {
+                throw new ResponseStatusException(
+                        HttpStatus.CONFLICT,
+                        "No puedes eliminar la única cuenta OWNER activa de la barbería"
+                );
+            }
+        }
+
+        String rawCurrentPassword = currentPassword == null ? "" : currentPassword.trim();
+        if (rawCurrentPassword.isEmpty()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "La contraseña actual es obligatoria"
+            );
+        }
+
+        if (user.getPasswordHash() == null || user.getPasswordHash().isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "El usuario no tiene contraseña configurada"
+            );
+        }
+
+        boolean matches = passwordEncoder.matches(rawCurrentPassword, user.getPasswordHash());
+        if (!matches) {
+            throw new ResponseStatusException(
+                    HttpStatus.UNAUTHORIZED,
+                    "La contraseña actual es incorrecta"
+            );
+        }
+
+        String marker = "deleted_user_" + user.getId() + "_" + System.currentTimeMillis();
+
+        user.setNombre("Cuenta eliminada");
+        user.setApellido("");
+        user.setEmail(marker + "@deleted.local");
+        user.setPhone(marker);
+        user.setPasswordHash(passwordEncoder.encode(UUID.randomUUID().toString()));
+        user.setPhotoUrl(null);
+        user.setActivo(false);
+        user.setBranch(null);
+        user.setFechaActualizacion(LocalDateTime.now());
+
+        userRepository.save(user);
+    }
+
     public String hashPassword(String rawPassword) {
         return passwordEncoder.encode(rawPassword);
     }
@@ -228,7 +305,6 @@ public class UserService {
         user.setActivo(activo);
         userRepository.save(user);
     }
-
 
     public AppUserResponse crearUsuario(CrearUsuarioRequest req) {
         Long tenantId = TenantContext.getTenantId();

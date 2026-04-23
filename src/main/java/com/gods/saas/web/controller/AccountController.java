@@ -1,6 +1,9 @@
 package com.gods.saas.web.controller;
 
 import com.gods.saas.domain.dto.request.ChangePasswordRequest;
+import com.gods.saas.domain.dto.request.DeleteMyAccountRequest;
+import com.gods.saas.domain.dto.response.DeleteAccountResponse;
+import com.gods.saas.domain.model.AppUser;
 import com.gods.saas.service.impl.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -21,26 +24,51 @@ public class AccountController {
             Authentication authentication,
             @RequestBody ChangePasswordRequest request
     ) {
-        if (authentication == null || authentication.getPrincipal() == null) {
-            return ResponseEntity.status(401).body(
-                    Map.of("message", "Sesión no válida")
-            );
-        }
-
-        Object principal = authentication.getPrincipal();
-
-        if (!(principal instanceof Number userIdNum)) {
-            return ResponseEntity.status(401).body(
-                    Map.of("message", "No se pudo identificar al usuario autenticado")
-            );
-        }
-
-        Long userId = userIdNum.longValue();
+        Long userId = extractUserId(authentication);
 
         userService.changeMyPassword(userId, request);
 
         return ResponseEntity.ok(
                 Map.of("message", "Contraseña actualizada correctamente")
         );
+    }
+
+    @DeleteMapping
+    public ResponseEntity<DeleteAccountResponse> deleteMyAccount(
+            Authentication authentication,
+            @RequestBody DeleteMyAccountRequest request
+    ) {
+        Long userId = extractUserId(authentication);
+
+        userService.deleteMyInternalAccount(
+                userId,
+                request != null ? request.getCurrentPassword() : null,
+                request != null ? request.getConfirmation() : null
+        );
+
+        return ResponseEntity.ok(
+                DeleteAccountResponse.builder()
+                        .success(true)
+                        .message("Tu cuenta fue eliminada correctamente")
+                        .build()
+        );
+    }
+
+    private Long extractUserId(Authentication authentication) {
+        if (authentication == null || authentication.getPrincipal() == null) {
+            throw new RuntimeException("Sesión no válida");
+        }
+
+        Object principal = authentication.getPrincipal();
+
+        if (principal instanceof Number userIdNum) {
+            return userIdNum.longValue();
+        }
+
+        if (principal instanceof AppUser appUser) {
+            return appUser.getId();
+        }
+
+        throw new RuntimeException("No se pudo identificar al usuario autenticado");
     }
 }

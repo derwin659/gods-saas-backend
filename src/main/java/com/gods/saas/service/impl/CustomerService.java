@@ -31,6 +31,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Random;
 import java.util.stream.Collectors;
 
@@ -103,7 +104,6 @@ public class CustomerService {
         if (req.getEmail() != null) customer.setEmail(req.getEmail());
         if (req.getFechaNacimiento() != null) customer.setFechaNacimiento(req.getFechaNacimiento());
 
-
         customer.setFechaActualizacion(LocalDateTime.now());
         return customerRepository.save(customer);
     }
@@ -153,6 +153,44 @@ public class CustomerService {
         customerRepository.save(customer);
     }
 
+    @Transactional
+    public void deleteMyCustomerAccount(Long customerId, String confirmation) {
+        if (customerId == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Cliente inválido");
+        }
+
+        final String confirm = confirmation == null ? "" : confirmation.trim().toUpperCase();
+        if (!Objects.equals(confirm, "ELIMINAR")) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Debes confirmar la eliminación escribiendo ELIMINAR"
+            );
+        }
+
+        Customer customer = customerRepository.findById(customerId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cliente no encontrado"));
+
+        if (!Boolean.TRUE.equals(customer.getActivo())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La cuenta ya fue eliminada");
+        }
+
+        String marker = "deleted_customer_" + customer.getId() + "_" + System.currentTimeMillis();
+
+        customer.setNombres("Cuenta eliminada");
+        customer.setApellidos("");
+        customer.setTelefono(marker);
+        customer.setEmail(marker + "@deleted.local");
+        customer.setPhoneVerified(false);
+        customer.setPhonePendiente(null);
+        customer.setPhonePendienteVerificacion(false);
+        customer.setAppActivated(false);
+        customer.setActivo(false);
+        customer.setFechaActualizacion(LocalDateTime.now());
+        customer.setSource("DELETED");
+
+        customerRepository.save(customer);
+    }
+
     public List<Customer> listarClientesOwner(Long tenantId, String q, int limit) {
         int safeLimit = Math.min(Math.max(limit, 1), 100);
         PageRequest pageable = PageRequest.of(0, safeLimit);
@@ -168,7 +206,6 @@ public class CustomerService {
         return customerRepository.findByIdAndTenant_IdAndActivoTrue(customerId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
     }
-
 
     public Customer obtenerClientePorTelefono(Long tenantId, String phone) {
         return customerRepository.findByTenant_IdAndTelefonoAndActivoTrue(tenantId, phone)
