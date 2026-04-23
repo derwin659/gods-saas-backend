@@ -37,7 +37,7 @@ public class AccountController {
         );
     }
 
-    @DeleteMapping("/me")
+    @DeleteMapping("/delete")
     public ResponseEntity<DeleteAccountResponse> deleteMyAccount(
             @RequestBody DeleteMyAccountRequest request
     ) {
