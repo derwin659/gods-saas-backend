@@ -46,6 +46,8 @@ public class CashSaleServiceImpl implements CashSaleService {
             throw new IllegalArgumentException("La venta debe tener al menos un item.");
         }
 
+        LocalDateTime effectiveSaleDate = resolveSaleDate(tenantId, request);
+
         cashRegisterRepository
                 .findByTenant_IdAndBranch_IdAndStatus(tenantId, branchId, CashRegisterStatus.OPEN)
                 .orElseThrow(() -> new IllegalStateException("No hay una caja abierta en esta sede."));
@@ -85,13 +87,19 @@ public class CashSaleServiceImpl implements CashSaleService {
         );
 
         SaleResponse response = saleService.crearVenta(saleRequest);
+        Sale savedSale = saleRepository.findByIdAndTenant_Id(response.getSaleId(), tenantId)
+                .orElseThrow(() -> new EntityNotFoundException("Venta creada no encontrada"));
+
+        savedSale.setSaleDate(effectiveSaleDate);
+        savedSale = saleRepository.save(savedSale);
+
 
         if (appointment != null) {
             appointment.setEstado("COMPLETADO");
             appointmentRepository.save(appointment);
         }
 
-        return response;
+        return mapResponse(savedSale, response.getPuntosGanados());
     }
 
     @Override
@@ -104,7 +112,7 @@ public class CashSaleServiceImpl implements CashSaleService {
         LocalDateTime to = today.plusDays(1).atStartOfDay();
 
         return saleRepository
-                .findByTenant_IdAndBranch_IdAndFechaCreacionGreaterThanEqualAndFechaCreacionLessThanOrderByFechaCreacionDesc(
+                .findCashSalesByBusinessDateRange(
                         tenantId,
                         branchId,
                         from,
@@ -122,7 +130,7 @@ public class CashSaleServiceImpl implements CashSaleService {
         LocalDateTime toDateTime = to.plusDays(1).atStartOfDay();
 
         return saleRepository
-                .findByTenant_IdAndBranch_IdAndFechaCreacionBetweenOrderByFechaCreacionDesc(
+                .findCashSalesByBusinessDateRange(
                         tenantId, branchId, fromDateTime, toDateTime
                 )
                 .stream()
@@ -187,6 +195,32 @@ public class CashSaleServiceImpl implements CashSaleService {
         return mapResponse(saved, 0);
     }
 
+    private LocalDateTime resolveSaleDate(Long tenantId, CreateCashSaleRequest request) {
+        LocalDateTime now = tenantTimeService.now(tenantId);
+
+        if (request.getSaleDate() == null) {
+            return now;
+        }
+
+        LocalDateTime saleDate = request.getSaleDate();
+
+        if (saleDate.isAfter(now.plusMinutes(5))) {
+            throw new IllegalArgumentException("La fecha de venta no puede ser futura.");
+        }
+
+        LocalDate minAllowedDate = now.toLocalDate().minusDays(30);
+        if (saleDate.toLocalDate().isBefore(minAllowedDate)) {
+            throw new IllegalArgumentException("Solo puedes registrar ventas de hasta 30 días atrás.");
+        }
+
+        return saleDate;
+    }
+
+
+    private LocalDateTime resolveBusinessDate(Sale sale) {
+        return sale.getSaleDate() != null ? sale.getSaleDate() : sale.getFechaCreacion();
+    }
+
     private SaleItemRequest toSaleItemRequest(CreateCashSaleItemRequest request) {
         SaleItemRequest item = new SaleItemRequest();
         item.setServiceId(request.getServiceId());
@@ -210,7 +244,7 @@ public class CashSaleServiceImpl implements CashSaleService {
                 .total(safe(sale.getTotal()))
                 .cashReceived(safe(sale.getCashReceived()))
                 .changeAmount(safe(sale.getChangeAmount()))
-                .fechaCreacion(sale.getFechaCreacion())
+                .fechaCreacion(resolveBusinessDate(sale))
                 .puntosGanados(puntosGanados == null ? 0 : puntosGanados)
                 .barberName(resolveBarberName(sale))
                 .items(

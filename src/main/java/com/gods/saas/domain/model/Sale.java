@@ -60,6 +60,17 @@ public class Sale {
     @Column(name = "metodo_pago", length = 30)
     private String metodoPago;
 
+    /**
+     * Fecha/hora real en la que ocurrió la venta.
+     * Se usa para reportes diarios, rangos, ranking y ventas por fecha.
+     */
+    @Column(name = "sale_date")
+    private LocalDateTime saleDate;
+
+    /**
+     * Fecha/hora en la que la venta fue registrada en el sistema.
+     * Se mantiene para auditoría.
+     */
     @Column(name = "fecha_creacion")
     private LocalDateTime fechaCreacion;
 

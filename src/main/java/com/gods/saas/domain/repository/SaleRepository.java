@@ -406,4 +406,22 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end
     );
+
+
+    @Query("""
+        select s
+        from Sale s
+        where s.tenant.id = :tenantId
+          and s.branch.id = :branchId
+          and coalesce(s.saleDate, s.fechaCreacion) >= :from
+          and coalesce(s.saleDate, s.fechaCreacion) < :to
+        order by coalesce(s.saleDate, s.fechaCreacion) desc
+        """)
+    List<Sale> findCashSalesByBusinessDateRange(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to
+    );
+
 }
