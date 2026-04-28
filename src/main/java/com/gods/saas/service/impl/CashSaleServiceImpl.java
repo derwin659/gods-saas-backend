@@ -150,6 +150,7 @@ public class CashSaleServiceImpl implements CashSaleService {
     @Override
     @Transactional
     public SaleResponse updateSale(Long tenantId, Long branchId, Long userId, Long saleId, UpdateSaleRequest request) {
+        requireOwnerForSensitiveSaleAction(tenantId, userId);
         Sale sale = saleRepository.findByIdAndTenant_IdAndBranch_Id(saleId, tenantId, branchId)
                 .orElseThrow(() -> new RuntimeException("Venta no encontrada"));
 
@@ -302,6 +303,7 @@ public class CashSaleServiceImpl implements CashSaleService {
     @Override
     @Transactional
     public void deleteSale(Long tenantId, Long branchId, Long userId, Long saleId) {
+        requireOwnerForSensitiveSaleAction(tenantId, userId);
         Sale sale = saleRepository.findByIdAndTenant_IdAndBranch_Id(saleId, tenantId, branchId)
                 .orElseThrow(() -> new RuntimeException("Venta no encontrada"));
 
@@ -333,6 +335,16 @@ public class CashSaleServiceImpl implements CashSaleService {
         }
 
         saleRepository.delete(sale);
+    }
+
+    private void requireOwnerForSensitiveSaleAction(Long tenantId, Long userId) {
+        AppUser actor = userRepository.findByIdAndTenant_Id(userId, tenantId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        String role = actor.getRol() == null ? "" : actor.getRol().trim().toUpperCase();
+        if (!"OWNER".equals(role)) {
+            throw new org.springframework.security.access.AccessDeniedException("Solo el dueño puede editar o eliminar ventas.");
+        }
     }
 
     private void restoreProductStockFromSale(Long tenantId, Long branchId, Long userId, Sale sale) {

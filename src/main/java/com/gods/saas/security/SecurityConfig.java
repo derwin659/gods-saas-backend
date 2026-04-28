@@ -89,12 +89,14 @@ public class SecurityConfig {
 
                         .requestMatchers("/api/super-admin/**").hasRole("SUPER_ADMIN")
 
-                        .requestMatchers("/api/internal/users/**").hasAnyRole("OWNER", "ADMIN")
-                        .requestMatchers("/api/internal/users/login/**").hasAnyRole("OWNER", "ADMIN")
+                        .requestMatchers("/api/internal/users/**").hasRole("OWNER")
+                        .requestMatchers("/api/internal/users/login/**").hasRole("OWNER")
                         .requestMatchers("/api/internal/me").hasAnyRole("OWNER", "ADMIN", "BARBER", "CASHIER", "SUPER_ADMIN")
 
                         .requestMatchers("/api/owner/device-tokens/**")
                         .hasAnyRole("OWNER", "ADMIN", "BARBER", "CASHIER")
+
+                        .requestMatchers("/api/owner/home/**").hasAnyRole("OWNER", "ADMIN")
 
                         .requestMatchers("/api/owner/notifications/**")
                         .hasAnyRole("OWNER", "ADMIN", "BARBER", "CASHIER")
@@ -103,6 +105,7 @@ public class SecurityConfig {
                         .authenticated()
 
                         .requestMatchers("/api/owner/cash-registers/**").hasAnyRole("OWNER", "ADMIN")
+                        .requestMatchers("/api/owner/cash-sales/**").hasAnyRole("OWNER", "ADMIN")
                         .requestMatchers("/api/owner/marketing-campaigns/**").hasRole("OWNER")
                         .requestMatchers("/api/owner/**").hasRole("OWNER")
 
