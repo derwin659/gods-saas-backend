@@ -25,7 +25,7 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
             'Cliente'
         ) AS nombre,
         c.telefono AS telefono,
-        MAX(s.fecha_creacion) AS ultimaVisita
+        MAX(COALESCE(s.sale_date, s.fecha_creacion)) AS ultimaVisita
     FROM customer c
     JOIN sale s
       ON s.customer_id = c.customer_id
@@ -33,23 +33,23 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
       AND s.tenant_id = :tenantId
       AND c.customer_id IS NOT NULL
     GROUP BY c.customer_id, c.nombres, c.apellidos, c.telefono
-    HAVING MAX(s.fecha_creacion) <= NOW() - CAST((:daysInactive || ' days') AS interval)
-    ORDER BY MAX(s.fecha_creacion) ASC
+    HAVING MAX(COALESCE(s.sale_date, s.fecha_creacion)) <= NOW() - CAST((:daysInactive || ' days') AS interval)
+    ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
     """, nativeQuery = true)
     List<CustomerCampaignAudienceProjection> findInactiveCustomers(Long tenantId, Integer daysInactive);
 
     @Query(value = """
     select
-        cast(s.fecha_creacion as date) as saleDate,
+        cast(COALESCE(s.sale_date, s.fecha_creacion) as date) as saleDate,
         coalesce(sum(s.total), 0) as totalSales,
         count(s.sale_id) as salesCount
     from sale s
     where s.tenant_id = :tenantId
       and (:branchId is null or s.branch_id = :branchId)
-      and s.fecha_creacion >= :start
-      and s.fecha_creacion < :end
-    group by cast(s.fecha_creacion as date)
-    order by cast(s.fecha_creacion as date) asc
+      and COALESCE(s.sale_date, s.fecha_creacion) >= :start
+      and COALESCE(s.sale_date, s.fecha_creacion) < :end
+    group by cast(COALESCE(s.sale_date, s.fecha_creacion) as date)
+    order by cast(COALESCE(s.sale_date, s.fecha_creacion) as date) asc
     """, nativeQuery = true)
     List<DailySalesReportProjection> getDailySalesReport(
             @Param("tenantId") Long tenantId,
@@ -69,7 +69,7 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
         left join product p on p.product_id = si.product_id
         where s.tenant_id = :tenantId
           and (:branchId is null or s.branch_id = :branchId)
-          and s.fecha_creacion between :start and :end
+          and COALESCE(s.sale_date, s.fecha_creacion) between :start and :end
         group by coalesce(se.nombre, p.nombre, 'Item')
         order by count(si.sale_item_id) desc, coalesce(sum(si.subtotal), 0) desc
         """, nativeQuery = true)
@@ -85,8 +85,13 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
         from Sale s
         where s.tenant.id = :tenantId
           and (:branchId is null or s.branch.id = :branchId)
-          and upper(coalesce(s.metodoPago, '')) = upper(:paymentMethod)
-          and s.fechaCreacion between :start and :end
+          and (
+              upper(trim(coalesce(s.metodoPago, ''))) = upper(:paymentMethod)
+              or (upper(:paymentMethod) in ('CASH', 'EFECTIVO') and upper(trim(coalesce(s.metodoPago, ''))) in ('CASH', 'EFECTIVO'))
+              or (upper(:paymentMethod) in ('CARD', 'TARJETA') and upper(trim(coalesce(s.metodoPago, ''))) in ('CARD', 'TARJETA'))
+              or (upper(:paymentMethod) in ('FREE', 'GRATIS') and upper(trim(coalesce(s.metodoPago, ''))) in ('FREE', 'GRATIS'))
+          )
+          and coalesce(s.saleDate, s.fechaCreacion) between :start and :end
         """)
     BigDecimal getTotalByPaymentMethod(
             @Param("tenantId") Long tenantId,
@@ -102,8 +107,8 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
         where s.tenant.id = :tenantId
           and s.branch.id = :branchId
           and s.user.id = :barberId
-          and s.fechaCreacion >= :start
-          and s.fechaCreacion < :end
+          and coalesce(s.saleDate, s.fechaCreacion) >= :start
+          and coalesce(s.saleDate, s.fechaCreacion) < :end
         """)
     BigDecimal sumTodaySales(
             @Param("tenantId") Long tenantId,
@@ -119,8 +124,8 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
         where s.tenant.id = :tenantId
           and s.branch.id = :branchId
           and s.user.id = :barberId
-          and s.fechaCreacion >= :start
-          and s.fechaCreacion < :end
+          and coalesce(s.saleDate, s.fechaCreacion) >= :start
+          and coalesce(s.saleDate, s.fechaCreacion) < :end
         """)
     long countTodayServices(
             @Param("tenantId") Long tenantId,
@@ -130,26 +135,35 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
             @Param("end") LocalDateTime end
     );
 
+    @Query("""
+        select s
+        from Sale s
+        where s.tenant.id = :tenantId
+          and s.branch.id = :branchId
+          and s.user.id = :userId
+          and coalesce(s.saleDate, s.fechaCreacion) between :start and :end
+        order by coalesce(s.saleDate, s.fechaCreacion) desc
+        """)
     List<Sale> findByTenant_IdAndBranch_IdAndUser_IdAndFechaCreacionBetween(
-            Long tenantId,
-            Long branchId,
-            Long userId,
-            LocalDateTime start,
-            LocalDateTime end
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("userId") Long userId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
     );
 
     @Query("""
         select
-            cast(s.fechaCreacion as date) as fecha,
+            cast(coalesce(s.saleDate, s.fechaCreacion) as date) as fecha,
             coalesce(sum(s.total), 0) as ventas
         from Sale s
         where s.tenant.id = :tenantId
           and s.branch.id = :branchId
           and s.user.id = :barberId
-          and s.fechaCreacion >= :start
-          and s.fechaCreacion < :end
-        group by cast(s.fechaCreacion as date)
-        order by cast(s.fechaCreacion as date) asc
+          and coalesce(s.saleDate, s.fechaCreacion) >= :start
+          and coalesce(s.saleDate, s.fechaCreacion) < :end
+        group by cast(coalesce(s.saleDate, s.fechaCreacion) as date)
+        order by cast(coalesce(s.saleDate, s.fechaCreacion) as date) asc
         """)
     List<BarberCommissionDailyProjection> findDailySalesByBarber(
             @Param("tenantId") Long tenantId,
@@ -176,11 +190,20 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
 
     Optional<Sale> findByIdAndTenant_Id(Long saleId, Long tenantId);
 
+    @Query("""
+        select s
+        from Sale s
+        where s.tenant.id = :tenantId
+          and s.branch.id = :branchId
+          and coalesce(s.saleDate, s.fechaCreacion) >= :from
+          and coalesce(s.saleDate, s.fechaCreacion) < :to
+        order by coalesce(s.saleDate, s.fechaCreacion) desc
+        """)
     List<Sale> findByTenant_IdAndBranch_IdAndFechaCreacionBetweenOrderByFechaCreacionDesc(
-            Long tenantId,
-            Long branchId,
-            LocalDateTime from,
-            LocalDateTime to
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to
     );
 
     @Query(value = """
@@ -193,7 +216,7 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
         join app_user u on u.user_id = s.user_id
         where s.tenant_id = :tenantId
           and (:branchId is null or s.branch_id = :branchId)
-          and s.fecha_creacion between :start and :end
+          and COALESCE(s.sale_date, s.fecha_creacion) between :start and :end
         group by u.user_id, u.nombre
         order by coalesce(sum(s.total), 0) desc, u.nombre asc
         """, nativeQuery = true)
@@ -209,7 +232,7 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
         from Sale s
         where s.tenant.id = :tenantId
           and (:branchId is null or s.branch.id = :branchId)
-          and s.fechaCreacion between :start and :end
+          and coalesce(s.saleDate, s.fechaCreacion) between :start and :end
         """)
     BigDecimal getTotalSalesByRange(
             @Param("tenantId") Long tenantId,
@@ -223,7 +246,7 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
         from Sale s
         where s.tenant.id = :tenantId
           and (:branchId is null or s.branch.id = :branchId)
-          and s.fechaCreacion between :start and :end
+          and coalesce(s.saleDate, s.fechaCreacion) between :start and :end
         """)
     Long countSalesByRange(
             @Param("tenantId") Long tenantId,
@@ -237,7 +260,7 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
         from sale s
         where s.tenant_id = :tenantId
           and (:branchId is null or s.branch_id = :branchId)
-          and s.fecha_creacion between :start and :end
+          and COALESCE(s.sale_date, s.fecha_creacion) between :start and :end
         """, nativeQuery = true)
     Long countActiveBarbersByRange(
             @Param("tenantId") Long tenantId,
@@ -262,7 +285,7 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
             ) as serviceNames,
             s.total as total,
             coalesce(s.metodo_pago, '') as paymentMethod,
-            s.fecha_creacion as createdAt
+            COALESCE(s.sale_date, s.fecha_creacion) as createdAt
         from sale s
         left join customer c on c.customer_id = s.customer_id
         left join sale_item si on si.sale_id = s.sale_id
@@ -271,9 +294,9 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
         where s.tenant_id = :tenantId
           and (:branchId is null or s.branch_id = :branchId)
           and s.user_id = :barberId
-          and s.fecha_creacion between :start and :end
-        group by s.sale_id, c.nombres, c.apellidos, s.total, s.metodo_pago, s.fecha_creacion
-        order by s.fecha_creacion desc
+          and COALESCE(s.sale_date, s.fecha_creacion) between :start and :end
+        group by s.sale_id, c.nombres, c.apellidos, s.total, s.metodo_pago, COALESCE(s.sale_date, s.fecha_creacion)
+        order by COALESCE(s.sale_date, s.fecha_creacion) desc
         """, nativeQuery = true)
     List<BarberSaleDetailProjection> getBarberSaleDetails(
             @Param("tenantId") Long tenantId,
@@ -294,8 +317,8 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
         from Sale s
         join s.branch b
         where s.tenant.id = :tenantId
-          and (:fromDateTime is null or s.fechaCreacion >= :fromDateTime)
-          and (:toDateTime is null or s.fechaCreacion < :toDateTime)
+          and (:fromDateTime is null or coalesce(s.saleDate, s.fechaCreacion) >= :fromDateTime)
+          and (:toDateTime is null or coalesce(s.saleDate, s.fechaCreacion) < :toDateTime)
         group by b.id, b.nombre
         order by coalesce(sum(s.total), 0) desc
         """)
@@ -320,8 +343,8 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
         join s.branch b
         where s.tenant.id = :tenantId
           and (:branchId is null or b.id = :branchId)
-          and (:fromDateTime is null or s.fechaCreacion >= :fromDateTime)
-          and (:toDateTime is null or s.fechaCreacion < :toDateTime)
+          and (:fromDateTime is null or coalesce(s.saleDate, s.fechaCreacion) >= :fromDateTime)
+          and (:toDateTime is null or coalesce(s.saleDate, s.fechaCreacion) < :toDateTime)
         group by u.id, u.nombre, b.id, b.nombre
         order by coalesce(sum(s.total), 0) desc
         """)
@@ -337,8 +360,8 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
     from Sale s
     where s.tenant.id = :tenantId
       and (:branchId is null or s.branch.id = :branchId)
-      and s.fechaCreacion >= :start
-      and s.fechaCreacion < :end
+      and coalesce(s.saleDate, s.fechaCreacion) >= :start
+      and coalesce(s.saleDate, s.fechaCreacion) < :end
 """)
     BigDecimal sumSalesByDay(
             @Param("tenantId") Long tenantId,
@@ -352,8 +375,8 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
     from Sale s
     where s.tenant.id = :tenantId
       and (:branchId is null or s.branch.id = :branchId)
-      and s.fechaCreacion >= :start
-      and s.fechaCreacion < :end
+      and coalesce(s.saleDate, s.fechaCreacion) >= :start
+      and coalesce(s.saleDate, s.fechaCreacion) < :end
 """)
     BigDecimal averageTicketByDay(
             @Param("tenantId") Long tenantId,
@@ -364,11 +387,20 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
 
     Optional<Sale> findByIdAndTenant_IdAndBranch_Id(Long saleId, Long tenantId, Long branchId);
 
+    @Query("""
+        select s
+        from Sale s
+        where s.tenant.id = :tenantId
+          and s.branch.id = :branchId
+          and coalesce(s.saleDate, s.fechaCreacion) >= :from
+          and coalesce(s.saleDate, s.fechaCreacion) < :to
+        order by coalesce(s.saleDate, s.fechaCreacion) desc
+        """)
     List<Sale> findByTenant_IdAndBranch_IdAndFechaCreacionGreaterThanEqualAndFechaCreacionLessThanOrderByFechaCreacionDesc(
-            Long tenantId,
-            Long branchId,
-            LocalDateTime from,
-            LocalDateTime to
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to
     );
 
 
@@ -379,8 +411,8 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
     where s.tenant.id = :tenantId
       and (:branchId is null or s.branch.id = :branchId)
       and si.barberUser.id = :barberUserId
-      and s.fechaCreacion >= :start
-      and s.fechaCreacion < :end
+      and coalesce(s.saleDate, s.fechaCreacion) >= :start
+      and coalesce(s.saleDate, s.fechaCreacion) < :end
     """)
     BigDecimal sumBarberItemSalesByRange(
             @Param("tenantId") Long tenantId,
@@ -397,8 +429,8 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
     where s.tenant.id = :tenantId
       and (:branchId is null or s.branch.id = :branchId)
       and upper(trim(coalesce(s.metodoPago, ''))) in ('EFECTIVO', 'CASH')
-      and s.fechaCreacion >= :start
-      and s.fechaCreacion < :end
+      and coalesce(s.saleDate, s.fechaCreacion) >= :start
+      and coalesce(s.saleDate, s.fechaCreacion) < :end
     """)
     BigDecimal getCashSalesByRange(
             @Param("tenantId") Long tenantId,
@@ -406,22 +438,4 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end
     );
-
-
-    @Query("""
-        select s
-        from Sale s
-        where s.tenant.id = :tenantId
-          and s.branch.id = :branchId
-          and coalesce(s.saleDate, s.fechaCreacion) >= :from
-          and coalesce(s.saleDate, s.fechaCreacion) < :to
-        order by coalesce(s.saleDate, s.fechaCreacion) desc
-        """)
-    List<Sale> findCashSalesByBusinessDateRange(
-            @Param("tenantId") Long tenantId,
-            @Param("branchId") Long branchId,
-            @Param("from") LocalDateTime from,
-            @Param("to") LocalDateTime to
-    );
-
 }
