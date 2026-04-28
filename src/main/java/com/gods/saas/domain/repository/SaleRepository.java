@@ -199,6 +199,22 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
           and coalesce(s.saleDate, s.fechaCreacion) < :to
         order by coalesce(s.saleDate, s.fechaCreacion) desc
         """)
+    @Query("""
+        select s
+        from Sale s
+        where s.tenant.id = :tenantId
+          and s.branch.id = :branchId
+          and coalesce(s.saleDate, s.fechaCreacion) >= :start
+          and coalesce(s.saleDate, s.fechaCreacion) < :end
+        order by coalesce(s.saleDate, s.fechaCreacion) desc
+        """)
+    List<Sale> findCashSalesByBusinessDateRange(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+
     List<Sale> findByTenant_IdAndBranch_IdAndFechaCreacionBetweenOrderByFechaCreacionDesc(
             @Param("tenantId") Long tenantId,
             @Param("branchId") Long branchId,
