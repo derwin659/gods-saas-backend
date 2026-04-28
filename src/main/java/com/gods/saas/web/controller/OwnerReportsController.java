@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Map;
+import org.springframework.security.access.AccessDeniedException;
 
 @RestController
 @RequestMapping("/api/owner/reports")
@@ -26,7 +27,7 @@ public class OwnerReportsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         Long tenantId = extractTenantId(authentication);
-        return ownerReportsService.getProfitabilityReport(tenantId, branchId, from, to);
+        return ownerReportsService.getProfitabilityReport(tenantId, effectiveBranchIdForReports(authentication, branchId), from, to);
     }
 
     @GetMapping("/sales")
@@ -37,7 +38,7 @@ public class OwnerReportsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         Long tenantId = extractTenantId(authentication);
-        return ownerReportsService.getSalesReport(tenantId, branchId, from, to);
+        return ownerReportsService.getSalesReport(tenantId, effectiveBranchIdForReports(authentication, branchId), from, to);
     }
 
     @GetMapping("/sales/barber/{barberId}")
@@ -49,7 +50,7 @@ public class OwnerReportsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         Long tenantId = extractTenantId(authentication);
-        return ownerReportsService.getBarberSalesDetail(tenantId, branchId, barberId, from, to);
+        return ownerReportsService.getBarberSalesDetail(tenantId, effectiveBranchIdForReports(authentication, branchId), barberId, from, to);
     }
 
     @GetMapping("/branches/summary")
@@ -70,7 +71,7 @@ public class OwnerReportsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         Long tenantId = extractTenantId(authentication);
-        return ownerReportsService.getBranchDetail(tenantId, branchId, from, to);
+        return ownerReportsService.getBranchDetail(tenantId, requireAllowedBranch(authentication, branchId), from, to);
     }
 
     @GetMapping("/branches/{branchId}/barbers")
@@ -81,7 +82,7 @@ public class OwnerReportsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         Long tenantId = extractTenantId(authentication);
-        return ownerReportsService.getBranchBarbersReport(tenantId, branchId, from, to);
+        return ownerReportsService.getBranchBarbersReport(tenantId, requireAllowedBranch(authentication, branchId), from, to);
     }
 
     @GetMapping("/barbers/summary")
@@ -92,7 +93,7 @@ public class OwnerReportsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         Long tenantId = extractTenantId(authentication);
-        return ownerReportsService.getBarberSummary(tenantId, branchId, from, to);
+        return ownerReportsService.getBarberSummary(tenantId, effectiveBranchIdForReports(authentication, branchId), from, to);
     }
 
     @GetMapping("/barbers/{barberId}/detail")
@@ -104,7 +105,7 @@ public class OwnerReportsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         Long tenantId = extractTenantId(authentication);
-        return ownerReportsService.getBarberDetail(tenantId, branchId, barberId, from, to);
+        return ownerReportsService.getBarberDetail(tenantId, effectiveBranchIdForReports(authentication, branchId), barberId, from, to);
     }
 
     @GetMapping("/sales/daily")
@@ -115,7 +116,7 @@ public class OwnerReportsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         Long tenantId = extractTenantId(authentication);
-        return ownerReportsService.getDailySales(tenantId, branchId, from, to);
+        return ownerReportsService.getDailySales(tenantId, effectiveBranchIdForReports(authentication, branchId), from, to);
     }
 
     @GetMapping("/services/top")
@@ -126,7 +127,7 @@ public class OwnerReportsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         Long tenantId = extractTenantId(authentication);
-        return ownerReportsService.getTopServices(tenantId, branchId, from, to);
+        return ownerReportsService.getTopServices(tenantId, effectiveBranchIdForReports(authentication, branchId), from, to);
     }
 
     @GetMapping("/payments/summary")
@@ -137,7 +138,42 @@ public class OwnerReportsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         Long tenantId = extractTenantId(authentication);
-        return ownerReportsService.getPaymentSummary(tenantId, branchId, from, to);
+        return ownerReportsService.getPaymentSummary(tenantId, effectiveBranchIdForReports(authentication, branchId), from, to);
+    }
+
+
+    private Long effectiveBranchIdForReports(Authentication authentication, Long requestedBranchId) {
+        String role = extractRole(authentication);
+        if ("ADMIN".equalsIgnoreCase(role)) {
+            Long sessionBranchId = extractBranchId(authentication);
+            if (sessionBranchId == null) {
+                throw new AccessDeniedException("El administrador no tiene una sede asignada");
+            }
+            return sessionBranchId;
+        }
+        return requestedBranchId;
+    }
+
+    private Long requireAllowedBranch(Authentication authentication, Long requestedBranchId) {
+        String role = extractRole(authentication);
+        if ("ADMIN".equalsIgnoreCase(role)) {
+            Long sessionBranchId = extractBranchId(authentication);
+            if (sessionBranchId == null || !sessionBranchId.equals(requestedBranchId)) {
+                throw new AccessDeniedException("El administrador solo puede ver reportes de su sede");
+            }
+        }
+        return requestedBranchId;
+    }
+
+    private String extractRole(Authentication authentication) {
+        Map<String, Object> details = getDetails(authentication);
+        Object role = details.get("role");
+        return role == null ? "" : role.toString().trim().toUpperCase();
+    }
+
+    private Long extractBranchId(Authentication authentication) {
+        Map<String, Object> details = getDetails(authentication);
+        return toLong(details.get("branchId"));
     }
 
     private Long extractTenantId(Authentication authentication) {
