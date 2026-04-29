@@ -213,15 +213,14 @@ public class AuthController {
     }
     @PostMapping("/forgot-password")
     public ResponseEntity<?> forgotPassword(@RequestBody ForgotPasswordRequest request) {
+        System.out.println("=======================================");
         System.out.println("✅ LLEGÓ A /api/auth/forgot-password");
         System.out.println("EMAIL RECIBIDO => " + request.getEmail());
-
-        passwordResetService.sendResetCode(request.getEmail());
-
-        System.out.println("✅ TERMINÓ sendResetCode");
+        System.out.println("=======================================");
 
         return ResponseEntity.ok(Map.of(
-                "message", "Si el correo existe, enviaremos un código de recuperación."
+                "message", "TEST OK forgot-password llegó al backend",
+                "email", request.getEmail()
         ));
     }
 
