@@ -27,9 +27,11 @@ public class OwnerServiceCrudServiceImpl implements OwnerServiceCrudService {
     public List<ServiceResponse> findAll(Long tenantId, Boolean onlyActive) {
         List<ServiceEntity> services = Boolean.TRUE.equals(onlyActive)
                 ? serviceRepository.findByTenant_IdAndActivoTrueOrderByNombreAsc(tenantId)
-                : serviceRepository.findByTenant_IdAndActivoTrue(tenantId);
+                : serviceRepository.findByTenant_IdOrderByNombreAsc(tenantId);
 
-        return services.stream().map(this::toResponse).toList();
+        return services.stream()
+                .map(this::toResponse)
+                .toList();
     }
 
     @Override
@@ -49,15 +51,11 @@ public class OwnerServiceCrudServiceImpl implements OwnerServiceCrudService {
         if (nombreLimpio == null || nombreLimpio.isBlank()) {
             throw new IllegalArgumentException("El nombre del servicio es obligatorio");
         }
-        System.out.println("TENANT ID CREATE SERVICE => " + tenantId);
-        System.out.println("SERVICE NAME CREATE => " + request.nombre());
-        System.out.println("SERVICE NAME CREATE => " + nombreLimpio);
 
         boolean exists = serviceRepository.existsByTenant_IdAndNombreIgnoreCase(
-                tenantId, nombreLimpio
+                tenantId,
+                nombreLimpio
         );
-        System.out.println("EXISTS => " + exists);
-
 
         if (exists) {
             throw new IllegalArgumentException("Ya existe un servicio con ese nombre en esta barbería");
@@ -74,18 +72,28 @@ public class OwnerServiceCrudServiceImpl implements OwnerServiceCrudService {
 
         return toResponse(serviceRepository.save(service));
     }
+
     @Override
     public ServiceResponse update(Long tenantId, Long serviceId, ServiceRequest request) {
         ServiceEntity service = getServiceOrThrow(tenantId, serviceId);
 
+        String nombreLimpio = request.nombre() == null ? null : request.nombre().trim();
+
+        if (nombreLimpio == null || nombreLimpio.isBlank()) {
+            throw new IllegalArgumentException("El nombre del servicio es obligatorio");
+        }
+
         boolean exists = serviceRepository.existsByTenant_IdAndNombreIgnoreCaseAndIdNot(
-                tenantId, request.nombre().trim(), serviceId
+                tenantId,
+                nombreLimpio,
+                serviceId
         );
+
         if (exists) {
             throw new IllegalArgumentException("Ya existe otro servicio con ese nombre");
         }
 
-        service.setNombre(request.nombre().trim());
+        service.setNombre(nombreLimpio);
         service.setDescripcion(trimToNull(request.descripcion()));
         service.setDuracionMinutos(request.duracionMinutos());
         service.setPrecio(request.precio().doubleValue());
