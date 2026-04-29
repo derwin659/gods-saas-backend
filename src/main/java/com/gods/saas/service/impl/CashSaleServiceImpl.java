@@ -2,6 +2,7 @@ package com.gods.saas.service.impl;
 
 import com.gods.saas.domain.dto.request.*;
 import com.gods.saas.domain.dto.response.SaleItemResponse;
+import com.gods.saas.domain.dto.response.SalePaymentResponse;
 import com.gods.saas.domain.dto.response.SaleResponse;
 import com.gods.saas.domain.enums.CashRegisterStatus;
 import com.gods.saas.domain.model.*;
@@ -79,6 +80,9 @@ public class CashSaleServiceImpl implements CashSaleService {
         saleRequest.setMetodoPago(normalizeMethod(request.getMetodoPago()));
         saleRequest.setDiscount(safe(request.getDiscount()));
         saleRequest.setCashReceived(safe(request.getCashReceived()));
+        saleRequest.setTipAmount(safe(request.getTipAmount()));
+        saleRequest.setTipBarberUserId(request.getTipBarberUserId());
+        saleRequest.setPayments(request.getPayments());
         saleRequest.setCutType(request.getCutType());
         saleRequest.setCutDetail(request.getCutDetail());
         saleRequest.setCutObservations(request.getCutObservations());
@@ -242,12 +246,16 @@ public class CashSaleServiceImpl implements CashSaleService {
                 .metodoPago(sale.getMetodoPago())
                 .subtotal(safe(sale.getSubtotal()))
                 .discount(safe(sale.getDiscount()))
+                .tipAmount(safe(sale.getTipAmount()))
+                .tipBarberUserId(sale.getTipBarberUser() != null ? sale.getTipBarberUser().getId() : null)
+                .tipBarberUserName(sale.getTipBarberUser() != null ? sale.getTipBarberUser().getNombre() : null)
                 .total(safe(sale.getTotal()))
                 .cashReceived(safe(sale.getCashReceived()))
                 .changeAmount(safe(sale.getChangeAmount()))
                 .fechaCreacion(resolveBusinessDate(sale))
                 .puntosGanados(puntosGanados == null ? 0 : puntosGanados)
                 .barberName(resolveBarberName(sale))
+                .payments(mapPaymentResponses(sale))
                 .items(
                         sale.getItems() == null
                                 ? List.of()
@@ -267,6 +275,21 @@ public class CashSaleServiceImpl implements CashSaleService {
                         ).collect(Collectors.toList())
                 )
                 .build();
+    }
+
+
+    private List<SalePaymentResponse> mapPaymentResponses(Sale sale) {
+        if (sale.getPayments() == null) {
+            return List.of();
+        }
+
+        return sale.getPayments().stream()
+                .map(payment -> SalePaymentResponse.builder()
+                        .id(payment.getId())
+                        .method(payment.getMethod())
+                        .amount(safe(payment.getAmount()))
+                        .build())
+                .collect(Collectors.toList());
     }
 
     private BigDecimal safe(BigDecimal value) {

@@ -21,6 +21,12 @@ public class BarberPaymentPreviewResponse {
 
     private BigDecimal salaryAmount;
 
+    /** Propinas asignadas al barbero en el rango. Se suman al monto pendiente de pago. */
+    private BigDecimal tipsAmount;
+
+    /** Comisión o sueldo + propinas. */
+    private BigDecimal grossAmount;
+
     private BigDecimal advancesApplied;
     private BigDecimal previousPaymentsApplied;
     private BigDecimal pendingAmount;

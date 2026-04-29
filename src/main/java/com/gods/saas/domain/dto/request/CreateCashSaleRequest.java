@@ -15,6 +15,15 @@ public class CreateCashSaleRequest {
     private BigDecimal discount;
     private BigDecimal cashReceived;
 
+    /** Propina para el barbero. */
+    private BigDecimal tipAmount;
+
+    /** Barbero que recibirá la propina. Si viene null, se asigna al primer barbero de la venta. */
+    private Long tipBarberUserId;
+
+    /** Pagos mixtos: CASH + YAPE + PLIN + CARD + TRANSFER. */
+    private List<SalePaymentRequest> payments;
+
     /**
      * Fecha/hora real en la que ocurrió la venta.
      * Si viene null, se usa la fecha/hora actual del tenant.

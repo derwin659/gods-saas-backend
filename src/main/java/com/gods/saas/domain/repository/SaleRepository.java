@@ -80,15 +80,34 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
             @Param("end") LocalDateTime end
     );
 
-    @Query("""
-        select coalesce(sum(s.total), 0)
-        from Sale s
-        where s.tenant.id = :tenantId
-          and (:branchId is null or s.branch.id = :branchId)
-          and upper(coalesce(s.metodoPago, '')) = upper(:paymentMethod)
-          and coalesce(s.saleDate, s.fechaCreacion) >= :start
-          and coalesce(s.saleDate, s.fechaCreacion) < :end
-        """)
+    @Query(value = """
+        select coalesce(sum(
+            case
+                when exists (select 1 from sale_payment spx where spx.sale_id = s.sale_id)
+                    then coalesce(sp.amount, 0)
+                when (
+                    (upper(:paymentMethod) in ('EFECTIVO','CASH') and upper(trim(coalesce(s.metodo_pago, ''))) in ('EFECTIVO','CASH')) or
+                    (upper(:paymentMethod) in ('TARJETA','CARD') and upper(trim(coalesce(s.metodo_pago, ''))) in ('TARJETA','CARD')) or
+                    (upper(:paymentMethod) in ('GRATIS','FREE') and upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS','FREE')) or
+                    upper(trim(coalesce(s.metodo_pago, ''))) = upper(:paymentMethod)
+                ) then s.total
+                else 0
+            end
+        ), 0)
+        from sale s
+        left join sale_payment sp
+          on sp.sale_id = s.sale_id
+         and (
+              (upper(:paymentMethod) in ('EFECTIVO','CASH') and upper(trim(sp.method)) in ('EFECTIVO','CASH')) or
+              (upper(:paymentMethod) in ('TARJETA','CARD') and upper(trim(sp.method)) in ('TARJETA','CARD')) or
+              (upper(:paymentMethod) in ('GRATIS','FREE') and upper(trim(sp.method)) in ('GRATIS','FREE')) or
+              upper(trim(sp.method)) = upper(:paymentMethod)
+         )
+        where s.tenant_id = :tenantId
+          and (:branchId is null or s.branch_id = :branchId)
+          and COALESCE(s.sale_date, s.fecha_creacion) >= :start
+          and COALESCE(s.sale_date, s.fecha_creacion) < :end
+        """, nativeQuery = true)
     BigDecimal getTotalByPaymentMethod(
             @Param("tenantId") Long tenantId,
             @Param("branchId") Long branchId,
@@ -176,12 +195,22 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
         """)
     BigDecimal sumTotalByCashRegisterId(@Param("cashRegisterId") Long cashRegisterId);
 
-    @Query("""
-        select coalesce(sum(s.total), 0)
-        from Sale s
-        where s.cashRegister.id = :cashRegisterId
-          and upper(trim(s.metodoPago)) in ('EFECTIVO', 'CASH')
-        """)
+    @Query(value = """
+        select coalesce(sum(
+            case
+                when exists (select 1 from sale_payment spx where spx.sale_id = s.sale_id)
+                    then coalesce(sp.amount, 0)
+                when upper(trim(coalesce(s.metodo_pago, ''))) in ('EFECTIVO', 'CASH')
+                    then s.total
+                else 0
+            end
+        ), 0)
+        from sale s
+        left join sale_payment sp
+          on sp.sale_id = s.sale_id
+         and upper(trim(sp.method)) in ('EFECTIVO', 'CASH')
+        where s.cash_register_id = :cashRegisterId
+        """, nativeQuery = true)
     BigDecimal sumCashTotalByCashRegisterId(@Param("cashRegisterId") Long cashRegisterId);
 
     Optional<Sale> findByIdAndTenant_Id(Long saleId, Long tenantId);
@@ -427,14 +456,41 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
     );
 
     @Query("""
-        select coalesce(sum(s.total), 0)
+        select coalesce(sum(s.tipAmount), 0)
         from Sale s
         where s.tenant.id = :tenantId
           and (:branchId is null or s.branch.id = :branchId)
-          and upper(trim(coalesce(s.metodoPago, ''))) in ('EFECTIVO', 'CASH')
+          and s.tipBarberUser.id = :barberUserId
           and coalesce(s.saleDate, s.fechaCreacion) >= :start
           and coalesce(s.saleDate, s.fechaCreacion) < :end
         """)
+    BigDecimal sumBarberTipsByRange(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("barberUserId") Long barberUserId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+
+    @Query(value = """
+        select coalesce(sum(
+            case
+                when exists (select 1 from sale_payment spx where spx.sale_id = s.sale_id)
+                    then coalesce(sp.amount, 0)
+                when upper(trim(coalesce(s.metodo_pago, ''))) in ('EFECTIVO', 'CASH')
+                    then s.total
+                else 0
+            end
+        ), 0)
+        from sale s
+        left join sale_payment sp
+          on sp.sale_id = s.sale_id
+         and upper(trim(sp.method)) in ('EFECTIVO', 'CASH')
+        where s.tenant_id = :tenantId
+          and (:branchId is null or s.branch_id = :branchId)
+          and COALESCE(s.sale_date, s.fecha_creacion) >= :start
+          and COALESCE(s.sale_date, s.fecha_creacion) < :end
+        """, nativeQuery = true)
     BigDecimal getCashSalesByRange(
             @Param("tenantId") Long tenantId,
             @Param("branchId") Long branchId,

@@ -20,7 +20,15 @@ public class CreateSaleRequest {
     private List<SaleItemRequest> items;
     private BigDecimal discount;
 
-    // NUEVO
+    /** Propina que se suma al total cobrado y al pago pendiente del barbero. */
+    private BigDecimal tipAmount;
+
+    /** Barbero que recibirá la propina. Si viene null, se usa el primer barbero de los items. */
+    private Long tipBarberUserId;
+
+    /** Pagos mixtos: efectivo + yape + plin + tarjeta, etc. */
+    private List<SalePaymentRequest> payments;
+
     private String cutType;
     private String cutDetail;
     private String cutObservations;

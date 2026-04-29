@@ -3,6 +3,9 @@ package com.gods.saas.domain.dto.request;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.math.BigDecimal;
+import java.util.List;
+
 @Getter
 @Setter
 public class CreateSaleFromAppointmentRequest {
@@ -11,8 +14,10 @@ public class CreateSaleFromAppointmentRequest {
     private Double cashReceived;
     private String notes;
 
-    // NUEVO
-    private String cutType;          // Fade, Clasico, Buzz Cut, Taper, etc.
-    private String cutDetail;        // Low Fade, Mid Fade, High Fade, etc.
-    private String cutObservations;  // Dejar volumen arriba, no tocar línea frontal...
+    private BigDecimal tipAmount;
+    private List<SalePaymentRequest> payments;
+
+    private String cutType;
+    private String cutDetail;
+    private String cutObservations;
 }

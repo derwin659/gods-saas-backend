@@ -26,8 +26,12 @@ public class SaleResponse {
     private String customerName;
     private BigDecimal subtotal;
     private BigDecimal discount;
+    private BigDecimal tipAmount;
+    private Long tipBarberUserId;
+    private String tipBarberUserName;
     private BigDecimal cashReceived;
     private BigDecimal changeAmount;
+    private List<SalePaymentResponse> payments;
 
     private String barberName;
 }

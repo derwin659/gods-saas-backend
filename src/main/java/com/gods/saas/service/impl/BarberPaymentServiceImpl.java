@@ -65,6 +65,12 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 : salesBase.multiply(commissionPercentage)
                 .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
 
+        BigDecimal tipsAmount = safe(
+                saleRepository.sumBarberTipsByRange(
+                        tenantId, branchId, barberUserId, start, end
+                )
+        );
+
         BigDecimal advances = safe(
                 cashMovementRepository.sumAdvancesByBarberAndRange(
                         tenantId, branchId, barberUserId, start, end
@@ -81,7 +87,9 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 ? resolveSalaryAmountForPeriod(barber, periodFrom, periodTo)
                 : BigDecimal.ZERO;
 
-        BigDecimal gross = salaryMode ? salaryAmount : commissionAmount;
+        BigDecimal gross = (salaryMode ? salaryAmount : commissionAmount)
+                .add(tipsAmount)
+                .setScale(2, RoundingMode.HALF_UP);
         BigDecimal pending = gross.subtract(advances).subtract(previousPayments);
         if (pending.compareTo(BigDecimal.ZERO) < 0) {
             pending = BigDecimal.ZERO;
@@ -97,6 +105,8 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 .percentageApplied(salaryMode ? null : commissionPercentage)
                 .commissionAmount(commissionAmount)
                 .salaryAmount(salaryAmount)
+                .tipsAmount(tipsAmount)
+                .grossAmount(gross)
                 .advancesApplied(advances)
                 .previousPaymentsApplied(previousPayments)
                 .pendingAmount(pending)
@@ -266,6 +276,25 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
     }
 
     private BarberPaymentResponse map(BarberPayment bp) {
+        BigDecimal tipsAmount = BigDecimal.ZERO;
+        if (bp.getTenant() != null && bp.getBranch() != null && bp.getBarberUser() != null
+                && bp.getPeriodFrom() != null && bp.getPeriodTo() != null) {
+            LocalDateTime start = bp.getPeriodFrom().atStartOfDay();
+            LocalDateTime end = bp.getPeriodTo().plusDays(1).atStartOfDay();
+            tipsAmount = safe(saleRepository.sumBarberTipsByRange(
+                    bp.getTenant().getId(),
+                    bp.getBranch().getId(),
+                    bp.getBarberUser().getId(),
+                    start,
+                    end
+            ));
+        }
+
+        BigDecimal baseGross = bp.getPaymentMode() == BarberPaymentMode.SALARY
+                ? safe(bp.getSalaryAmount())
+                : safe(bp.getCommissionAmount());
+        BigDecimal grossAmount = baseGross.add(tipsAmount).setScale(2, RoundingMode.HALF_UP);
+
         return BarberPaymentResponse.builder()
                 .paymentId(bp.getId())
                 .barberUserId(bp.getBarberUser().getId())
@@ -277,6 +306,8 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 .baseAmount(safe(bp.getBaseAmount()))
                 .percentageApplied(bp.getPercentageApplied())
                 .commissionAmount(safe(bp.getCommissionAmount()))
+                .tipsAmount(tipsAmount)
+                .grossAmount(grossAmount)
                 .advancesApplied(safe(bp.getAdvancesApplied()))
                 .previousPaymentsApplied(safe(bp.getPreviousPaymentsApplied()))
                 .amountPaid(safe(bp.getAmountPaid()))

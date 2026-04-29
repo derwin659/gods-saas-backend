@@ -38,16 +38,19 @@ public class BarberSaleService {
             throw new RuntimeException("appointmentId es obligatorio");
         }
 
-        if (request.getMetodoPago() == null || request.getMetodoPago().isBlank()) {
+        boolean hasMixedPayments = request.getPayments() != null && !request.getPayments().isEmpty();
+        if (!hasMixedPayments && (request.getMetodoPago() == null || request.getMetodoPago().isBlank())) {
             throw new RuntimeException("metodoPago es obligatorio");
         }
 
-        String metodoPago = request.getMetodoPago().trim().toUpperCase();
+        String metodoPago = hasMixedPayments ? "MIXED" : request.getMetodoPago().trim().toUpperCase();
 
-        if (!"CASH".equals(metodoPago)
+        if (!hasMixedPayments
+                && !"CASH".equals(metodoPago)
                 && !"CARD".equals(metodoPago)
                 && !"YAPE".equals(metodoPago)
-                && !"PLIN".equals(metodoPago)) {
+                && !"PLIN".equals(metodoPago)
+                && !"TRANSFER".equals(metodoPago)) {
             throw new RuntimeException("metodoPago no válido");
         }
 
@@ -83,13 +86,21 @@ public class BarberSaleService {
             throw new RuntimeException("El servicio no tiene precio configurado");
         }
 
-        BigDecimal total = BigDecimal.valueOf(service.getPrecio())
+        BigDecimal serviceTotal = BigDecimal.valueOf(service.getPrecio())
                 .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal tipAmount = request.getTipAmount() == null
+                ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+                : request.getTipAmount().setScale(2, RoundingMode.HALF_UP);
+        if (tipAmount.compareTo(BigDecimal.ZERO) < 0) {
+            throw new RuntimeException("La propina no puede ser negativa");
+        }
+
+        BigDecimal total = serviceTotal.add(tipAmount).setScale(2, RoundingMode.HALF_UP);
 
         BigDecimal cashReceived = null;
         BigDecimal change = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
 
-        if ("CASH".equals(metodoPago)) {
+        if (!hasMixedPayments && "CASH".equals(metodoPago)) {
             if (request.getCashReceived() == null) {
                 throw new RuntimeException("Para pago en efectivo debes enviar cashReceived");
             }
@@ -115,6 +126,9 @@ public class BarberSaleService {
         saleRequest.setMetodoPago(metodoPago);
         saleRequest.setDiscount(BigDecimal.ZERO);
         saleRequest.setCashReceived(cashReceived);
+        saleRequest.setTipAmount(tipAmount);
+        saleRequest.setTipBarberUserId(userId);
+        saleRequest.setPayments(request.getPayments());
         saleRequest.setCutType(request.getCutType());
         saleRequest.setCutDetail(request.getCutDetail());
         saleRequest.setCutObservations(request.getCutObservations());
@@ -165,9 +179,9 @@ public class BarberSaleService {
         response.setCliente(clienteNombre);
         response.setServicio(service.getNombre() != null ? service.getNombre() : "Servicio");
         response.setMetodoPago(metodoPago);
-        response.setTotal(total.doubleValue());
-        response.setCashReceived(cashReceived != null ? cashReceived.doubleValue() : null);
-        response.setChange(change.doubleValue());
+        response.setTotal(saleResponse.getTotal() != null ? saleResponse.getTotal().doubleValue() : total.doubleValue());
+        response.setCashReceived(saleResponse.getCashReceived() != null ? saleResponse.getCashReceived().doubleValue() : (cashReceived != null ? cashReceived.doubleValue() : null));
+        response.setChange(saleResponse.getChangeAmount() != null ? saleResponse.getChangeAmount().doubleValue() : change.doubleValue());
         response.setPointsEarned(pointsEarned);
         response.setCustomerPointsBalance(customerPointsBalance);
         response.setFechaHora(LocalDateTime.now().toString());
