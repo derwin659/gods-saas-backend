@@ -551,4 +551,23 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
             @Param("tenantId") Long tenantId,
             @Param("branchId") Long branchId
     );
+
+    @Query("""
+        select coalesce(sum(si.productCommissionAmount), 0)
+        from SaleItem si
+        join si.sale s
+        where s.tenant.id = :tenantId
+          and (:branchId is null or s.branch.id = :branchId)
+          and si.barberUser.id = :barberUserId
+          and si.product is not null
+          and coalesce(s.saleDate, s.fechaCreacion) >= :start
+          and coalesce(s.saleDate, s.fechaCreacion) < :end
+        """)
+    BigDecimal sumBarberProductCommissionsByRange(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("barberUserId") Long barberUserId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
 }

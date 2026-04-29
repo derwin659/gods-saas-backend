@@ -64,6 +64,11 @@ public class SaleItem {
     @Builder.Default
     private BigDecimal ganancia = BigDecimal.ZERO;
 
+    /** Comisión fija acumulada que gana el barbero por vender este producto. */
+    @Column(name = "product_commission_amount", precision = 12, scale = 2, nullable = false)
+    @Builder.Default
+    private BigDecimal productCommissionAmount = BigDecimal.ZERO;
+
     @PrePersist
     @PreUpdate
     private void ensureDefaults() {
@@ -86,6 +91,9 @@ public class SaleItem {
         }
         if (ganancia == null) {
             ganancia = BigDecimal.ZERO;
+        }
+        if (productCommissionAmount == null) {
+            productCommissionAmount = BigDecimal.ZERO;
         }
     }
 }

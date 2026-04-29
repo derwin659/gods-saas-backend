@@ -1,6 +1,5 @@
 package com.gods.saas.domain.dto.response;
 
-
 import lombok.Builder;
 import lombok.Getter;
 
@@ -21,5 +20,5 @@ public class SaleItemResponse {
     private Integer cantidad;
     private BigDecimal precioUnitario;
     private BigDecimal subtotal;
-
+    private BigDecimal productCommissionAmount;
 }

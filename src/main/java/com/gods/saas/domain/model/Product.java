@@ -54,6 +54,14 @@ public class Product {
     @Builder.Default
     private BigDecimal precioVenta = BigDecimal.ZERO;
 
+    /**
+     * Comisión fija que gana el barbero cuando vende este producto.
+     * Ejemplo: producto S/ 35, comisión S/ 5.
+     */
+    @Column(name = "barber_commission_amount", precision = 12, scale = 2, nullable = false)
+    @Builder.Default
+    private BigDecimal barberCommissionAmount = BigDecimal.ZERO;
+
     @Column(name = "stock_actual", nullable = false)
     @Builder.Default
     private Integer stockActual = 0;
@@ -80,6 +88,12 @@ public class Product {
         }
         if (precioCompra == null) {
             precioCompra = BigDecimal.ZERO;
+        }
+        if (barberCommissionAmount == null) {
+            barberCommissionAmount = BigDecimal.ZERO;
+        }
+        if (barberCommissionAmount.compareTo(BigDecimal.ZERO) < 0) {
+            barberCommissionAmount = BigDecimal.ZERO;
         }
         if (stockActual == null) {
             stockActual = 0;

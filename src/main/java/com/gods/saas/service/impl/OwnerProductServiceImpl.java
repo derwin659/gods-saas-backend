@@ -163,10 +163,15 @@ public class OwnerProductServiceImpl implements OwnerProductService {
         BigDecimal precioVenta = firstPositive(request.getPrecioVenta(), request.getPrecio(), toBigDecimal(product.getPrecio()));
         BigDecimal precioCompra = request.getPrecioCompra() != null ? request.getPrecioCompra() : safe(product.getPrecioCompra());
 
+
+        BigDecimal barberCommission = request.getBarberCommissionAmount() != null
+                ? request.getBarberCommissionAmount()
+                : safe(product.getBarberCommissionAmount());
         product.setPrecioCompra(safe(precioCompra));
         product.setPrecioVenta(safe(precioVenta));
         product.setPrecio(safe(precioVenta).doubleValue());
 
+        product.setBarberCommissionAmount(safe(barberCommission));
         if (request.getStockActual() != null) {
             product.setStockActual(Math.max(0, request.getStockActual()));
         } else if (product.getStockActual() == null) {
@@ -210,6 +215,10 @@ public class OwnerProductServiceImpl implements OwnerProductService {
             throw new RuntimeException("El precio de compra no puede ser negativo");
         }
 
+        if (request.getBarberCommissionAmount() != null && request.getBarberCommissionAmount().compareTo(BigDecimal.ZERO) < 0) {
+            throw new RuntimeException("La comisión del barbero no puede ser negativa");
+        }
+
         if (request.getStockActual() != null && request.getStockActual() < 0) {
             throw new RuntimeException("El stock actual no puede ser negativo");
         }
@@ -236,6 +245,7 @@ public class OwnerProductServiceImpl implements OwnerProductService {
                 .precioCompra(safe(product.getPrecioCompra()))
                 .precioVenta(resolvePrecioVenta(product))
                 .precio(product.getPrecio())
+                .barberCommissionAmount(safe(product.getBarberCommissionAmount()))
                 .stockActual(stockActual)
                 .stockMinimo(stockMinimo)
                 .categoria(product.getCategoria())

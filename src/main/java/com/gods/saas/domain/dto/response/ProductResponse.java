@@ -1,14 +1,13 @@
 package com.gods.saas.domain.dto.response;
 
 import lombok.Builder;
-import lombok.Getter;
+import lombok.Data;
 
 import java.math.BigDecimal;
 
-@Getter
+@Data
 @Builder
 public class ProductResponse {
-
     private Long id;
     private String nombre;
     private String sku;
@@ -16,6 +15,7 @@ public class ProductResponse {
     private BigDecimal precioCompra;
     private BigDecimal precioVenta;
     private Double precio;
+    private BigDecimal barberCommissionAmount;
     private Integer stockActual;
     private Integer stockMinimo;
     private String categoria;
