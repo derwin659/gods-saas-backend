@@ -372,4 +372,81 @@ public class UserService {
         if (v.isEmpty()) throw new ResponseStatusException(HttpStatus.BAD_REQUEST, message);
         return v;
     }
+
+    @Transactional
+    public AppUserResponse cambiarRolUsuario(Long userId, String targetRole, Long branchId) {
+        validarOwner();
+
+        Long tenantId = TenantContext.getTenantId();
+        String newRole = normalizeInternalRole(targetRole);
+
+        if (!List.of("ADMIN", "BARBER").contains(newRole)) {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Solo puedes cambiar entre ADMIN y BARBER"
+            );
+        }
+
+        AppUser user = userRepository.findByIdAndTenantId(userId, tenantId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        String currentRole = user.getRol() == null
+                ? ""
+                : user.getRol().trim().toUpperCase(Locale.ROOT);
+
+        if ("OWNER".equals(currentRole)) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "No puedes cambiar el rol del dueño principal desde esta pantalla"
+            );
+        }
+
+        Branch branch = null;
+        if (branchId != null) {
+            branch = branchRepository.findByIdAndTenant_Id(branchId, tenantId)
+                    .orElseThrow(() -> new RuntimeException("La sede no pertenece al tenant"));
+        } else if (user.getBranch() != null) {
+            branch = user.getBranch();
+        } else {
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Debes enviar una sede para este usuario"
+            );
+        }
+
+        if ("BARBER".equals(newRole)) {
+            subscriptionService.validateBarberLimit(tenantId);
+        }
+
+        if ("ADMIN".equals(newRole)) {
+            subscriptionService.validateAdminLimit(tenantId);
+        }
+
+        user.setRol(newRole);
+        user.setActivo(true);
+        user.setBranch(branch);
+        user.setFechaActualizacion(LocalDateTime.now());
+
+        AppUser saved = userRepository.save(user);
+
+        UserTenantRole utr = userTenantRoleRepository
+                .findByUser_IdAndTenant_Id(userId, tenantId)
+                .orElse(null);
+
+        if (utr == null) {
+            utr = UserTenantRole.builder()
+                    .user(saved)
+                    .tenant(new Tenant(tenantId))
+                    .branch(branch)
+                    .role(RoleType.valueOf(newRole))
+                    .build();
+        } else {
+            utr.setRole(RoleType.valueOf(newRole));
+            utr.setBranch(branch);
+        }
+
+        userTenantRoleRepository.save(utr);
+
+        return AppUserResponse.from(saved);
+    }
 }
