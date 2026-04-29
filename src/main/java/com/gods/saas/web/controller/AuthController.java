@@ -211,15 +211,16 @@ public class AuthController {
                     .body(new ErrorResponse("Usuario o contraseña inválidos"));
         }
     }
+
     @PostMapping("/forgot-password")
     public ResponseEntity<?> forgotPassword(@RequestBody ForgotPasswordRequest request) {
         System.out.println("=======================================");
-        System.out.println("✅ LLEGÓ A /api/auth/forgot-password");
+        System.out.println("LLEGO A /api/auth/forgot-password");
         System.out.println("EMAIL RECIBIDO => " + request.getEmail());
 
         passwordResetService.sendResetCode(request.getEmail());
 
-        System.out.println("✅ TERMINÓ passwordResetService.sendResetCode");
+        System.out.println("TERMINO passwordResetService.sendResetCode");
         System.out.println("=======================================");
 
         return ResponseEntity.ok(Map.of(

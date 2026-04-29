@@ -27,27 +27,40 @@ public class PasswordResetService {
 
     @Transactional
     public void sendResetCode(String rawEmail) {
+        System.out.println("PASSWORD RESET => INICIO sendResetCode");
+        System.out.println("PASSWORD RESET => rawEmail=" + rawEmail);
+
         if (rawEmail == null || rawEmail.trim().isEmpty()) {
+            System.out.println("PASSWORD RESET => email vacío, termina");
             return;
         }
 
         String email = rawEmail.trim().toLowerCase();
+        System.out.println("PASSWORD RESET => email normalizado=" + email);
 
+        System.out.println("PASSWORD RESET => buscando usuario por email");
         Optional<AppUser> userOpt = appUserRepository.findByEmail(email);
+        System.out.println("PASSWORD RESET => búsqueda usuario terminada. existe=" + userOpt.isPresent());
 
         // Importante: no revelar si el correo existe o no.
         if (userOpt.isEmpty()) {
+            System.out.println("PASSWORD RESET => usuario no existe, termina flujo seguro");
             return;
         }
 
         AppUser user = userOpt.get();
 
+        System.out.println("PASSWORD RESET => usuario encontrado id=" + user.getId());
+
         if (user.getActivo() != null && !user.getActivo()) {
+            System.out.println("PASSWORD RESET => usuario inactivo, termina");
             return;
         }
 
+        System.out.println("PASSWORD RESET => generando código");
         String code = String.format("%06d", new Random().nextInt(1_000_000));
 
+        System.out.println("PASSWORD RESET => creando token");
         PasswordResetToken token = PasswordResetToken.builder()
                 .email(email)
                 .codeHash(passwordEncoder.encode(code))
@@ -56,9 +69,15 @@ public class PasswordResetService {
                 .expiresAt(LocalDateTime.now().plusMinutes(10))
                 .build();
 
+        System.out.println("PASSWORD RESET => guardando token en BD");
         tokenRepository.save(token);
+        System.out.println("PASSWORD RESET => token guardado OK");
 
+        System.out.println("PASSWORD RESET => enviando correo");
         emailService.sendPasswordResetCode(email, code);
+        System.out.println("PASSWORD RESET => correo enviado OK");
+
+        System.out.println("PASSWORD RESET => FIN sendResetCode");
     }
 
     @Transactional
