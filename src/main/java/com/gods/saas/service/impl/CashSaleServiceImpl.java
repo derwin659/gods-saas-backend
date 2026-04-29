@@ -307,7 +307,12 @@ public class CashSaleServiceImpl implements CashSaleService {
     public void deleteSale(Long tenantId, Long branchId, Long userId, Long saleId) {
         requireOwnerForSensitiveSaleAction(tenantId, userId);
 
-        Sale sale = saleRepository.findByIdAndTenant_IdAndBranch_Id(saleId, tenantId, branchId)
+        // 1) Cargamos venta con items/productos/cliente/caja/cita.
+        Sale sale = saleRepository.findForDeleteWithItems(saleId, tenantId, branchId)
+                .orElseThrow(() -> new RuntimeException("Venta no encontrada"));
+
+        // 2) Inicializamos payments en una segunda query para evitar MultipleBagFetchException.
+        saleRepository.findForDeleteWithPayments(saleId, tenantId, branchId)
                 .orElseThrow(() -> new RuntimeException("Venta no encontrada"));
 
         if (sale.getCashRegister() == null) {
@@ -318,39 +323,33 @@ public class CashSaleServiceImpl implements CashSaleService {
             throw new RuntimeException("Solo se puede eliminar una venta con caja abierta");
         }
 
-        // 1) Primero devolvemos stock si la venta tenía productos.
-        //    La devolución queda como movimiento de auditoría SIN sale_id,
-        //    para que no bloquee el borrado de la venta.
+        // 3) Si la venta tenía productos, devolvemos el stock.
         restoreProductStockFromSale(tenantId, branchId, userId, sale);
 
-        // 2) Revertimos puntos y datos dependientes.
+        // 4) Revertimos puntos del cliente si corresponde.
         if (sale.getCustomer() != null) {
             AppUser actor = sale.getUser();
             loyaltyService.revertSalePoints(sale.getTenant(), sale.getCustomer(), actor, sale);
         }
 
+        // 5) Eliminamos historial de corte relacionado.
         customerCutHistoryService.deleteBySale(tenantId, saleId);
 
+        // 6) Si venía de una cita, la regresamos a CONFIRMADO.
         if (sale.getAppointment() != null) {
             sale.getAppointment().setEstado("CONFIRMADO");
             appointmentRepository.save(sale.getAppointment());
         }
 
-        // 3) Eliminamos dependencias que tienen FK hacia sale.
-        //    Esto evita errores como: stock_movement.sale_id still referenced.
+        // 7) Primero borrar movimientos de stock que apuntan a esta venta.
+        // Esto evita error de FK: stock_movement.sale_id todavía referencia sale.
         stockMovementRepository.deleteBySaleId(saleId);
-        salePaymentRepository.deleteBySale_Id(saleId);
 
-        if (sale.getPayments() != null) {
-            sale.getPayments().clear();
-        }
-
-        if (sale.getItems() != null && !sale.getItems().isEmpty()) {
-            saleItemRepository.deleteAll(sale.getItems());
-            sale.getItems().clear();
-        }
-
+        // 8) Ya NO hagas sale.getPayments().clear().
+        // Sale tiene cascade = ALL y orphanRemoval = true para items y payments,
+        // entonces Hibernate puede borrar sale_item y sale_payment con saleRepository.delete(sale).
         saleRepository.delete(sale);
+        saleRepository.flush();
     }
 
     private void requireOwnerForSensitiveSaleAction(Long tenantId, Long userId) {

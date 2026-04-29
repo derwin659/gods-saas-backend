@@ -513,4 +513,42 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
             @Param("start") LocalDateTime start,
             @Param("end") LocalDateTime end
     );
+
+
+    @Query("""
+    select distinct s
+    from Sale s
+    left join fetch s.tenant
+    left join fetch s.branch
+    left join fetch s.cashRegister
+    left join fetch s.customer
+    left join fetch s.user
+    left join fetch s.appointment
+    left join fetch s.items i
+    left join fetch i.product
+    left join fetch i.service
+    left join fetch i.barberUser
+    where s.id = :saleId
+      and s.tenant.id = :tenantId
+      and s.branch.id = :branchId
+""")
+    Optional<Sale> findForDeleteWithItems(
+            @Param("saleId") Long saleId,
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId
+    );
+
+    @Query("""
+    select distinct s
+    from Sale s
+    left join fetch s.payments
+    where s.id = :saleId
+      and s.tenant.id = :tenantId
+      and s.branch.id = :branchId
+""")
+    Optional<Sale> findForDeleteWithPayments(
+            @Param("saleId") Long saleId,
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId
+    );
 }
