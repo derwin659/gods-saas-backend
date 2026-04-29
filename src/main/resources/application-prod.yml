@@ -4,14 +4,30 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME}
     password: ${SPRING_DATASOURCE_PASSWORD}
 
+  mail:
+    host: ${MAIL_HOST}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
+    properties:
+      mail:
+        smtp:
+          auth: true
+          starttls:
+            enable: true
+
   jpa:
     hibernate:
       ddl-auto: none
-    show-sql: false   # 👈 importante en prod
+    show-sql: false
     properties:
       hibernate.format_sql: false
       hibernate.jdbc.time_zone: UTC
     open-in-view: false
+
+app:
+  mail:
+    from: "${MAIL_FROM:Super Gods <no-reply@godsplatform.com>}"
 
 logging:
   level:
@@ -23,14 +39,12 @@ server:
 runpod:
   enabled: ${RUNPOD_ENABLED:true}
 
-
 feign:
   client:
     config:
       default:
         connectTimeout: 60000
         readTimeout: 600000
-
 
 firebase:
   enabled: true

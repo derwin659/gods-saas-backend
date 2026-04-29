@@ -1,6 +1,9 @@
 package com.gods.saas.web.controller;
 
 import com.gods.saas.domain.dto.*;
+
+import com.gods.saas.domain.dto.ForgotPasswordRequest;
+import com.gods.saas.domain.dto.request.ResetPasswordRequest;
 import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.AppUserRepository;
 import com.gods.saas.domain.repository.UserTenantRoleRepository;
@@ -19,6 +22,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Map;
 
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
@@ -26,6 +30,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class AuthController {
 
+    private final PasswordResetService passwordResetService;
     private final CustomerService customerService;
     private final AuthService authService;
     private final JwtService jwtService;
@@ -205,6 +210,24 @@ public class AuthController {
                     .status(HttpStatus.UNAUTHORIZED)
                     .body(new ErrorResponse("Usuario o contraseña inválidos"));
         }
+    }
+
+    @PostMapping("/forgot-password")
+    public ResponseEntity<?> forgotPassword(@RequestBody ForgotPasswordRequest request) {
+        passwordResetService.sendResetCode(request.getEmail());
+
+        return ResponseEntity.ok(Map.of(
+                "message", "Si el correo existe, enviaremos un código de recuperación."
+        ));
+    }
+
+    @PostMapping("/reset-password")
+    public ResponseEntity<?> resetPassword(@RequestBody ResetPasswordRequest request) {
+        passwordResetService.resetPassword(request);
+
+        return ResponseEntity.ok(Map.of(
+                "message", "Contraseña actualizada correctamente."
+        ));
     }
 
 
