@@ -345,15 +345,17 @@ public class SaleServiceImpl implements SaleService {
         int puntosGanados = 0;
         int puntosDisponibles = 0;
 
-        if (customer != null && total.compareTo(BigDecimal.ZERO) > 0) {
-            puntosGanados = calcularPuntos(total.doubleValue());
+        BigDecimal servicePointsBase = calculateServicePointsBase(savedSale);
+
+        if (customer != null && servicePointsBase.compareTo(BigDecimal.ZERO) > 0) {
+            puntosGanados = calcularPuntos(servicePointsBase.doubleValue());
 
             loyaltyService.grantSalePoints(
                     tenant,
                     customer,
                     user,
                     savedSale,
-                    total.doubleValue()
+                    servicePointsBase.doubleValue()
             );
 
             LoyaltyAccount updated = loyaltyAccountRepository
@@ -363,9 +365,17 @@ public class SaleServiceImpl implements SaleService {
             puntosDisponibles = updated != null && updated.getPuntosDisponibles() != null
                     ? updated.getPuntosDisponibles()
                     : 0;
-        }
 
-        notificationService.notifyPointsEarned(customer, puntosGanados, savedSale.getId());
+            notificationService.notifyPointsEarned(customer, puntosGanados, savedSale.getId());
+        } else if (customer != null) {
+            LoyaltyAccount current = loyaltyAccountRepository
+                    .findByTenant_IdAndCustomer_Id(tenant.getId(), customer.getId())
+                    .orElse(null);
+
+            puntosDisponibles = current != null && current.getPuntosDisponibles() != null
+                    ? current.getPuntosDisponibles()
+                    : 0;
+        }
 
         return SaleResponse.builder()
                 .saleId(savedSale.getId())
@@ -520,6 +530,19 @@ public class SaleServiceImpl implements SaleService {
                         .amount(safe(p.getAmount()))
                         .build())
                 .toList();
+    }
+
+    private BigDecimal calculateServicePointsBase(Sale savedSale) {
+        if (savedSale == null || savedSale.getItems() == null || savedSale.getItems().isEmpty()) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        return savedSale.getItems().stream()
+                .filter(item -> item.getService() != null)
+                .map(SaleItem::getSubtotal)
+                .map(this::safe)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
     }
 
     private void registerProductStockMovements(Sale savedSale, Tenant tenant, Branch branch, AppUser user) {
