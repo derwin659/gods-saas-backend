@@ -22,9 +22,12 @@ public class OwnerCatalogController {
 
     @GetMapping("/barbers")
     public List<SimpleBarberResponse> getBarbers(
-            @RequestAttribute("tenantId") Long tenantId
+            @RequestAttribute("tenantId") Long tenantId,
+            @RequestAttribute("branchId") Long sessionBranchId,
+            @RequestParam(required = false) Long branchId
     ) {
-        return ownerCatalogService.getBarbers(tenantId);
+        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        return ownerCatalogService.getBarbers(tenantId, effectiveBranchId);
     }
 
     @GetMapping("/services")
@@ -37,8 +40,8 @@ public class OwnerCatalogController {
     @GetMapping("/customers/search")
     public List<SimpleCustomerResponse> searchCustomers(
             @RequestAttribute("tenantId") Long tenantId,
-            @RequestParam String query
+            @RequestParam String q
     ) {
-        return ownerCatalogService.searchCustomers(tenantId, query);
+        return ownerCatalogService.searchCustomers(tenantId, q);
     }
 }

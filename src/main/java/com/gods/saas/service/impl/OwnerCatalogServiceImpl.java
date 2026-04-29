@@ -1,18 +1,19 @@
 package com.gods.saas.service.impl;
 
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.PageRequest;
 import com.gods.saas.domain.dto.response.SimpleBarberResponse;
 import com.gods.saas.domain.dto.response.SimpleCustomerResponse;
 import com.gods.saas.domain.dto.response.SimpleServiceResponse;
 import com.gods.saas.domain.model.AppUser;
 import com.gods.saas.domain.model.Customer;
+import com.gods.saas.domain.model.RoleType;
 import com.gods.saas.domain.model.ServiceEntity;
-import com.gods.saas.domain.repository.AppUserRepository;
 import com.gods.saas.domain.repository.CustomerRepository;
 import com.gods.saas.domain.repository.ServiceRepository;
+import com.gods.saas.domain.repository.UserTenantRoleRepository;
 import com.gods.saas.service.impl.impl.OwnerCatalogService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,19 +28,18 @@ import java.util.Map;
 @Transactional(readOnly = true)
 public class OwnerCatalogServiceImpl implements OwnerCatalogService {
 
-    private final AppUserRepository appUserRepository;
+    private final UserTenantRoleRepository userTenantRoleRepository;
     private final ServiceRepository serviceRepository;
     private final CustomerRepository customerRepository;
 
     @Override
-    public List<SimpleBarberResponse> getBarbers(Long tenantId) {
-        return appUserRepository
-                .findByTenant_IdAndRolAndActivoTrueOrderByNombreAsc(tenantId, "BARBER")
+    public List<SimpleBarberResponse> getBarbers(Long tenantId, Long branchId) {
+        return userTenantRoleRepository
+                .findActiveUsersByTenantBranchAndRole(tenantId, branchId, RoleType.BARBER)
                 .stream()
                 .map(this::mapBarber)
                 .toList();
     }
-
 
     @Override
     public List<SimpleServiceResponse> getServices(Long tenantId) {
@@ -57,7 +57,7 @@ public class OwnerCatalogServiceImpl implements OwnerCatalogService {
             return List.of();
         }
 
-        Pageable pageable = (Pageable) PageRequest.of(0, 10);
+        Pageable pageable = PageRequest.of(0, 10);
 
         List<Customer> byName = customerRepository
                 .findByTenant_IdAndNombresContainingIgnoreCaseOrderByNombresAsc(tenantId, q, pageable);
