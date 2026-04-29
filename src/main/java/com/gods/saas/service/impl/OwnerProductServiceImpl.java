@@ -163,15 +163,15 @@ public class OwnerProductServiceImpl implements OwnerProductService {
         BigDecimal precioVenta = firstPositive(request.getPrecioVenta(), request.getPrecio(), toBigDecimal(product.getPrecio()));
         BigDecimal precioCompra = request.getPrecioCompra() != null ? request.getPrecioCompra() : safe(product.getPrecioCompra());
 
-
-        BigDecimal barberCommission = request.getBarberCommissionAmount() != null
-                ? request.getBarberCommissionAmount()
-                : safe(product.getBarberCommissionAmount());
         product.setPrecioCompra(safe(precioCompra));
         product.setPrecioVenta(safe(precioVenta));
         product.setPrecio(safe(precioVenta).doubleValue());
 
-        product.setBarberCommissionAmount(safe(barberCommission));
+        BigDecimal barberCommissionAmount = request.getBarberCommissionAmount() != null
+                ? request.getBarberCommissionAmount()
+                : safe(product.getBarberCommissionAmount());
+        product.setBarberCommissionAmount(safe(barberCommissionAmount));
+
         if (request.getStockActual() != null) {
             product.setStockActual(Math.max(0, request.getStockActual()));
         } else if (product.getStockActual() == null) {
@@ -215,7 +215,8 @@ public class OwnerProductServiceImpl implements OwnerProductService {
             throw new RuntimeException("El precio de compra no puede ser negativo");
         }
 
-        if (request.getBarberCommissionAmount() != null && request.getBarberCommissionAmount().compareTo(BigDecimal.ZERO) < 0) {
+        if (request.getBarberCommissionAmount() != null
+                && request.getBarberCommissionAmount().compareTo(BigDecimal.ZERO) < 0) {
             throw new RuntimeException("La comisión del barbero no puede ser negativa");
         }
 

@@ -222,14 +222,11 @@ public class SaleServiceImpl implements SaleService {
 
                 item.setCostoUnitario(costoUnitario);
                 item.setGanancia(ganancia);
-                if (item.getBarberUser() != null) {
-                    BigDecimal commission = safe(selectedProduct.getBarberCommissionAmount())
-                            .multiply(BigDecimal.valueOf(cantidad))
-                            .setScale(2, RoundingMode.HALF_UP);
-                    item.setProductCommissionAmount(commission);
-                } else {
-                    item.setProductCommissionAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
-                }
+
+                BigDecimal productCommissionAmount = safe(selectedProduct.getBarberCommissionAmount())
+                        .multiply(BigDecimal.valueOf(cantidad))
+                        .setScale(2, RoundingMode.HALF_UP);
+                item.setProductCommissionAmount(productCommissionAmount);
             }
 
             items.add(item);
@@ -248,7 +245,6 @@ public class SaleServiceImpl implements SaleService {
                             .cantidad(cantidad)
                             .precioUnitario(precioUnitario)
                             .subtotal(subtotalItem)
-                            .productCommissionAmount(safe(item.getProductCommissionAmount()))
                             .build()
             );
         }
@@ -342,7 +338,6 @@ public class SaleServiceImpl implements SaleService {
                             .cantidad(old.getCantidad())
                             .precioUnitario(old.getPrecioUnitario())
                             .subtotal(old.getSubtotal())
-                            .productCommissionAmount(old.getProductCommissionAmount())
                             .build()
             );
         }

@@ -59,17 +59,21 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 )
         );
 
-        BigDecimal commissionPercentage = safe(barber.getCommissionPercentage());
-        BigDecimal commissionAmount = salaryMode
-                ? BigDecimal.ZERO
-                : salesBase.multiply(commissionPercentage)
-                .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
-
-        BigDecimal productCommissionAmount = safe(
+        BigDecimal productCommissionsAmount = safe(
                 saleRepository.sumBarberProductCommissionsByRange(
                         tenantId, branchId, barberUserId, start, end
                 )
         );
+
+        BigDecimal commissionPercentage = safe(barber.getCommissionPercentage());
+        BigDecimal serviceCommissionAmount = salaryMode
+                ? BigDecimal.ZERO
+                : salesBase.multiply(commissionPercentage)
+                .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
+
+        BigDecimal commissionAmount = serviceCommissionAmount
+                .add(productCommissionsAmount)
+                .setScale(2, RoundingMode.HALF_UP);
 
         BigDecimal tipsAmount = safe(
                 saleRepository.sumBarberTipsByRange(
@@ -93,8 +97,7 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 ? resolveSalaryAmountForPeriod(barber, periodFrom, periodTo)
                 : BigDecimal.ZERO;
 
-        BigDecimal gross = (salaryMode ? salaryAmount : commissionAmount)
-                .add(productCommissionAmount)
+        BigDecimal gross = (salaryMode ? salaryAmount.add(productCommissionsAmount) : commissionAmount)
                 .add(tipsAmount)
                 .setScale(2, RoundingMode.HALF_UP);
         BigDecimal pending = gross.subtract(advances).subtract(previousPayments);
@@ -111,7 +114,6 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 .baseSales(salesBase)
                 .percentageApplied(salaryMode ? null : commissionPercentage)
                 .commissionAmount(commissionAmount)
-                .productCommissionAmount(productCommissionAmount)
                 .salaryAmount(salaryAmount)
                 .tipsAmount(tipsAmount)
                 .grossAmount(gross)
@@ -285,18 +287,10 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
 
     private BarberPaymentResponse map(BarberPayment bp) {
         BigDecimal tipsAmount = BigDecimal.ZERO;
-        BigDecimal productCommissionAmount = BigDecimal.ZERO;
         if (bp.getTenant() != null && bp.getBranch() != null && bp.getBarberUser() != null
                 && bp.getPeriodFrom() != null && bp.getPeriodTo() != null) {
             LocalDateTime start = bp.getPeriodFrom().atStartOfDay();
             LocalDateTime end = bp.getPeriodTo().plusDays(1).atStartOfDay();
-            productCommissionAmount = safe(saleRepository.sumBarberProductCommissionsByRange(
-                    bp.getTenant().getId(),
-                    bp.getBranch().getId(),
-                    bp.getBarberUser().getId(),
-                    start,
-                    end
-            ));
             tipsAmount = safe(saleRepository.sumBarberTipsByRange(
                     bp.getTenant().getId(),
                     bp.getBranch().getId(),
@@ -307,9 +301,9 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
         }
 
         BigDecimal baseGross = bp.getPaymentMode() == BarberPaymentMode.SALARY
-                ? safe(bp.getSalaryAmount())
+                ? safe(bp.getSalaryAmount()).add(safe(bp.getCommissionAmount()))
                 : safe(bp.getCommissionAmount());
-        BigDecimal grossAmount = baseGross.add(productCommissionAmount).add(tipsAmount).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal grossAmount = baseGross.add(tipsAmount).setScale(2, RoundingMode.HALF_UP);
 
         return BarberPaymentResponse.builder()
                 .paymentId(bp.getId())
@@ -322,7 +316,6 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 .baseAmount(safe(bp.getBaseAmount()))
                 .percentageApplied(bp.getPercentageApplied())
                 .commissionAmount(safe(bp.getCommissionAmount()))
-                .productCommissionAmount(productCommissionAmount)
                 .tipsAmount(tipsAmount)
                 .grossAmount(grossAmount)
                 .advancesApplied(safe(bp.getAdvancesApplied()))

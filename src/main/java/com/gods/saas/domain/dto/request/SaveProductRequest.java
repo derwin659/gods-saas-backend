@@ -19,9 +19,9 @@ public class SaveProductRequest {
      */
     private BigDecimal precio;
 
-
-    /** Comisión fija para el barbero por cada unidad vendida del producto. */
+    /** Comisión fija que gana el barbero por vender este producto. */
     private BigDecimal barberCommissionAmount;
+
     private Integer stockActual;
     private Integer stockMinimo;
     private String categoria;
