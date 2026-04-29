@@ -211,10 +211,14 @@ public class AuthController {
                     .body(new ErrorResponse("Usuario o contraseña inválidos"));
         }
     }
-
     @PostMapping("/forgot-password")
     public ResponseEntity<?> forgotPassword(@RequestBody ForgotPasswordRequest request) {
+        System.out.println("✅ LLEGÓ A /api/auth/forgot-password");
+        System.out.println("EMAIL RECIBIDO => " + request.getEmail());
+
         passwordResetService.sendResetCode(request.getEmail());
+
+        System.out.println("✅ TERMINÓ sendResetCode");
 
         return ResponseEntity.ok(Map.of(
                 "message", "Si el correo existe, enviaremos un código de recuperación."
@@ -223,7 +227,11 @@ public class AuthController {
 
     @PostMapping("/reset-password")
     public ResponseEntity<?> resetPassword(@RequestBody ResetPasswordRequest request) {
+        System.out.println("✅ LLEGÓ A /api/auth/reset-password");
+
         passwordResetService.resetPassword(request);
+
+        System.out.println("✅ TERMINÓ resetPassword");
 
         return ResponseEntity.ok(Map.of(
                 "message", "Contraseña actualizada correctamente."
