@@ -9,4 +9,6 @@ import java.util.List;
 @Repository
 public interface SalePaymentRepository extends JpaRepository<SalePayment, Long> {
     List<SalePayment> findBySale_Id(Long saleId);
+
+    void deleteBySale_Id(Long saleId);
 }

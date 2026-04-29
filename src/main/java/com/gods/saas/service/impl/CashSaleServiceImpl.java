@@ -34,6 +34,7 @@ public class CashSaleServiceImpl implements CashSaleService {
     private final SaleItemRepository saleItemRepository;
     private final ProductRepository productRepository;
     private final StockMovementRepository stockMovementRepository;
+    private final SalePaymentRepository salePaymentRepository;
     private final TenantTimeService tenantTimeService;
     private final CustomerCutHistoryService customerCutHistoryService;
     private final LoyaltyService loyaltyService;
@@ -305,6 +306,7 @@ public class CashSaleServiceImpl implements CashSaleService {
     @Transactional
     public void deleteSale(Long tenantId, Long branchId, Long userId, Long saleId) {
         requireOwnerForSensitiveSaleAction(tenantId, userId);
+
         Sale sale = saleRepository.findByIdAndTenant_IdAndBranch_Id(saleId, tenantId, branchId)
                 .orElseThrow(() -> new RuntimeException("Venta no encontrada"));
 
@@ -316,8 +318,12 @@ public class CashSaleServiceImpl implements CashSaleService {
             throw new RuntimeException("Solo se puede eliminar una venta con caja abierta");
         }
 
+        // 1) Primero devolvemos stock si la venta tenía productos.
+        //    La devolución queda como movimiento de auditoría SIN sale_id,
+        //    para que no bloquee el borrado de la venta.
         restoreProductStockFromSale(tenantId, branchId, userId, sale);
 
+        // 2) Revertimos puntos y datos dependientes.
         if (sale.getCustomer() != null) {
             AppUser actor = sale.getUser();
             loyaltyService.revertSalePoints(sale.getTenant(), sale.getCustomer(), actor, sale);
@@ -328,6 +334,15 @@ public class CashSaleServiceImpl implements CashSaleService {
         if (sale.getAppointment() != null) {
             sale.getAppointment().setEstado("CONFIRMADO");
             appointmentRepository.save(sale.getAppointment());
+        }
+
+        // 3) Eliminamos dependencias que tienen FK hacia sale.
+        //    Esto evita errores como: stock_movement.sale_id still referenced.
+        stockMovementRepository.deleteBySaleId(saleId);
+        salePaymentRepository.deleteBySale_Id(saleId);
+
+        if (sale.getPayments() != null) {
+            sale.getPayments().clear();
         }
 
         if (sale.getItems() != null && !sale.getItems().isEmpty()) {
@@ -393,7 +408,9 @@ public class CashSaleServiceImpl implements CashSaleService {
                     .tenant(sale.getTenant())
                     .branch(branch)
                     .product(product)
-                    .sale(sale)
+                    // No enlazar esta devolución a la venta eliminada.
+                    // Si queda sale_id, PostgreSQL no permitirá borrar la venta.
+                    .sale(null)
                     .user(user)
                     .tipoMovimiento("DEVOLUCION")
                     .cantidad(cantidad)
