@@ -11,6 +11,7 @@ import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -21,6 +22,7 @@ public class OwnerServiceCrudServiceImpl implements OwnerServiceCrudService {
 
     private final ServiceRepository serviceRepository;
     private final TenantRepository tenantRepository;
+    private final CloudinaryStorageService cloudinaryStorageService;
 
     @Override
     @Transactional(readOnly = true)
@@ -110,6 +112,45 @@ public class OwnerServiceCrudServiceImpl implements OwnerServiceCrudService {
         return toResponse(serviceRepository.save(service));
     }
 
+    @Override
+    public ServiceResponse uploadImage(Long tenantId, Long serviceId, MultipartFile file) {
+        ServiceEntity service = getServiceOrThrow(tenantId, serviceId);
+
+        String oldPublicId = service.getImagePublicId();
+
+        CloudinaryStorageService.UploadResult result =
+                cloudinaryStorageService.uploadServiceImage(tenantId, serviceId, file);
+
+        service.setImageUrl(result.getSecureUrl());
+        service.setImagePublicId(result.getPublicId());
+
+        ServiceEntity saved = serviceRepository.save(service);
+
+        if (oldPublicId != null && !oldPublicId.isBlank()) {
+            cloudinaryStorageService.deleteImage(oldPublicId);
+        }
+
+        return toResponse(saved);
+    }
+
+    @Override
+    public ServiceResponse deleteImage(Long tenantId, Long serviceId) {
+        ServiceEntity service = getServiceOrThrow(tenantId, serviceId);
+
+        String oldPublicId = service.getImagePublicId();
+
+        service.setImageUrl(null);
+        service.setImagePublicId(null);
+
+        ServiceEntity saved = serviceRepository.save(service);
+
+        if (oldPublicId != null && !oldPublicId.isBlank()) {
+            cloudinaryStorageService.deleteImage(oldPublicId);
+        }
+
+        return toResponse(saved);
+    }
+
     private ServiceEntity getServiceOrThrow(Long tenantId, Long serviceId) {
         return serviceRepository.findByIdAndTenant_Id(serviceId, tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("Servicio no encontrado"));
@@ -124,7 +165,8 @@ public class OwnerServiceCrudServiceImpl implements OwnerServiceCrudService {
                 service.getDuracionMinutos(),
                 service.getPrecio(),
                 service.getCategoria(),
-                service.getActivo()
+                service.getActivo(),
+                service.getImageUrl()
         );
     }
 

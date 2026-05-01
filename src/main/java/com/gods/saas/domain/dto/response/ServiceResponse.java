@@ -1,7 +1,5 @@
 package com.gods.saas.domain.dto.response;
 
-
-
 public record ServiceResponse(
         Long serviceId,
         Long tenantId,
@@ -10,6 +8,7 @@ public record ServiceResponse(
         Integer duracionMinutos,
         Double precio,
         String categoria,
-        Boolean activo
+        Boolean activo,
+        String imageUrl
 ) {
 }

@@ -37,4 +37,10 @@ public class ServiceEntity {
     private String categoria;
 
     private Boolean activo;
+
+    @Column(name = "image_url", columnDefinition = "TEXT")
+    private String imageUrl;
+
+    @Column(name = "image_public_id", length = 255)
+    private String imagePublicId;
 }
