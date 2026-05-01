@@ -13,6 +13,8 @@ import java.util.Optional;
 
 @Repository
 public interface UserTenantRoleRepository extends JpaRepository<UserTenantRole, Long> {
+
+
     boolean existsByUserIdAndTenantIdAndRoleIn(
             Long userId,
             Long tenantId,

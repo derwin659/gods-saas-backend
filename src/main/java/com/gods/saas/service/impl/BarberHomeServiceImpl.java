@@ -6,16 +6,22 @@ import com.gods.saas.domain.dto.response.BarberQuickStatsResponse;
 import com.gods.saas.domain.dto.response.CommissionSummaryResponse;
 import com.gods.saas.domain.model.AppUser;
 import com.gods.saas.domain.model.Appointment;
+import com.gods.saas.domain.model.RoleType;
 import com.gods.saas.domain.model.TenantSettings;
+import com.gods.saas.domain.model.UserTenantRole;
 import com.gods.saas.domain.repository.AppUserRepository;
 import com.gods.saas.domain.repository.AppointmentRepository;
 import com.gods.saas.domain.repository.SaleRepository;
 import com.gods.saas.domain.repository.TenantSettingsRepository;
+import com.gods.saas.domain.repository.UserTenantRoleRepository;
+import com.gods.saas.exception.BusinessException;
 import com.gods.saas.service.impl.impl.BarberHomeService;
+import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -39,6 +45,8 @@ public class BarberHomeServiceImpl implements BarberHomeService {
     private final AppointmentRepository appointmentRepository;
     private final SaleRepository saleRepository;
     private final TenantSettingsRepository tenantSettingsRepository;
+    private final UserTenantRoleRepository userTenantRoleRepository;
+    private final CloudinaryStorageService cloudinaryStorageService;
 
     @Override
     public BarberHomeResponse getBarberHome(Authentication authentication) {
@@ -90,8 +98,7 @@ public class BarberHomeServiceImpl implements BarberHomeService {
         );
 
         DateTimeFormatter hourFormatter = DateTimeFormatter.ofPattern("HH:mm");
-        System.out.println("HOME tenantId=" + tenantId + ", branchId=" + branchId + ", barberId=" + barberId);
-        System.out.println("HOME ventasHoy=" + ventasHoy);
+
         List<BarberHomeAppointmentResponse> proximasCitas = upcoming.stream()
                 .limit(5)
                 .map(a -> new BarberHomeAppointmentResponse(
@@ -115,6 +122,7 @@ public class BarberHomeServiceImpl implements BarberHomeService {
         return BarberHomeResponse.builder()
                 .tenantName(barber.getTenant() != null ? barber.getTenant().getNombre() : "Barbería")
                 .barberName(buildBarberName(barber))
+                .barberPhotoUrl(barber.getPhotoUrl())
                 .citasHoy((int) citasHoy)
                 .atendidosHoy((int) atendidosHoy)
                 .ventasHoy(ventasHoy.setScale(2, RoundingMode.HALF_UP))
@@ -122,6 +130,65 @@ public class BarberHomeServiceImpl implements BarberHomeService {
                 .stats(stats)
                 .commissions(commissions)
                 .build();
+    }
+
+    @Override
+    @Transactional
+    public BarberHomeResponse uploadMyPhoto(Authentication authentication, MultipartFile file) {
+        AppUser barber = getCurrentBarber();
+        Long tenantId = getCurrentTenantId();
+
+        validateCurrentUserIsBarber(barber.getId(), tenantId);
+
+        String oldPublicId = barber.getPhotoPublicId();
+
+        CloudinaryStorageService.UploadResult result =
+                cloudinaryStorageService.uploadBarberPhoto(tenantId, barber.getId(), file);
+
+        barber.setPhotoUrl(result.getSecureUrl());
+        barber.setPhotoPublicId(result.getPublicId());
+        barber.setFechaActualizacion(LocalDateTime.now());
+
+        userRepository.save(barber);
+
+        if (oldPublicId != null && !oldPublicId.isBlank()) {
+            cloudinaryStorageService.deleteImage(oldPublicId);
+        }
+
+        return getBarberHome(authentication);
+    }
+
+    @Override
+    @Transactional
+    public BarberHomeResponse deleteMyPhoto(Authentication authentication) {
+        AppUser barber = getCurrentBarber();
+        Long tenantId = getCurrentTenantId();
+
+        validateCurrentUserIsBarber(barber.getId(), tenantId);
+
+        String oldPublicId = barber.getPhotoPublicId();
+
+        barber.setPhotoUrl(null);
+        barber.setPhotoPublicId(null);
+        barber.setFechaActualizacion(LocalDateTime.now());
+
+        userRepository.save(barber);
+
+        if (oldPublicId != null && !oldPublicId.isBlank()) {
+            cloudinaryStorageService.deleteImage(oldPublicId);
+        }
+
+        return getBarberHome(authentication);
+    }
+
+    private void validateCurrentUserIsBarber(Long userId, Long tenantId) {
+        UserTenantRole role = userTenantRoleRepository
+                .findByUser_IdAndTenant_Id(userId, tenantId)
+                .orElseThrow(() -> new BusinessException("El usuario no tiene rol asignado en este tenant"));
+
+        if (role.getRole() != RoleType.BARBER) {
+            throw new BusinessException("El usuario autenticado no es un barbero");
+        }
     }
 
     private ZoneId resolveTenantZoneId(Long tenantId) {

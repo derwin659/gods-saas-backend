@@ -9,7 +9,9 @@ import com.gods.saas.utils.JwtUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -59,6 +61,25 @@ public class OwnerBarberController {
         return ownerBarberService.updateStatus(tenantId, barberId, requestBody);
     }
 
+    @PostMapping(value = "/{barberId}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public BarberResponse uploadPhoto(
+            @PathVariable Long barberId,
+            @RequestParam("file") MultipartFile file,
+            HttpServletRequest request
+    ) {
+        Long tenantId = jwtUtil.getTenantIdFromToken(extractToken(request));
+        return ownerBarberService.uploadPhoto(tenantId, barberId, file);
+    }
+
+    @DeleteMapping("/{barberId}/photo")
+    public BarberResponse deletePhoto(
+            @PathVariable Long barberId,
+            HttpServletRequest request
+    ) {
+        Long tenantId = jwtUtil.getTenantIdFromToken(extractToken(request));
+        return ownerBarberService.deletePhoto(tenantId, barberId);
+    }
+
     private String extractToken(HttpServletRequest request) {
         String authHeader = request.getHeader("Authorization");
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
@@ -66,4 +87,6 @@ public class OwnerBarberController {
         }
         return authHeader.substring(7);
     }
+
+
 }

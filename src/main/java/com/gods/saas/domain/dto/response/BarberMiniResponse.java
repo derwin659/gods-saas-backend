@@ -15,6 +15,7 @@ public class BarberMiniResponse {
     private String nombre;
     private String apellido;
     private Long branchId;
+    private String photoUrl;
 
     public static BarberMiniResponse fromEntity(AppUser u) {
         return BarberMiniResponse.builder()
@@ -22,6 +23,7 @@ public class BarberMiniResponse {
                 .nombre(u.getNombre())
                 .apellido(u.getApellido())
                 .branchId(u.getBranch() != null ? u.getBranch().getId() : null)
+                .photoUrl(u.getPhotoUrl())
                 .build();
     }
 }

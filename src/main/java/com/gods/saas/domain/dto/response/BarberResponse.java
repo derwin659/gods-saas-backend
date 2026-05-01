@@ -18,7 +18,7 @@ public class BarberResponse {
     private Boolean activo;
     private Long branchId;
     private String branchNombre;
-
+    private String photoUrl;
     private Boolean salaryMode;
     private BigDecimal commissionPercentage;
     private String salaryFrequency;

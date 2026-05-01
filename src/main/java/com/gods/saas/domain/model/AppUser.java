@@ -98,6 +98,9 @@ public class AppUser implements UserDetails {
     @Column(name = "salary_start_date")
     private LocalDate salaryStartDate;
 
+    @Column(name = "photo_public_id", length = 255)
+    private String photoPublicId;
+
     // ============================================================
     // SPRING SECURITY METHODS (IMPORTANTES)
     // ============================================================

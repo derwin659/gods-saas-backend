@@ -13,6 +13,7 @@ import java.util.List;
 public class BarberHomeResponse {
     private String tenantName;
     private String barberName;
+    private String barberPhotoUrl;
     private int citasHoy;
     private int atendidosHoy;
     private BigDecimal ventasHoy;

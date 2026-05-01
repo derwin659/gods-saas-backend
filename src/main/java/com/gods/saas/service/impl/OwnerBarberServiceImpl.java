@@ -21,6 +21,7 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -36,6 +37,7 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
     private final UserTenantRoleRepository userTenantRoleRepository;
     private final PasswordEncoder passwordEncoder;
     private final SubscriptionService subscriptionService;
+    private final CloudinaryStorageService cloudinaryStorageService;
 
     @Override
     public List<BarberResponse> listBarbers(Long tenantId, Long branchId) {
@@ -235,6 +237,7 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
                 .activo(user.getActivo())
                 .branchId(user.getBranch() != null ? user.getBranch().getId() : null)
                 .branchNombre(user.getBranch() != null ? user.getBranch().getNombre() : null)
+                .photoUrl(user.getPhotoUrl())
                 .salaryMode(user.getSalaryMode())
                 .commissionPercentage(user.getCommissionPercentage())
                 .salaryFrequency(user.getSalaryFrequency() != null ? user.getSalaryFrequency().name() : null)
@@ -242,6 +245,7 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
                 .salaryStartDate(user.getSalaryStartDate())
                 .build();
     }
+
 
     private String normalizeRequired(String value, String message) {
         if (value == null || value.trim().isEmpty()) {
@@ -256,4 +260,66 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
         }
         return value.trim();
     }
+
+    @Override
+    @Transactional
+    public BarberResponse uploadPhoto(Long tenantId, Long barberId, MultipartFile file) {
+        AppUser barber = appUserRepository.findByIdAndTenant_Id(barberId, tenantId)
+                .orElseThrow(() -> new EntityNotFoundException("Barbero no encontrado."));
+
+        UserTenantRole role = userTenantRoleRepository
+                .findByUser_IdAndTenant_Id(barberId, tenantId)
+                .orElseThrow(() -> new BusinessException("El usuario no tiene rol asignado en este tenant"));
+
+        if (role.getRole() != RoleType.BARBER) {
+            throw new BusinessException("El usuario indicado no es un barbero");
+        }
+
+        String oldPublicId = barber.getPhotoPublicId();
+
+        CloudinaryStorageService.UploadResult result =
+                cloudinaryStorageService.uploadBarberPhoto(tenantId, barberId, file);
+
+        barber.setPhotoUrl(result.getSecureUrl());
+        barber.setPhotoPublicId(result.getPublicId());
+        barber.setFechaActualizacion(LocalDateTime.now());
+
+        AppUser saved = appUserRepository.save(barber);
+
+        if (oldPublicId != null && !oldPublicId.isBlank()) {
+            cloudinaryStorageService.deleteImage(oldPublicId);
+        }
+
+        return toResponse(saved);
+    }
+
+    @Override
+    @Transactional
+    public BarberResponse deletePhoto(Long tenantId, Long barberId) {
+        AppUser barber = appUserRepository.findByIdAndTenant_Id(barberId, tenantId)
+                .orElseThrow(() -> new EntityNotFoundException("Barbero no encontrado."));
+
+        UserTenantRole role = userTenantRoleRepository
+                .findByUser_IdAndTenant_Id(barberId, tenantId)
+                .orElseThrow(() -> new BusinessException("El usuario no tiene rol asignado en este tenant"));
+
+        if (role.getRole() != RoleType.BARBER) {
+            throw new BusinessException("El usuario indicado no es un barbero");
+        }
+
+        String oldPublicId = barber.getPhotoPublicId();
+
+        barber.setPhotoUrl(null);
+        barber.setPhotoPublicId(null);
+        barber.setFechaActualizacion(LocalDateTime.now());
+
+        AppUser saved = appUserRepository.save(barber);
+
+        if (oldPublicId != null && !oldPublicId.isBlank()) {
+            cloudinaryStorageService.deleteImage(oldPublicId);
+        }
+
+        return toResponse(saved);
+    }
+
 }
