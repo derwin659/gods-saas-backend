@@ -11,6 +11,7 @@ import com.gods.saas.service.impl.impl.SubscriptionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -22,6 +23,7 @@ public class OwnerBranchService {
     private final BranchRepository branchRepository;
     private final TenantRepository tenantRepository;
     private final SubscriptionService subscriptionService;
+    private final CloudinaryStorageService cloudinaryStorageService;
 
     @Transactional(readOnly = true)
     public List<OwnerBranchResponse> listBranches(Long tenantId) {
@@ -97,16 +99,57 @@ public class OwnerBranchService {
         branchRepository.save(branch);
     }
 
+    @Transactional
+    public OwnerBranchResponse uploadImage(Long tenantId, Long branchId, MultipartFile file) {
+        Branch branch = branchRepository.findByIdAndTenant_Id(branchId, tenantId)
+                .orElseThrow(() -> new BusinessException("No se encontró la sede"));
+
+        String oldPublicId = branch.getImagePublicId();
+
+        CloudinaryStorageService.UploadResult result =
+                cloudinaryStorageService.uploadBranchImage(tenantId, branchId, file);
+
+        branch.setImageUrl(result.getSecureUrl());
+        branch.setImagePublicId(result.getPublicId());
+
+        Branch saved = branchRepository.save(branch);
+
+        if (oldPublicId != null && !oldPublicId.isBlank()) {
+            cloudinaryStorageService.deleteImage(oldPublicId);
+        }
+
+        return toResponse(saved);
+    }
+
+    @Transactional
+    public OwnerBranchResponse deleteImage(Long tenantId, Long branchId) {
+        Branch branch = branchRepository.findByIdAndTenant_Id(branchId, tenantId)
+                .orElseThrow(() -> new BusinessException("No se encontró la sede"));
+
+        String oldPublicId = branch.getImagePublicId();
+
+        branch.setImageUrl(null);
+        branch.setImagePublicId(null);
+
+        Branch saved = branchRepository.save(branch);
+
+        if (oldPublicId != null && !oldPublicId.isBlank()) {
+            cloudinaryStorageService.deleteImage(oldPublicId);
+        }
+
+        return toResponse(saved);
+    }
+
     private OwnerBranchResponse toResponse(Branch branch) {
         return new OwnerBranchResponse(
                 branch.getId(),
                 branch.getNombre(),
                 branch.getDireccion(),
                 branch.getTelefono(),
-                branch.getActivo()
+                branch.getActivo(),
+                branch.getImageUrl()
         );
     }
-
     private String normalizeRequired(String value) {
         if (value == null || value.trim().isEmpty()) {
             throw new BusinessException("El nombre de la sede es obligatorio");
@@ -120,4 +163,7 @@ public class OwnerBranchService {
         }
         return value.trim();
     }
+
+
+
 }

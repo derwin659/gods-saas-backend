@@ -36,6 +36,12 @@ public class Branch {
     @Column(name = "fecha_creacion")
     private LocalDateTime fechaCreacion;
 
+    @Column(name = "image_url", columnDefinition = "TEXT")
+    private String imageUrl;
+
+    @Column(name = "image_public_id", length = 255)
+    private String imagePublicId;
+
     public Branch(Long branchId) {
         this.id = branchId;
     }

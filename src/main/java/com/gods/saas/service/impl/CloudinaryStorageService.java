@@ -106,4 +106,32 @@ public class CloudinaryStorageService {
             this.publicId = publicId;
         }
     }
+
+    public UploadResult uploadBranchImage(Long tenantId, Long branchId, MultipartFile file) {
+        validateImage(file);
+
+        try {
+            String folder = "super-gods/tenants/" + tenantId + "/branches";
+
+            Map<?, ?> result = cloudinary.uploader().upload(
+                    file.getBytes(),
+                    ObjectUtils.asMap(
+                            "folder", folder,
+                            "resource_type", "image",
+                            "public_id", "branch_" + branchId + "_" + System.currentTimeMillis(),
+                            "overwrite", true
+                    )
+            );
+
+            String secureUrl = String.valueOf(result.get("secure_url"));
+            String publicId = String.valueOf(result.get("public_id"));
+
+            return new UploadResult(secureUrl, publicId);
+
+        } catch (IOException e) {
+            throw new IllegalStateException("No se pudo subir la imagen de la sede a Cloudinary", e);
+        }
+    }
+
+
 }

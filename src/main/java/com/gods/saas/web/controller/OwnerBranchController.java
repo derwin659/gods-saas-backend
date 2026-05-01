@@ -7,7 +7,9 @@ import com.gods.saas.security.SecurityUtils;
 import com.gods.saas.service.impl.OwnerBranchService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -52,5 +54,21 @@ public class OwnerBranchController {
     ) {
         Long tenantId = SecurityUtils.getCurrentTenantId();
         ownerBranchService.updateStatus(tenantId, branchId, request.activo());
+    }
+
+
+    @PostMapping(value = "/{branchId}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public OwnerBranchResponse uploadImage(
+            @PathVariable Long branchId,
+            @RequestParam("file") MultipartFile file
+    ) {
+        Long tenantId = SecurityUtils.getCurrentTenantId();
+        return ownerBranchService.uploadImage(tenantId, branchId, file);
+    }
+
+    @DeleteMapping("/{branchId}/image")
+    public OwnerBranchResponse deleteImage(@PathVariable Long branchId) {
+        Long tenantId = SecurityUtils.getCurrentTenantId();
+        return ownerBranchService.deleteImage(tenantId, branchId);
     }
 }

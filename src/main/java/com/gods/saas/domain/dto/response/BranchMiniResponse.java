@@ -14,12 +14,14 @@ public class BranchMiniResponse {
     private Long id;
     private String nombre;
     private String direccion;
+    private String imageUrl;
 
     public static BranchMiniResponse fromEntity(Branch b) {
         return BranchMiniResponse.builder()
                 .id(b.getId())
                 .nombre(b.getNombre())
                 .direccion(b.getDireccion())
+                .imageUrl(b.getImageUrl())
                 .build();
     }
 }

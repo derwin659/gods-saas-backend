@@ -5,6 +5,7 @@ public record OwnerBranchResponse(
         String nombre,
         String direccion,
         String telefono,
-        Boolean activo
+        Boolean activo,
+        String imageUrl
 ) {
 }
