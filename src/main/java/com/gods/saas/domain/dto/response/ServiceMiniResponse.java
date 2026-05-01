@@ -15,6 +15,7 @@ public class ServiceMiniResponse {
     private String nombre;
     private Integer duracionMinutos;
     private Double precio;
+    private String imageUrl;
 
     public static ServiceMiniResponse fromEntity(ServiceEntity s) {
         return ServiceMiniResponse.builder()
@@ -22,6 +23,7 @@ public class ServiceMiniResponse {
                 .nombre(s.getNombre())
                 .duracionMinutos(s.getDuracionMinutos())
                 .precio(s.getPrecio())
+                .imageUrl(s.getImageUrl())
                 .build();
     }
 }
