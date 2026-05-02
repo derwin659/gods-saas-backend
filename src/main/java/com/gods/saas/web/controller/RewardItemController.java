@@ -6,6 +6,7 @@ import com.gods.saas.service.impl.impl.RewardItemService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -46,6 +47,19 @@ public class RewardItemController {
         Map<String, Object> details = (Map<String, Object>) authentication.getDetails();
         Long tenantId = Long.valueOf(details.get("tenantId").toString());
         return service.update(tenantId, id, request);
+    }
+
+
+
+    @PostMapping(value = "/{id}/image", consumes = "multipart/form-data")
+    public RewardItemResponse uploadImage(
+            @PathVariable Long id,
+            @RequestPart("file") MultipartFile file,
+            Authentication authentication
+    ) {
+        Map<String, Object> details = (Map<String, Object>) authentication.getDetails();
+        Long tenantId = Long.valueOf(details.get("tenantId").toString());
+        return service.uploadRewardImage(tenantId, id, file);
     }
 
     @DeleteMapping("/{id}")

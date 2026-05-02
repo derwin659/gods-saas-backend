@@ -6,6 +6,7 @@ import com.gods.saas.service.impl.impl.PromotionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 import java.util.Map;
@@ -43,6 +44,18 @@ public class OwnerPromotionController {
     ) {
         Long tenantId = extractTenantId(authentication);
         return promotionService.updatePromotion(tenantId, id, request);
+    }
+
+
+
+    @PostMapping(value = "/{id}/image", consumes = "multipart/form-data")
+    public PromotionResponse uploadImage(
+            @PathVariable Long id,
+            @RequestPart("file") MultipartFile file,
+            Authentication authentication
+    ) {
+        Long tenantId = extractTenantId(authentication);
+        return promotionService.uploadPromotionImage(tenantId, id, file);
     }
 
     @PatchMapping("/{id}/toggle")

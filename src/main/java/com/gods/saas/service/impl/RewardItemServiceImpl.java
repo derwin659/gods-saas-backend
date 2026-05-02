@@ -13,6 +13,7 @@ import com.gods.saas.service.impl.impl.RewardItemService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -27,6 +28,7 @@ public class RewardItemServiceImpl implements RewardItemService {
     private final TenantRepository tenantRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final NotificationService notificationService;
+    private final CloudinaryStorageService cloudinaryStorageService;
 
     @Override
     public List<RewardItemResponse> getAll(Long tenantId, Boolean onlyActive) {
@@ -98,6 +100,23 @@ public class RewardItemServiceImpl implements RewardItemService {
         return map(repository.save(entity));
     }
 
+
+
+    @Override
+    public RewardItemResponse uploadRewardImage(Long tenantId, Long id, MultipartFile file) {
+        validateCustomRewardsFeatureAllowed(tenantId);
+
+        RewardItem entity = repository.findByIdAndTenant_Id(id, tenantId)
+                .orElseThrow(() -> new RuntimeException("Premio no encontrado"));
+
+        CloudinaryStorageService.UploadResult result =
+                cloudinaryStorageService.uploadRewardImage(tenantId, id, file);
+
+        entity.setImagenUrl(result.getSecureUrl());
+
+        return map(repository.save(entity));
+    }
+
     @Override
     public void delete(Long tenantId, Long id) {
         validateCustomRewardsFeatureAllowed(tenantId);
@@ -123,13 +142,16 @@ public class RewardItemServiceImpl implements RewardItemService {
     }
 
     private RewardItemResponse map(RewardItem e) {
-        return new RewardItemResponse(
-                e.getId(),
-                e.getNombre(),
-                e.getDescripcion(),
-                e.getPuntosRequeridos(),
-                false
-        );
+        return RewardItemResponse.builder()
+                .id(e.getId())
+                .titulo(e.getNombre())
+                .descripcion(e.getDescripcion())
+                .costoPuntos(e.getPuntosRequeridos() == null ? 0 : e.getPuntosRequeridos())
+                .destacado(false)
+                .stock(e.getStock())
+                .imagenUrl(e.getImagenUrl())
+                .activo(e.getActivo() == null || e.getActivo())
+                .build();
     }
 
     private void validateCustomRewardsFeatureAllowed(Long tenantId) {

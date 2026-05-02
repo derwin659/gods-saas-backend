@@ -4,6 +4,8 @@ import com.gods.saas.domain.dto.request.PromotionRequest;
 import com.gods.saas.domain.dto.response.ClientPromotionResponse;
 import com.gods.saas.domain.dto.response.PromotionResponse;
 
+import org.springframework.web.multipart.MultipartFile;
+
 import java.util.List;
 
 public interface PromotionService {
@@ -18,6 +20,8 @@ public interface PromotionService {
     PromotionResponse updatePromotion(Long tenantId, Long promotionId, PromotionRequest request);
 
     PromotionResponse togglePromotion(Long tenantId, Long promotionId);
+
+    PromotionResponse uploadPromotionImage(Long tenantId, Long promotionId, MultipartFile file);
 
     void deletePromotion(Long tenantId, Long promotionId);
 }

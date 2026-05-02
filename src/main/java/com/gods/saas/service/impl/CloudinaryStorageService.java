@@ -160,4 +160,57 @@ public class CloudinaryStorageService {
     }
 
 
+
+    public UploadResult uploadPromotionImage(Long tenantId, Long promotionId, MultipartFile file) {
+        validateImage(file);
+
+        try {
+            String folder = "super-gods/tenants/" + tenantId + "/promotions";
+
+            Map<?, ?> result = cloudinary.uploader().upload(
+                    file.getBytes(),
+                    ObjectUtils.asMap(
+                            "folder", folder,
+                            "resource_type", "image",
+                            "public_id", "promotion_" + promotionId + "_" + System.currentTimeMillis(),
+                            "overwrite", true
+                    )
+            );
+
+            String secureUrl = String.valueOf(result.get("secure_url"));
+            String publicId = String.valueOf(result.get("public_id"));
+
+            return new UploadResult(secureUrl, publicId);
+
+        } catch (IOException e) {
+            throw new IllegalStateException("No se pudo subir la imagen de la promoción a Cloudinary", e);
+        }
+    }
+
+    public UploadResult uploadRewardImage(Long tenantId, Long rewardId, MultipartFile file) {
+        validateImage(file);
+
+        try {
+            String folder = "super-gods/tenants/" + tenantId + "/rewards";
+
+            Map<?, ?> result = cloudinary.uploader().upload(
+                    file.getBytes(),
+                    ObjectUtils.asMap(
+                            "folder", folder,
+                            "resource_type", "image",
+                            "public_id", "reward_" + rewardId + "_" + System.currentTimeMillis(),
+                            "overwrite", true
+                    )
+            );
+
+            String secureUrl = String.valueOf(result.get("secure_url"));
+            String publicId = String.valueOf(result.get("public_id"));
+
+            return new UploadResult(secureUrl, publicId);
+
+        } catch (IOException e) {
+            throw new IllegalStateException("No se pudo subir la imagen del premio a Cloudinary", e);
+        }
+    }
+
 }

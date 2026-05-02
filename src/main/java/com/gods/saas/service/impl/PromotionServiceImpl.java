@@ -12,6 +12,7 @@ import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -27,6 +28,7 @@ public class PromotionServiceImpl implements PromotionService {
     private final TenantRepository tenantRepository;
     private final BranchRepository branchRepository;
     private final NotificationService notificationService;
+    private final CloudinaryStorageService cloudinaryStorageService;
 
     @Override
     @Transactional(readOnly = true)
@@ -156,6 +158,23 @@ public class PromotionServiceImpl implements PromotionService {
                 .orElseThrow(() -> new EntityNotFoundException("Promoción no encontrada"));
 
         promotion.setActivo(!promotion.isActivo());
+
+        return toOwnerResponse(promotionRepository.save(promotion));
+    }
+
+
+
+    @Override
+    public PromotionResponse uploadPromotionImage(Long tenantId, Long promotionId, MultipartFile file) {
+        validatePromotionsFeatureAllowed(tenantId);
+
+        Promotion promotion = promotionRepository.findByIdAndTenant_Id(promotionId, tenantId)
+                .orElseThrow(() -> new EntityNotFoundException("Promoción no encontrada"));
+
+        CloudinaryStorageService.UploadResult result =
+                cloudinaryStorageService.uploadPromotionImage(tenantId, promotionId, file);
+
+        promotion.setImageUrl(result.getSecureUrl());
 
         return toOwnerResponse(promotionRepository.save(promotion));
     }
