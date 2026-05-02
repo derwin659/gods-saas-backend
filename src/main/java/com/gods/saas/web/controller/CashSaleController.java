@@ -52,6 +52,18 @@ public class CashSaleController {
         return cashSaleService.getSalesByRange(tenantId, effectiveBranchId, from, to);
     }
 
+
+    @GetMapping("/by-cash-register/{cashRegisterId}")
+    public List<SaleResponse> byCashRegister(
+            @RequestAttribute("tenantId") Long tenantId,
+            @RequestAttribute("branchId") Long sessionBranchId,
+            @PathVariable Long cashRegisterId,
+            @RequestParam(required = false) Long branchId
+    ) {
+        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        return cashSaleService.getSalesByCashRegister(tenantId, effectiveBranchId, cashRegisterId);
+    }
+
     @GetMapping("/{saleId}")
     public SaleResponse detail(
             @RequestAttribute("tenantId") Long tenantId,

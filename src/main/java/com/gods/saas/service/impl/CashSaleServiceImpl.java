@@ -149,6 +149,24 @@ public class CashSaleServiceImpl implements CashSaleService {
                 .collect(Collectors.toList());
     }
 
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<SaleResponse> getSalesByCashRegister(Long tenantId, Long branchId, Long cashRegisterId) {
+        CashRegister cashRegister = cashRegisterRepository.findByIdAndTenant_Id(cashRegisterId, tenantId)
+                .orElseThrow(() -> new EntityNotFoundException("Caja no encontrada"));
+
+        if (cashRegister.getBranch() == null || !cashRegister.getBranch().getId().equals(branchId)) {
+            throw new IllegalStateException("La caja no pertenece a esta sede.");
+        }
+
+        return saleRepository
+                .findCashSalesByCashRegister(tenantId, branchId, cashRegisterId)
+                .stream()
+                .map(sale -> mapResponse(sale, 0))
+                .collect(Collectors.toList());
+    }
+
     @Override
     @Transactional(readOnly = true)
     public SaleResponse getById(Long tenantId, Long saleId) {

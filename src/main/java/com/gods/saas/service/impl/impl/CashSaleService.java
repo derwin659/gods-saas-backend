@@ -15,6 +15,8 @@ public interface CashSaleService {
 
     List<SaleResponse> getSalesByRange(Long tenantId, Long branchId, LocalDate from, LocalDate to);
 
+    List<SaleResponse> getSalesByCashRegister(Long tenantId, Long branchId, Long cashRegisterId);
+
     SaleResponse getById(Long tenantId, Long saleId);
 
     SaleResponse updateSale(Long tenantId, Long branchId, Long userId, Long saleId, UpdateSaleRequest request);
