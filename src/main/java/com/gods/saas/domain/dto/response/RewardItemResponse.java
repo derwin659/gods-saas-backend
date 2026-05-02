@@ -1,11 +1,16 @@
 package com.gods.saas.domain.dto.response;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
 @Data
+@Builder
 @NoArgsConstructor
+@AllArgsConstructor
 public class RewardItemResponse {
+
     private Long id;
     private String titulo;
     private String descripcion;
@@ -15,6 +20,7 @@ public class RewardItemResponse {
     private String imagenUrl;
     private Boolean activo;
 
+    // Constructor anterior para no romper código existente que todavía envía 5 campos.
     public RewardItemResponse(
             Long id,
             String titulo,
@@ -22,27 +28,13 @@ public class RewardItemResponse {
             int costoPuntos,
             boolean destacado
     ) {
-        this(id, titulo, descripcion, costoPuntos, destacado, null, null, true);
-    }
-
-    @lombok.Builder
-    public RewardItemResponse(
-            Long id,
-            String titulo,
-            String descripcion,
-            int costoPuntos,
-            boolean destacado,
-            Integer stock,
-            String imagenUrl,
-            Boolean activo
-    ) {
         this.id = id;
         this.titulo = titulo;
         this.descripcion = descripcion;
         this.costoPuntos = costoPuntos;
         this.destacado = destacado;
-        this.stock = stock;
-        this.imagenUrl = imagenUrl;
-        this.activo = activo;
+        this.stock = null;
+        this.imagenUrl = null;
+        this.activo = true;
     }
 }

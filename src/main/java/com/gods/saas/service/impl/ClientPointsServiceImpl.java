@@ -1,6 +1,5 @@
 package com.gods.saas.service.impl;
 
-
 import com.gods.saas.domain.dto.response.ClientPointsResponse;
 import com.gods.saas.domain.dto.response.PointMovementResponse;
 import com.gods.saas.domain.dto.response.PointsSummaryResponse;
@@ -23,8 +22,6 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ClientPointsServiceImpl implements ClientPointsService {
 
-
-
     private final CustomerRepository customerRepository;
     private final LoyaltyAccountRepository loyaltyAccountRepository;
     private final LoyaltyMovementRepository loyaltyMovementRepository;
@@ -32,7 +29,6 @@ public class ClientPointsServiceImpl implements ClientPointsService {
 
     @Override
     public ClientPointsResponse getClientPoints(Authentication authentication) {
-
         String idCustomer = authentication.getName();
         System.out.println("PHONE/USERNAME RECIBIDO = " + idCustomer);
 
@@ -96,18 +92,26 @@ public class ClientPointsServiceImpl implements ClientPointsService {
                 .toList();
 
         List<RewardItemResponse> premios = rewards.stream()
-                .map(r -> new RewardItemResponse(
-                        r.getId(),
-                        r.getNombre(),
-                        r.getDescripcion(),
-                        safeInt(r.getPuntosRequeridos()),
-                        r.getNombre() != null
-                                && r.getNombre().trim().toLowerCase().contains("corte gratis")
-                ))
+                .map(r -> {
+                    boolean destacado = r.getNombre() != null
+                            && r.getNombre().trim().toLowerCase().contains("corte gratis");
+
+                    return RewardItemResponse.builder()
+                            .id(r.getId())
+                            .titulo(r.getNombre())
+                            .descripcion(r.getDescripcion())
+                            .costoPuntos(safeInt(r.getPuntosRequeridos()))
+                            .destacado(destacado)
+                            .stock(r.getStock())
+                            .imagenUrl(r.getImagenUrl())
+                            .activo(r.getActivo())
+                            .build();
+                })
                 .toList();
 
         return new ClientPointsResponse(summary, movimientos, premios);
     }
+
     private LoyaltyAccount buildEmptyAccount() {
         LoyaltyAccount a = new LoyaltyAccount();
         a.setPuntosDisponibles(0);
@@ -118,6 +122,4 @@ public class ClientPointsServiceImpl implements ClientPointsService {
     private int safeInt(Integer value) {
         return value == null ? 0 : value;
     }
-
-
 }
