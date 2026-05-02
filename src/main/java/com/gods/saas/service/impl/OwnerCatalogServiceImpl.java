@@ -94,6 +94,7 @@ public class OwnerCatalogServiceImpl implements OwnerCatalogService {
                 .nombre(service.getNombre())
                 .precio(precio)
                 .activo(service.getActivo())
+                .imageUrl(service.getImageUrl())
                 .build();
     }
 

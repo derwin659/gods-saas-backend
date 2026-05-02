@@ -16,4 +16,5 @@ public class SimpleServiceResponse {
     private String nombre;
     private BigDecimal precio;
     private Boolean activo;
+    private String imageUrl;
 }

@@ -17,6 +17,9 @@ public class CreateSaleFromAppointmentRequest {
     private BigDecimal tipAmount;
     private List<SalePaymentRequest> payments;
 
+    /** Productos adicionales vendidos por el barbero al finalizar la cita. */
+    private List<SaleItemRequest> items;
+
     private String cutType;
     private String cutDetail;
     private String cutObservations;

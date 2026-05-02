@@ -4,11 +4,16 @@ import com.gods.saas.domain.dto.request.CreateSaleFromAppointmentRequest;
 import com.gods.saas.domain.dto.request.CreateSaleRequest;
 import com.gods.saas.domain.dto.request.SaleItemRequest;
 import com.gods.saas.domain.dto.response.CreateSaleFromAppointmentResponse;
+import com.gods.saas.domain.dto.response.ProductResponse;
 import com.gods.saas.domain.dto.response.SaleResponse;
+import com.gods.saas.domain.dto.response.SimpleServiceResponse;
 import com.gods.saas.domain.model.Appointment;
 import com.gods.saas.domain.model.Customer;
+import com.gods.saas.domain.model.Product;
 import com.gods.saas.domain.model.ServiceEntity;
 import com.gods.saas.domain.repository.AppointmentRepository;
+import com.gods.saas.domain.repository.ProductRepository;
+import com.gods.saas.domain.repository.ServiceRepository;
 import com.gods.saas.service.impl.impl.SaleService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -17,6 +22,7 @@ import org.springframework.stereotype.Service;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -24,8 +30,59 @@ import java.util.List;
 public class BarberSaleService {
 
     private final AppointmentRepository appointmentRepository;
+    private final ProductRepository productRepository;
+    private final ServiceRepository serviceRepository;
     private final SaleService saleService;
     private final CustomerCutHistoryService customerCutHistoryService;
+
+
+    @Transactional(Transactional.TxType.SUPPORTS)
+    public List<SimpleServiceResponse> getAvailableServices(Long tenantId) {
+        return serviceRepository.findByTenant_IdAndActivoTrueOrderByNombreAsc(tenantId)
+                .stream()
+                .map(service -> SimpleServiceResponse.builder()
+                        .id(service.getId())
+                        .nombre(service.getNombre())
+                        .precio(service.getPrecio() == null ? BigDecimal.ZERO : BigDecimal.valueOf(service.getPrecio()))
+                        .activo(service.getActivo())
+                        .imageUrl(service.getImageUrl())
+                        .build())
+                .toList();
+    }
+
+    @Transactional(Transactional.TxType.SUPPORTS)
+    public List<ProductResponse> getAvailableProducts(Long tenantId) {
+        return productRepository.findByTenant_IdAndActivoTrueOrderByNombreAsc(tenantId)
+                .stream()
+                .map(this::toProductResponse)
+                .toList();
+    }
+
+    private ProductResponse toProductResponse(Product product) {
+        int stockActual = product.getStockActual() == null ? 0 : product.getStockActual();
+        int stockMinimo = product.getStockMinimo() == null ? 0 : product.getStockMinimo();
+        BigDecimal precioVenta = product.getPrecioVenta() != null && product.getPrecioVenta().compareTo(BigDecimal.ZERO) > 0
+                ? product.getPrecioVenta()
+                : (product.getPrecio() != null ? BigDecimal.valueOf(product.getPrecio()) : BigDecimal.ZERO);
+
+        return ProductResponse.builder()
+                .id(product.getId())
+                .nombre(product.getNombre())
+                .sku(product.getSku())
+                .descripcion(product.getDescripcion())
+                .precioCompra(product.getPrecioCompra() == null ? BigDecimal.ZERO : product.getPrecioCompra())
+                .precioVenta(precioVenta)
+                .precio(product.getPrecio())
+                .barberCommissionAmount(product.getBarberCommissionAmount() == null ? BigDecimal.ZERO : product.getBarberCommissionAmount())
+                .stockActual(stockActual)
+                .stockMinimo(stockMinimo)
+                .categoria(product.getCategoria())
+                .activo(Boolean.TRUE.equals(product.getActivo()))
+                .permiteVentaSinStock(Boolean.TRUE.equals(product.getPermiteVentaSinStock()))
+                .stockBajo(stockActual <= stockMinimo)
+                .imageUrl(product.getImageUrl())
+                .build();
+    }
 
     @Transactional
     public CreateSaleFromAppointmentResponse createSaleFromAppointment(
@@ -95,7 +152,55 @@ public class BarberSaleService {
             throw new RuntimeException("La propina no puede ser negativa");
         }
 
-        BigDecimal total = serviceTotal.add(tipAmount).setScale(2, RoundingMode.HALF_UP);
+        List<SaleItemRequest> saleItems = new ArrayList<>();
+
+        SaleItemRequest serviceItem = new SaleItemRequest();
+        serviceItem.setServiceId(service.getId());
+        serviceItem.setBarberUserId(userId);
+        serviceItem.setCantidad(1);
+        serviceItem.setPrecioUnitario(service.getPrecio());
+        saleItems.add(serviceItem);
+
+        BigDecimal productsTotal = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        if (request.getItems() != null) {
+            for (SaleItemRequest extra : request.getItems()) {
+                if (extra == null || extra.getProductId() == null) {
+                    continue;
+                }
+
+                Product product = productRepository.findByIdAndTenant_Id(extra.getProductId(), tenantId)
+                        .orElseThrow(() -> new RuntimeException("Producto no encontrado"));
+
+                if (!Boolean.TRUE.equals(product.getActivo())) {
+                    throw new RuntimeException("El producto " + product.getNombre() + " está inactivo");
+                }
+
+                int cantidad = extra.getCantidad() == null || extra.getCantidad() <= 0 ? 1 : extra.getCantidad();
+
+                if (!Boolean.TRUE.equals(product.getPermiteVentaSinStock())) {
+                    int stock = product.getStockActual() == null ? 0 : product.getStockActual();
+                    if (stock < cantidad) {
+                        throw new RuntimeException("Stock insuficiente para " + product.getNombre());
+                    }
+                }
+
+                BigDecimal unitPrice = product.getPrecioVenta() != null && product.getPrecioVenta().compareTo(BigDecimal.ZERO) > 0
+                        ? product.getPrecioVenta()
+                        : (product.getPrecio() != null ? BigDecimal.valueOf(product.getPrecio()) : BigDecimal.ZERO);
+                unitPrice = unitPrice.setScale(2, RoundingMode.HALF_UP);
+
+                SaleItemRequest productItem = new SaleItemRequest();
+                productItem.setProductId(product.getId());
+                productItem.setBarberUserId(userId);
+                productItem.setCantidad(cantidad);
+                productItem.setPrecioUnitario(unitPrice.doubleValue());
+                saleItems.add(productItem);
+
+                productsTotal = productsTotal.add(unitPrice.multiply(BigDecimal.valueOf(cantidad))).setScale(2, RoundingMode.HALF_UP);
+            }
+        }
+
+        BigDecimal total = serviceTotal.add(productsTotal).add(tipAmount).setScale(2, RoundingMode.HALF_UP);
 
         BigDecimal cashReceived = null;
         BigDecimal change = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
@@ -133,13 +238,7 @@ public class BarberSaleService {
         saleRequest.setCutDetail(request.getCutDetail());
         saleRequest.setCutObservations(request.getCutObservations());
 
-        SaleItemRequest item = new SaleItemRequest();
-        item.setServiceId(service.getId());
-        item.setBarberUserId(userId);
-        item.setCantidad(1);
-        item.setPrecioUnitario(service.getPrecio());
-
-        saleRequest.setItems(List.of(item));
+        saleRequest.setItems(saleItems);
         saleRequest.setCutType(request.getCutType());
         saleRequest.setCutDetail(request.getCutDetail());
         saleRequest.setCutObservations(request.getCutObservations());

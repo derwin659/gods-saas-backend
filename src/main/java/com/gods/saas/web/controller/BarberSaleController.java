@@ -2,11 +2,14 @@ package com.gods.saas.web.controller;
 
 import com.gods.saas.domain.dto.request.CreateSaleFromAppointmentRequest;
 import com.gods.saas.domain.dto.response.CreateSaleFromAppointmentResponse;
+import com.gods.saas.domain.dto.response.ProductResponse;
+import com.gods.saas.domain.dto.response.SimpleServiceResponse;
 import com.gods.saas.service.impl.BarberSaleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -43,6 +46,32 @@ public class BarberSaleController {
                 userId,
                 request
         );
+    }
+
+
+
+    @GetMapping("/catalog/services")
+    public List<SimpleServiceResponse> getServices(Authentication authentication) {
+        Map<String, Object> claims = getClaims(authentication);
+
+        Long tenantId = toLong(claims.get("tenantId"));
+        if (tenantId == null) {
+            throw new RuntimeException("El token no contiene tenantId");
+        }
+
+        return barberSaleService.getAvailableServices(tenantId);
+    }
+
+    @GetMapping("/catalog/products")
+    public List<ProductResponse> getProducts(Authentication authentication) {
+        Map<String, Object> claims = getClaims(authentication);
+
+        Long tenantId = toLong(claims.get("tenantId"));
+        if (tenantId == null) {
+            throw new RuntimeException("El token no contiene tenantId");
+        }
+
+        return barberSaleService.getAvailableProducts(tenantId);
     }
 
     @SuppressWarnings("unchecked")
