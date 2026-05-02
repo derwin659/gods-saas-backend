@@ -77,6 +77,12 @@ public class Product {
     @Column(length = 100)
     private String categoria;
 
+    @Column(name = "image_url", length = 500)
+    private String imageUrl;
+
+    @Column(name = "image_public_id", length = 255)
+    private String imagePublicId;
+
     @Builder.Default
     private Boolean activo = true;
 

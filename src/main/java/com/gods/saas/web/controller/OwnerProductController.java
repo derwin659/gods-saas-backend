@@ -6,6 +6,7 @@ import com.gods.saas.domain.dto.response.ProductResponse;
 import com.gods.saas.service.impl.impl.OwnerProductService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -73,6 +74,19 @@ public class OwnerProductController {
     ) {
         Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
         return ownerProductService.toggleActive(tenantId, effectiveBranchId, userId, productId);
+    }
+
+    @PostMapping("/{productId}/image")
+    public ProductResponse uploadImage(
+            @RequestAttribute("tenantId") Long tenantId,
+            @RequestAttribute("branchId") Long sessionBranchId,
+            @RequestAttribute("userId") Long userId,
+            @PathVariable Long productId,
+            @RequestParam(required = false) Long branchId,
+            @RequestParam("file") MultipartFile file
+    ) {
+        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        return ownerProductService.uploadImage(tenantId, effectiveBranchId, userId, productId, file);
     }
 
     @PatchMapping("/{productId}/stock")

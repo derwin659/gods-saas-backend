@@ -17,6 +17,7 @@ import com.gods.saas.service.impl.impl.OwnerProductService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -32,6 +33,7 @@ public class OwnerProductServiceImpl implements OwnerProductService {
     private final AppUserRepository appUserRepository;
     private final StockMovementRepository stockMovementRepository;
     private final TenantTimeService tenantTimeService;
+    private final CloudinaryStorageService cloudinaryStorageService;
 
     @Override
     @Transactional(readOnly = true)
@@ -151,6 +153,24 @@ public class OwnerProductServiceImpl implements OwnerProductService {
         return toResponse(saved);
     }
 
+
+    @Override
+    public ProductResponse uploadImage(Long tenantId, Long branchId, Long userId, Long productId, MultipartFile file) {
+        Product product = getProduct(tenantId, productId);
+
+        if (product.getImagePublicId() != null && !product.getImagePublicId().isBlank()) {
+            cloudinaryStorageService.deleteImage(product.getImagePublicId());
+        }
+
+        CloudinaryStorageService.UploadResult upload =
+                cloudinaryStorageService.uploadProductImage(tenantId, productId, file);
+
+        product.setImageUrl(upload.getSecureUrl());
+        product.setImagePublicId(upload.getPublicId());
+
+        return toResponse(productRepository.save(product));
+    }
+
     private void applyRequest(Product product, SaveProductRequest request) {
         if (clean(request.getNombre()) != null) {
             product.setNombre(clean(request.getNombre()));
@@ -250,6 +270,8 @@ public class OwnerProductServiceImpl implements OwnerProductService {
                 .stockActual(stockActual)
                 .stockMinimo(stockMinimo)
                 .categoria(product.getCategoria())
+                .imageUrl(product.getImageUrl())
+                .imagePublicId(product.getImagePublicId())
                 .activo(Boolean.TRUE.equals(product.getActivo()))
                 .permiteVentaSinStock(Boolean.TRUE.equals(product.getPermiteVentaSinStock()))
                 .stockBajo(stockActual <= stockMinimo)

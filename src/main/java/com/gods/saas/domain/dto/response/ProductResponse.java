@@ -19,6 +19,8 @@ public class ProductResponse {
     private Integer stockActual;
     private Integer stockMinimo;
     private String categoria;
+    private String imageUrl;
+    private String imagePublicId;
     private Boolean activo;
     private Boolean permiteVentaSinStock;
     private Boolean stockBajo;

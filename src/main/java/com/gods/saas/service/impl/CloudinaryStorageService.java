@@ -213,4 +213,32 @@ public class CloudinaryStorageService {
         }
     }
 
+
+
+    public UploadResult uploadProductImage(Long tenantId, Long productId, MultipartFile file) {
+        validateImage(file);
+
+        try {
+            String folder = "super-gods/tenants/" + tenantId + "/products";
+
+            Map<?, ?> result = cloudinary.uploader().upload(
+                    file.getBytes(),
+                    ObjectUtils.asMap(
+                            "folder", folder,
+                            "resource_type", "image",
+                            "public_id", "product_" + productId + "_" + System.currentTimeMillis(),
+                            "overwrite", true
+                    )
+            );
+
+            String secureUrl = String.valueOf(result.get("secure_url"));
+            String publicId = String.valueOf(result.get("public_id"));
+
+            return new UploadResult(secureUrl, publicId);
+
+        } catch (IOException e) {
+            throw new IllegalStateException("No se pudo subir la imagen del producto a Cloudinary", e);
+        }
+    }
+
 }
