@@ -39,6 +39,36 @@ public class CloudinaryStorageService {
         ));
     }
 
+    public UploadResult uploadAppointmentDepositEvidence(
+            Long tenantId,
+            Long customerId,
+            MultipartFile file
+    ) {
+        validateImage(file);
+
+        try {
+            String folder = "super-gods/tenants/" + tenantId + "/appointments/deposits";
+
+            Map<?, ?> result = cloudinary.uploader().upload(
+                    file.getBytes(),
+                    ObjectUtils.asMap(
+                            "folder", folder,
+                            "resource_type", "image",
+                            "public_id", "deposit_customer_" + customerId + "_" + System.currentTimeMillis(),
+                            "overwrite", true
+                    )
+            );
+
+            String secureUrl = String.valueOf(result.get("secure_url"));
+            String publicId = String.valueOf(result.get("public_id"));
+
+            return new UploadResult(secureUrl, publicId);
+
+        } catch (IOException e) {
+            throw new IllegalStateException("No se pudo subir el comprobante del pago", e);
+        }
+    }
+
     public UploadResult uploadServiceImage(Long tenantId, Long serviceId, MultipartFile file) {
         validateImage(file);
 
