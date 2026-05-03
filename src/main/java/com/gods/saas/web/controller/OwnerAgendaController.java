@@ -25,23 +25,29 @@ public class OwnerAgendaController {
     @GetMapping
     public List<OwnerAgendaResponse> getAgendaDelDia(
             @RequestHeader("Authorization") String authHeader,
-            @RequestParam(required = false) String fecha
+            @RequestParam(required = false) String fecha,
+            @RequestParam(required = false) Long branchId
     ) {
         final String token = authHeader.replace("Bearer ", "");
         final Map<String, Object> claims = jwtService.extractAllClaims(token);
 
         final Long tenantId = ((Number) claims.get("tenantId")).longValue();
-        final Object branchObj = claims.get("branchId");
-        final Long branchId = branchObj != null ? ((Number) branchObj).longValue() : null;
+
+        Long branchIdFinal = branchId;
+
+        if (branchIdFinal == null) {
+            final Object branchObj = claims.get("branchId");
+            branchIdFinal = branchObj != null ? ((Number) branchObj).longValue() : null;
+        }
 
         final LocalDate fechaConsulta = (fecha == null || fecha.isBlank())
                 ? LocalDate.now()
                 : LocalDate.parse(fecha);
 
-        if (branchId == null) {
-            throw new RuntimeException("No se encontró branchId en el token.");
+        if (branchIdFinal == null) {
+            throw new RuntimeException("No se encontró branchId en el token ni en la consulta.");
         }
 
-        return ownerAgendaService.getAgendaDelDia(tenantId, branchId, fechaConsulta);
+        return ownerAgendaService.getAgendaDelDia(tenantId, branchIdFinal, fechaConsulta);
     }
 }

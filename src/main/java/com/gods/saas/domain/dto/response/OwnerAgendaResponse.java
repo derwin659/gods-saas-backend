@@ -5,11 +5,14 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
+
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
 public class OwnerAgendaResponse {
+
     private Long appointmentId;
     private Long customerId;
     private Long serviceId;
@@ -25,4 +28,27 @@ public class OwnerAgendaResponse {
     private String barbero;
     private String estado;
     private String telefono;
+
+    // =========================
+    // Pago inicial / reserva
+    // =========================
+    private Boolean requierePagoInicial;
+    private BigDecimal montoPagoInicial;
+    private BigDecimal precioServicio;
+    private BigDecimal saldoPendiente;
+
+    private String metodoPagoInicial;
+    private String numeroOperacionPagoInicial;
+    private String comprobantePagoInicialUrl;
+
+    /**
+     * Estados sugeridos:
+     * PENDIENTE_VALIDACION
+     * VALIDADO
+     * RECHAZADO
+     * NO_REQUIERE
+     */
+    private String estadoPagoInicial;
+
+    private Boolean pagoInicialValidado;
 }
