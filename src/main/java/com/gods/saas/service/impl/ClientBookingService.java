@@ -10,17 +10,26 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.math.BigDecimal;
+
+import java.util.Map;
+
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class ClientBookingService {
+
+    private final TenantPaymentMethodRepository tenantPaymentMethodRepository;
+    private final TenantSettingsRepository tenantSettingsRepository;
 
     private static final LocalTime DEFAULT_OPENING_TIME = LocalTime.of(8, 0);
     private static final LocalTime DEFAULT_CLOSING_TIME = LocalTime.of(21, 0);
@@ -41,10 +50,27 @@ public class ClientBookingService {
         List<ServiceEntity> services = serviceRepository.findByTenant_IdAndActivoTrue(tenantId);
         List<AppUser> barbers = appUserRepository.findByTenant_IdAndRolAndActivoTrue(tenantId, "BARBER");
 
+        List<TenantPaymentMethod> paymentMethods =
+                tenantPaymentMethodRepository.findByTenant_IdAndActiveTrueOrderBySortOrderAscDisplayNameAsc(tenantId);
+
+        TenantSettings settings = tenantSettingsRepository.findByTenantId(tenantId).orElse(null);
+
+        Map<String, Object> config = settings != null && settings.getScheduleConfig() != null
+                ? settings.getScheduleConfig()
+                : Map.of();
+
+        Boolean depositEnabled = getBoolean(config, "bookingDepositEnabled", false);
+        BigDecimal defaultAmount = getBigDecimal(config, "bookingDepositDefaultAmount", BigDecimal.ZERO);
+        Integer defaultPercent = getInteger(config, "bookingDepositDefaultPercent", null);
+
         return BookingBootstrapResponse.builder()
                 .branches(branches.stream().map(BranchMiniResponse::fromEntity).toList())
                 .services(services.stream().map(ServiceMiniResponse::fromEntity).toList())
                 .barbers(barbers.stream().map(BarberMiniResponse::fromEntity).toList())
+                .bookingDepositEnabled(depositEnabled)
+                .bookingDepositDefaultAmount(defaultAmount)
+                .bookingDepositDefaultPercent(defaultPercent)
+                .paymentMethods(paymentMethods.stream().map(PaymentMethodMiniResponse::fromEntity).toList())
                 .build();
     }
 
@@ -233,15 +259,19 @@ public class ClientBookingService {
         Branch branch = branchRepository.findById(req.getBranchId())
                 .orElseThrow(() -> new RuntimeException("Sucursal no encontrada"));
 
-        if (!branch.getTenant().getId().equals(tenantId)) {
+        if (branch.getTenant() == null || !branch.getTenant().getId().equals(tenantId)) {
             throw new RuntimeException("La sucursal no pertenece al tenant");
         }
 
         ServiceEntity service = serviceRepository.findById(req.getServiceId())
                 .orElseThrow(() -> new RuntimeException("Servicio no encontrado"));
 
-        if (!service.getTenant().getId().equals(tenantId)) {
+        if (service.getTenant() == null || !service.getTenant().getId().equals(tenantId)) {
             throw new RuntimeException("El servicio no pertenece al tenant");
+        }
+
+        if (service.getPrecio() == null || service.getPrecio() <= 0) {
+            throw new RuntimeException("El servicio no tiene un precio válido configurado");
         }
 
         LocalDate fecha = LocalDate.parse(req.getDate());
@@ -261,7 +291,12 @@ public class ClientBookingService {
             validateBarberBranch(barber, req.getBranchId());
 
             if (!isBarberAvailableConsideringAllRules(
-                    tenantId, req.getBranchId(), barber.getId(), fecha, horaInicio, horaFin
+                    tenantId,
+                    req.getBranchId(),
+                    barber.getId(),
+                    fecha,
+                    horaInicio,
+                    horaFin
             )) {
                 throw new RuntimeException("Ese horario ya no está disponible");
             }
@@ -275,6 +310,69 @@ public class ClientBookingService {
             );
         }
 
+        BigDecimal totalAmount = BigDecimal.valueOf(service.getPrecio())
+                .setScale(2, RoundingMode.HALF_UP);
+
+        boolean depositRequired = Boolean.TRUE.equals(req.getDepositRequired());
+
+        BigDecimal depositAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        BigDecimal remainingAmount = totalAmount;
+
+        String appointmentStatus = "CREATED";
+        String depositStatus = "NOT_REQUIRED";
+
+        TenantPaymentMethod depositMethod = null;
+        String depositMethodCode = null;
+        String depositMethodName = null;
+
+        if (depositRequired) {
+            if (req.getDepositPaymentMethodId() == null) {
+                throw new RuntimeException("Debes seleccionar un método de pago para el inicial");
+            }
+
+            depositMethod = tenantPaymentMethodRepository
+                    .findByIdAndTenant_IdAndActiveTrue(req.getDepositPaymentMethodId(), tenantId)
+                    .orElseThrow(() -> new RuntimeException("Método de pago no válido o inactivo"));
+
+            if (depositMethod.getBranch() != null
+                    && !depositMethod.getBranch().getId().equals(req.getBranchId())) {
+                throw new RuntimeException("El método de pago no pertenece a la sede seleccionada");
+            }
+
+            if (req.getDepositAmount() == null
+                    || req.getDepositAmount().compareTo(BigDecimal.ZERO) <= 0) {
+                throw new RuntimeException("El monto del pago inicial debe ser mayor a cero");
+            }
+
+            depositAmount = req.getDepositAmount()
+                    .setScale(2, RoundingMode.HALF_UP);
+
+            if (depositAmount.compareTo(totalAmount) > 0) {
+                throw new RuntimeException("El pago inicial no puede ser mayor al precio del servicio");
+            }
+
+            if (Boolean.TRUE.equals(depositMethod.getRequiresOperationCode())
+                    && (req.getDepositOperationCode() == null
+                    || req.getDepositOperationCode().isBlank())) {
+                throw new RuntimeException("Debes ingresar el número de operación o referencia");
+            }
+
+            if (Boolean.TRUE.equals(depositMethod.getRequiresEvidence())
+                    && (req.getDepositEvidenceUrl() == null
+                    || req.getDepositEvidenceUrl().isBlank())) {
+                throw new RuntimeException("Debes adjuntar el comprobante del pago");
+            }
+
+            remainingAmount = totalAmount.subtract(depositAmount)
+                    .setScale(2, RoundingMode.HALF_UP);
+
+            appointmentStatus = "PENDING_DEPOSIT_VALIDATION";
+            depositStatus = "PENDING_VALIDATION";
+
+            depositMethodCode = depositMethod.getCode();
+            depositMethodName = depositMethod.getDisplayName();
+        }
+
         Appointment appointment = Appointment.builder()
                 .tenant(customer.getTenant())
                 .branch(branch)
@@ -284,14 +382,27 @@ public class ClientBookingService {
                 .fecha(fecha)
                 .horaInicio(horaInicio)
                 .horaFin(horaFin)
-                .estado("CREATED")
+                .estado(appointmentStatus)
                 .notas(null)
+
+                // Pago inicial
+                .totalAmount(totalAmount)
+                .depositRequired(depositRequired)
+                .depositAmount(depositAmount)
+                .remainingAmount(remainingAmount)
+                .depositStatus(depositStatus)
+                .depositPaymentMethod(depositMethod)
+                .depositMethodCode(depositMethodCode)
+                .depositMethodName(depositMethodName)
+                .depositOperationCode(trimToNull(req.getDepositOperationCode()))
+                .depositEvidenceUrl(trimToNull(req.getDepositEvidenceUrl()))
+                .depositNote(trimToNull(req.getDepositNote()))
+                .depositPaidAt(depositRequired ? LocalDateTime.now(BUSINESS_ZONE) : null)
                 .build();
 
         Appointment saved = appointmentRepository.save(appointment);
+
         notificationService.notifyBookingCreated(saved);
-
-
 
         return CreateAppointmentResponse.builder()
                 .appointmentId(saved.getId())
@@ -537,5 +648,41 @@ public class ClientBookingService {
         int minutesToAdd = remainder == 0 ? SLOT_INTERVAL_MINUTES : SLOT_INTERVAL_MINUTES - remainder;
 
         return time.withSecond(0).withNano(0).plusMinutes(minutesToAdd);
+    }
+
+    private String trimToNull(String value) {
+        if (value == null) return null;
+        String trimmed = value.trim();
+        return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private Boolean getBoolean(Map<String, Object> map, String key, Boolean defaultValue) {
+        Object value = map.get(key);
+        if (value == null) return defaultValue;
+        if (value instanceof Boolean b) return b;
+        return Boolean.parseBoolean(value.toString());
+    }
+
+    private Integer getInteger(Map<String, Object> map, String key, Integer defaultValue) {
+        Object value = map.get(key);
+        if (value == null) return defaultValue;
+        if (value instanceof Number n) return n.intValue();
+        try {
+            return Integer.parseInt(value.toString());
+        } catch (Exception e) {
+            return defaultValue;
+        }
+    }
+
+    private BigDecimal getBigDecimal(Map<String, Object> map, String key, BigDecimal defaultValue) {
+        Object value = map.get(key);
+        if (value == null) return defaultValue;
+        if (value instanceof BigDecimal bd) return bd;
+        if (value instanceof Number n) return BigDecimal.valueOf(n.doubleValue()).setScale(2, RoundingMode.HALF_UP);
+        try {
+            return new BigDecimal(value.toString()).setScale(2, RoundingMode.HALF_UP);
+        } catch (Exception e) {
+            return defaultValue;
+        }
     }
 }

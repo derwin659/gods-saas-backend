@@ -10,6 +10,8 @@ import java.util.List;
 @Getter
 @Builder
 public class SaleResponse {
+    private BigDecimal depositApplied;
+    private BigDecimal amountToCollectNow;
     private Long saleId;
     private Long tenantId;
     private Long branchId;

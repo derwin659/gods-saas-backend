@@ -35,7 +35,6 @@ public class BarberSaleService {
     private final SaleService saleService;
     private final CustomerCutHistoryService customerCutHistoryService;
 
-
     @Transactional(Transactional.TxType.SUPPORTS)
     public List<SimpleServiceResponse> getAvailableServices(Long tenantId) {
         return serviceRepository.findByTenant_IdAndActivoTrueOrderByNombreAsc(tenantId)
@@ -43,7 +42,9 @@ public class BarberSaleService {
                 .map(service -> SimpleServiceResponse.builder()
                         .id(service.getId())
                         .nombre(service.getNombre())
-                        .precio(service.getPrecio() == null ? BigDecimal.ZERO : BigDecimal.valueOf(service.getPrecio()))
+                        .precio(service.getPrecio() == null
+                                ? BigDecimal.ZERO
+                                : BigDecimal.valueOf(service.getPrecio()).setScale(2, RoundingMode.HALF_UP))
                         .activo(service.getActivo())
                         .imageUrl(service.getImageUrl())
                         .build())
@@ -61,9 +62,13 @@ public class BarberSaleService {
     private ProductResponse toProductResponse(Product product) {
         int stockActual = product.getStockActual() == null ? 0 : product.getStockActual();
         int stockMinimo = product.getStockMinimo() == null ? 0 : product.getStockMinimo();
-        BigDecimal precioVenta = product.getPrecioVenta() != null && product.getPrecioVenta().compareTo(BigDecimal.ZERO) > 0
+
+        BigDecimal precioVenta = product.getPrecioVenta() != null
+                && product.getPrecioVenta().compareTo(BigDecimal.ZERO) > 0
                 ? product.getPrecioVenta()
-                : (product.getPrecio() != null ? BigDecimal.valueOf(product.getPrecio()) : BigDecimal.ZERO);
+                : (product.getPrecio() != null
+                ? BigDecimal.valueOf(product.getPrecio())
+                : BigDecimal.ZERO);
 
         return ProductResponse.builder()
                 .id(product.getId())
@@ -73,7 +78,9 @@ public class BarberSaleService {
                 .precioCompra(product.getPrecioCompra() == null ? BigDecimal.ZERO : product.getPrecioCompra())
                 .precioVenta(precioVenta)
                 .precio(product.getPrecio())
-                .barberCommissionAmount(product.getBarberCommissionAmount() == null ? BigDecimal.ZERO : product.getBarberCommissionAmount())
+                .barberCommissionAmount(product.getBarberCommissionAmount() == null
+                        ? BigDecimal.ZERO
+                        : product.getBarberCommissionAmount())
                 .stockActual(stockActual)
                 .stockMinimo(stockMinimo)
                 .categoria(product.getCategoria())
@@ -96,18 +103,14 @@ public class BarberSaleService {
         }
 
         boolean hasMixedPayments = request.getPayments() != null && !request.getPayments().isEmpty();
+
         if (!hasMixedPayments && (request.getMetodoPago() == null || request.getMetodoPago().isBlank())) {
             throw new RuntimeException("metodoPago es obligatorio");
         }
 
-        String metodoPago = hasMixedPayments ? "MIXED" : request.getMetodoPago().trim().toUpperCase();
+        String metodoPago = hasMixedPayments ? "MIXED" : normalizePaymentMethod(request.getMetodoPago());
 
-        if (!hasMixedPayments
-                && !"CASH".equals(metodoPago)
-                && !"CARD".equals(metodoPago)
-                && !"YAPE".equals(metodoPago)
-                && !"PLIN".equals(metodoPago)
-                && !"TRANSFER".equals(metodoPago)) {
+        if (!hasMixedPayments && !isValidPaymentMethod(metodoPago)) {
             throw new RuntimeException("metodoPago no válido");
         }
 
@@ -120,9 +123,7 @@ public class BarberSaleService {
                 )
                 .orElseThrow(() -> new RuntimeException("No se encontró la cita"));
 
-        String estadoActual = appointment.getEstado() == null
-                ? ""
-                : appointment.getEstado().trim().toUpperCase();
+        String estadoActual = normalize(appointment.getEstado());
 
         if ("ATENDIDO".equals(estadoActual)
                 || "COMPLETADO".equals(estadoActual)
@@ -131,6 +132,7 @@ public class BarberSaleService {
         }
 
         ServiceEntity service = appointment.getService();
+
         if (service == null) {
             throw new RuntimeException("La cita no tiene servicio asociado");
         }
@@ -145,12 +147,16 @@ public class BarberSaleService {
 
         BigDecimal serviceTotal = BigDecimal.valueOf(service.getPrecio())
                 .setScale(2, RoundingMode.HALF_UP);
+
         BigDecimal tipAmount = request.getTipAmount() == null
                 ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
                 : request.getTipAmount().setScale(2, RoundingMode.HALF_UP);
+
         if (tipAmount.compareTo(BigDecimal.ZERO) < 0) {
             throw new RuntimeException("La propina no puede ser negativa");
         }
+
+        BigDecimal depositApplied = resolveApprovedDepositAmount(appointment, serviceTotal);
 
         List<SaleItemRequest> saleItems = new ArrayList<>();
 
@@ -162,6 +168,7 @@ public class BarberSaleService {
         saleItems.add(serviceItem);
 
         BigDecimal productsTotal = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+
         if (request.getItems() != null) {
             for (SaleItemRequest extra : request.getItems()) {
                 if (extra == null || extra.getProductId() == null) {
@@ -175,18 +182,25 @@ public class BarberSaleService {
                     throw new RuntimeException("El producto " + product.getNombre() + " está inactivo");
                 }
 
-                int cantidad = extra.getCantidad() == null || extra.getCantidad() <= 0 ? 1 : extra.getCantidad();
+                int cantidad = extra.getCantidad() == null || extra.getCantidad() <= 0
+                        ? 1
+                        : extra.getCantidad();
 
                 if (!Boolean.TRUE.equals(product.getPermiteVentaSinStock())) {
                     int stock = product.getStockActual() == null ? 0 : product.getStockActual();
+
                     if (stock < cantidad) {
                         throw new RuntimeException("Stock insuficiente para " + product.getNombre());
                     }
                 }
 
-                BigDecimal unitPrice = product.getPrecioVenta() != null && product.getPrecioVenta().compareTo(BigDecimal.ZERO) > 0
+                BigDecimal unitPrice = product.getPrecioVenta() != null
+                        && product.getPrecioVenta().compareTo(BigDecimal.ZERO) > 0
                         ? product.getPrecioVenta()
-                        : (product.getPrecio() != null ? BigDecimal.valueOf(product.getPrecio()) : BigDecimal.ZERO);
+                        : (product.getPrecio() != null
+                        ? BigDecimal.valueOf(product.getPrecio())
+                        : BigDecimal.ZERO);
+
                 unitPrice = unitPrice.setScale(2, RoundingMode.HALF_UP);
 
                 SaleItemRequest productItem = new SaleItemRequest();
@@ -196,16 +210,29 @@ public class BarberSaleService {
                 productItem.setPrecioUnitario(unitPrice.doubleValue());
                 saleItems.add(productItem);
 
-                productsTotal = productsTotal.add(unitPrice.multiply(BigDecimal.valueOf(cantidad))).setScale(2, RoundingMode.HALF_UP);
+                productsTotal = productsTotal
+                        .add(unitPrice.multiply(BigDecimal.valueOf(cantidad)))
+                        .setScale(2, RoundingMode.HALF_UP);
             }
         }
 
-        BigDecimal total = serviceTotal.add(productsTotal).add(tipAmount).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal fullTotal = serviceTotal
+                .add(productsTotal)
+                .add(tipAmount)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal amountToCollectNow = fullTotal
+                .subtract(depositApplied)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        if (amountToCollectNow.compareTo(BigDecimal.ZERO) < 0) {
+            amountToCollectNow = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
 
         BigDecimal cashReceived = null;
         BigDecimal change = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
 
-        if (!hasMixedPayments && "CASH".equals(metodoPago)) {
+        if (!hasMixedPayments && "EFECTIVO".equals(metodoPago)) {
             if (request.getCashReceived() == null) {
                 throw new RuntimeException("Para pago en efectivo debes enviar cashReceived");
             }
@@ -213,11 +240,12 @@ public class BarberSaleService {
             cashReceived = BigDecimal.valueOf(request.getCashReceived())
                     .setScale(2, RoundingMode.HALF_UP);
 
-            if (cashReceived.compareTo(total) < 0) {
-                throw new RuntimeException("El monto recibido no puede ser menor al total");
+            if (cashReceived.compareTo(amountToCollectNow) < 0) {
+                throw new RuntimeException("El monto recibido no puede ser menor al saldo pendiente");
             }
 
-            change = cashReceived.subtract(total).setScale(2, RoundingMode.HALF_UP);
+            change = cashReceived.subtract(amountToCollectNow)
+                    .setScale(2, RoundingMode.HALF_UP);
         }
 
         CreateSaleRequest saleRequest = new CreateSaleRequest();
@@ -237,15 +265,12 @@ public class BarberSaleService {
         saleRequest.setCutType(request.getCutType());
         saleRequest.setCutDetail(request.getCutDetail());
         saleRequest.setCutObservations(request.getCutObservations());
-
         saleRequest.setItems(saleItems);
-        saleRequest.setCutType(request.getCutType());
-        saleRequest.setCutDetail(request.getCutDetail());
-        saleRequest.setCutObservations(request.getCutObservations());
 
         SaleResponse saleResponse = saleService.crearVenta(saleRequest);
 
         appointment.setEstado("COMPLETADO");
+        appointment.setRemainingAmount(amountToCollectNow);
 
         if (request.getNotes() != null && !request.getNotes().isBlank()) {
             String notes = request.getNotes().trim();
@@ -261,14 +286,24 @@ public class BarberSaleService {
         int customerPointsBalance = saleResponse.getPuntosDisponibles() != null ? saleResponse.getPuntosDisponibles() : 0;
 
         String clienteNombre = "Sin cliente";
+
         if (customer != null) {
             String nombre = customer.getNombres() != null ? customer.getNombres().trim() : "";
             String apellido = customer.getApellidos() != null ? customer.getApellidos().trim() : "";
             String fullName = (nombre + " " + apellido).trim();
+
             if (!fullName.isBlank()) {
                 clienteNombre = fullName;
             }
         }
+
+        BigDecimal finalDepositApplied = saleResponse.getDepositApplied() == null
+                ? depositApplied
+                : saleResponse.getDepositApplied();
+
+        BigDecimal finalAmountToCollectNow = saleResponse.getAmountToCollectNow() == null
+                ? amountToCollectNow
+                : saleResponse.getAmountToCollectNow();
 
         CreateSaleFromAppointmentResponse response = new CreateSaleFromAppointmentResponse();
         response.setSuccess(true);
@@ -278,13 +313,107 @@ public class BarberSaleService {
         response.setCliente(clienteNombre);
         response.setServicio(service.getNombre() != null ? service.getNombre() : "Servicio");
         response.setMetodoPago(metodoPago);
-        response.setTotal(saleResponse.getTotal() != null ? saleResponse.getTotal().doubleValue() : total.doubleValue());
-        response.setCashReceived(saleResponse.getCashReceived() != null ? saleResponse.getCashReceived().doubleValue() : (cashReceived != null ? cashReceived.doubleValue() : null));
-        response.setChange(saleResponse.getChangeAmount() != null ? saleResponse.getChangeAmount().doubleValue() : change.doubleValue());
+
+        response.setTotal(
+                saleResponse.getTotal() != null
+                        ? saleResponse.getTotal().doubleValue()
+                        : fullTotal.doubleValue()
+        );
+
+        response.setDepositApplied(finalDepositApplied.doubleValue());
+        response.setAmountToCollectNow(finalAmountToCollectNow.doubleValue());
+        response.setDepositStatus(appointment.getDepositStatus());
+        response.setDepositMethodCode(appointment.getDepositMethodCode());
+        response.setDepositMethodName(appointment.getDepositMethodName());
+
+        response.setCashReceived(
+                saleResponse.getCashReceived() != null
+                        ? saleResponse.getCashReceived().doubleValue()
+                        : (cashReceived != null ? cashReceived.doubleValue() : null)
+        );
+
+        response.setChange(
+                saleResponse.getChangeAmount() != null
+                        ? saleResponse.getChangeAmount().doubleValue()
+                        : change.doubleValue()
+        );
+
         response.setPointsEarned(pointsEarned);
         response.setCustomerPointsBalance(customerPointsBalance);
         response.setFechaHora(LocalDateTime.now().toString());
 
         return response;
+    }
+
+    private BigDecimal resolveApprovedDepositAmount(Appointment appointment, BigDecimal serviceTotal) {
+        if (!Boolean.TRUE.equals(appointment.getDepositRequired())) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        String depositStatus = normalize(appointment.getDepositStatus());
+
+        if ("PENDING_VALIDATION".equals(depositStatus)) {
+            throw new RuntimeException("La reserva tiene un pago inicial pendiente de validación");
+        }
+
+        if ("REJECTED".equals(depositStatus)) {
+            throw new RuntimeException("El pago inicial de esta reserva fue rechazado");
+        }
+
+        if (!"PAID".equals(depositStatus)) {
+            throw new RuntimeException("La reserva requiere pago inicial aprobado");
+        }
+
+        BigDecimal depositAmount = appointment.getDepositAmount() == null
+                ? BigDecimal.ZERO
+                : appointment.getDepositAmount();
+
+        depositAmount = depositAmount.setScale(2, RoundingMode.HALF_UP);
+
+        if (depositAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        if (depositAmount.compareTo(serviceTotal) > 0) {
+            return serviceTotal;
+        }
+
+        return depositAmount;
+    }
+
+    private boolean isValidPaymentMethod(String metodoPago) {
+        String method = normalizePaymentMethod(metodoPago);
+
+        return "EFECTIVO".equals(method)
+                || "TARJETA".equals(method)
+                || "YAPE".equals(method)
+                || "PLIN".equals(method)
+                || "TRANSFER".equals(method)
+                || "NEQUI".equals(method)
+                || "DAVIPLATA".equals(method)
+                || "PAGO_MOVIL".equals(method)
+                || "ZELLE".equals(method)
+                || "QR".equals(method)
+                || "FREE".equals(method)
+                || "OTHER".equals(method);
+    }
+
+    private String normalizePaymentMethod(String value) {
+        if (value == null || value.isBlank()) {
+            return "EFECTIVO";
+        }
+
+        return switch (value.trim().toUpperCase()) {
+            case "CASH", "EFECTIVO" -> "EFECTIVO";
+            case "CARD", "TARJETA" -> "TARJETA";
+            case "TRANSFER", "TRANSFERENCIA" -> "TRANSFER";
+            case "PAGO MOVIL", "PAGO_MÓVIL", "PAGO_MOVIL" -> "PAGO_MOVIL";
+            case "FREE", "GRATIS", "CORTESIA", "CORTESÍA" -> "FREE";
+            default -> value.trim().toUpperCase();
+        };
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim().toUpperCase();
     }
 }

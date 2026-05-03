@@ -291,11 +291,17 @@ public class SaleServiceImpl implements SaleService {
 
         AppUser tipBarber = resolveTipBarber(tenant, request.getTipBarberUserId(), firstBarberUserIdFromItems, tipAmount);
 
-        List<SalePayment> payments = buildPayments(request, total);
-        String metodoPago = resolveMainPaymentMethod(request.getMetodoPago(), payments, total);
-        BigDecimal cashReceived = resolveCashReceived(request, payments, metodoPago, total);
-        BigDecimal changeAmount = resolveChangeAmount(metodoPago, cashReceived, total);
+        BigDecimal depositApplied = resolveDepositApplied(appointment, total);
+        BigDecimal amountToCollectNow = total.subtract(depositApplied).setScale(2, RoundingMode.HALF_UP);
 
+        if (amountToCollectNow.compareTo(BigDecimal.ZERO) < 0) {
+            amountToCollectNow = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        List<SalePayment> payments = buildPayments(request, total, depositApplied, amountToCollectNow);
+        String metodoPago = resolveMainPaymentMethod(request.getMetodoPago(), payments, total);
+        BigDecimal cashReceived = resolveCashReceived(request, payments, metodoPago, amountToCollectNow);
+        BigDecimal changeAmount = resolveChangeAmount(payments, cashReceived, amountToCollectNow);
         sale.setMetodoPago(metodoPago);
         sale.setSubtotal(subtotalVenta.setScale(2, RoundingMode.HALF_UP));
         sale.setDiscount(discount);
@@ -378,6 +384,8 @@ public class SaleServiceImpl implements SaleService {
         }
 
         return SaleResponse.builder()
+                .depositApplied(depositApplied)
+                .amountToCollectNow(amountToCollectNow)
                 .saleId(savedSale.getId())
                 .cashRegisterId(savedSale.getCashRegister() != null ? savedSale.getCashRegister().getId() : null)
                 .tenantId(savedSale.getTenant().getId())
@@ -402,29 +410,63 @@ public class SaleServiceImpl implements SaleService {
                 .build();
     }
 
-    private List<SalePayment> buildPayments(CreateSaleRequest request, BigDecimal total) {
+    private List<SalePayment> buildPayments(
+            CreateSaleRequest request,
+            BigDecimal total,
+            BigDecimal depositApplied,
+            BigDecimal amountToCollectNow
+    ) {
         List<SalePaymentRequest> rawPayments = request.getPayments();
         List<SalePayment> result = new ArrayList<>();
+
+        BigDecimal deposit = safe(depositApplied).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal saldo = safe(amountToCollectNow).setScale(2, RoundingMode.HALF_UP);
+
+        if (deposit.compareTo(BigDecimal.ZERO) > 0) {
+            result.add(SalePayment.builder()
+                    .method("DEPOSIT_APPLIED")
+                    .amount(deposit)
+                    .build());
+        }
 
         if (rawPayments != null && !rawPayments.isEmpty()) {
             for (SalePaymentRequest paymentRequest : rawPayments) {
                 if (paymentRequest == null) continue;
+
+                String method = normalizarMetodoPago(paymentRequest.getMethod());
                 BigDecimal amount = safe(paymentRequest.getAmount()).setScale(2, RoundingMode.HALF_UP);
+
                 if (amount.compareTo(BigDecimal.ZERO) <= 0) continue;
 
-                SalePayment payment = SalePayment.builder()
-                        .method(normalizarMetodoPago(paymentRequest.getMethod()))
+                result.add(SalePayment.builder()
+                        .method(method)
                         .amount(amount)
-                        .build();
-                result.add(payment);
+                        .build());
+            }
+        }
+
+        if ((rawPayments == null || rawPayments.isEmpty()) && saldo.compareTo(BigDecimal.ZERO) > 0) {
+            String method = normalizarMetodoPago(request.getMetodoPago());
+
+            if (!"FREE".equals(method)) {
+                result.add(SalePayment.builder()
+                        .method(method)
+                        .amount(saldo)
+                        .build());
             }
         }
 
         if (result.isEmpty()) {
-            String method = normalizarMetodoPago(request.getMetodoPago());
-            if ("FREE".equals(method) || total.compareTo(BigDecimal.ZERO) == 0) {
+            if (total.compareTo(BigDecimal.ZERO) == 0) {
                 return result;
             }
+
+            String method = normalizarMetodoPago(request.getMetodoPago());
+
+            if ("FREE".equals(method)) {
+                return result;
+            }
+
             result.add(SalePayment.builder()
                     .method(method)
                     .amount(total)
@@ -438,7 +480,10 @@ public class SaleServiceImpl implements SaleService {
                 .setScale(2, RoundingMode.HALF_UP);
 
         if (paid.compareTo(total) != 0) {
-            throw new RuntimeException("La suma de pagos debe ser igual al total de la venta. Total: " + total + ", pagado: " + paid);
+            throw new RuntimeException(
+                    "La suma de pagos debe ser igual al total de la venta. Total: "
+                            + total + ", pagado: " + paid
+            );
         }
 
         return result;
@@ -461,42 +506,69 @@ public class SaleServiceImpl implements SaleService {
         return normalizarMetodoPago(payments.get(0).getMethod());
     }
 
-    private BigDecimal resolveCashReceived(CreateSaleRequest request, List<SalePayment> payments, String metodoPago, BigDecimal total) {
-        BigDecimal cashPart = payments == null ? BigDecimal.ZERO : payments.stream()
+    private BigDecimal resolveCashReceived(
+            CreateSaleRequest request,
+            List<SalePayment> payments,
+            String metodoPago,
+            BigDecimal amountToCollectNow
+    ) {
+        BigDecimal cashPart = payments == null
+                ? BigDecimal.ZERO
+                : payments.stream()
                 .filter(p -> "EFECTIVO".equals(normalizarMetodoPago(p.getMethod())))
                 .map(SalePayment::getAmount)
                 .map(this::safe)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
 
-        if ("EFECTIVO".equals(metodoPago)) {
-            BigDecimal received = safe(request.getCashReceived()).setScale(2, RoundingMode.HALF_UP);
-            if (received.compareTo(BigDecimal.ZERO) <= 0) {
-                received = total;
-            }
-            if (received.compareTo(total) < 0) {
-                throw new RuntimeException("El monto recibido no puede ser menor al total");
-            }
-            return received;
-        }
+        BigDecimal saldo = safe(amountToCollectNow).setScale(2, RoundingMode.HALF_UP);
 
-        if (cashPart.compareTo(BigDecimal.ZERO) > 0) {
-            return cashPart;
+        if ("EFECTIVO".equals(metodoPago) || cashPart.compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal received = safe(request.getCashReceived()).setScale(2, RoundingMode.HALF_UP);
+
+            if (received.compareTo(BigDecimal.ZERO) <= 0) {
+                received = cashPart.compareTo(BigDecimal.ZERO) > 0 ? cashPart : saldo;
+            }
+
+            if (received.compareTo(cashPart.compareTo(BigDecimal.ZERO) > 0 ? cashPart : saldo) < 0) {
+                throw new RuntimeException("El monto recibido no puede ser menor al saldo pendiente");
+            }
+
+            return received;
         }
 
         if ("FREE".equals(metodoPago)) {
             return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         }
 
-        return total.setScale(2, RoundingMode.HALF_UP);
+        return saldo.setScale(2, RoundingMode.HALF_UP);
     }
 
-    private BigDecimal resolveChangeAmount(String metodoPago, BigDecimal cashReceived, BigDecimal total) {
-        if (!"EFECTIVO".equals(metodoPago)) {
+    private BigDecimal resolveChangeAmount(
+            List<SalePayment> payments,
+            BigDecimal cashReceived,
+            BigDecimal amountToCollectNow
+    ) {
+        BigDecimal cashPart = payments == null
+                ? BigDecimal.ZERO
+                : payments.stream()
+                .filter(p -> "EFECTIVO".equals(normalizarMetodoPago(p.getMethod())))
+                .map(SalePayment::getAmount)
+                .map(this::safe)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        if (cashPart.compareTo(BigDecimal.ZERO) <= 0) {
             return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         }
-        BigDecimal change = safe(cashReceived).subtract(total).setScale(2, RoundingMode.HALF_UP);
-        return change.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP) : change;
+
+        BigDecimal change = safe(cashReceived)
+                .subtract(cashPart)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        return change.compareTo(BigDecimal.ZERO) < 0
+                ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+                : change;
     }
 
     private AppUser resolveTipBarber(Tenant tenant, Long requestedTipBarberUserId, Long firstBarberUserIdFromItems, BigDecimal tipAmount) {
@@ -634,8 +706,14 @@ public class SaleServiceImpl implements SaleService {
             case "TRANSFER", "TRANSFERENCIA" -> "TRANSFER";
             case "YAPE" -> "YAPE";
             case "PLIN" -> "PLIN";
+            case "NEQUI" -> "NEQUI";
+            case "DAVIPLATA" -> "DAVIPLATA";
+            case "PAGO_MOVIL", "PAGO MÓVIL", "PAGO MOVIL" -> "PAGO_MOVIL";
+            case "ZELLE" -> "ZELLE";
+            case "QR" -> "QR";
             case "MIXED", "MIXTO" -> "MIXED";
             case "FREE", "GRATIS", "CORTESIA", "CORTESÍA" -> "FREE";
+            case "DEPOSIT_APPLIED", "DEPOSITO_APLICADO", "INICIAL_APLICADO" -> "DEPOSIT_APPLIED";
             default -> metodoPago.trim().toUpperCase();
         };
     }
@@ -699,5 +777,40 @@ public class SaleServiceImpl implements SaleService {
                 || nombre.contains("BUZZ")
                 || nombre.contains("CROP")
                 || nombre.contains("MULLET");
+    }
+
+    private BigDecimal resolveDepositApplied(Appointment appointment, BigDecimal total) {
+        if (appointment == null || !Boolean.TRUE.equals(appointment.getDepositRequired())) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        String depositStatus = appointment.getDepositStatus() == null
+                ? ""
+                : appointment.getDepositStatus().trim().toUpperCase();
+
+        if ("PENDING_VALIDATION".equals(depositStatus)) {
+            throw new RuntimeException("La reserva tiene un pago inicial pendiente de validación");
+        }
+
+        if ("REJECTED".equals(depositStatus)) {
+            throw new RuntimeException("El pago inicial de esta reserva fue rechazado");
+        }
+
+        if (!"PAID".equals(depositStatus)) {
+            throw new RuntimeException("La reserva requiere pago inicial aprobado");
+        }
+
+        BigDecimal depositAmount = safe(appointment.getDepositAmount())
+                .setScale(2, RoundingMode.HALF_UP);
+
+        if (depositAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        if (depositAmount.compareTo(total) > 0) {
+            return total.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        return depositAmount;
     }
 }

@@ -7,8 +7,21 @@ import java.math.BigDecimal;
 @Data
 public class SalePaymentRequest {
     /**
-     * CASH / EFECTIVO, YAPE, PLIN, CARD / TARJETA, TRANSFER / TRANSFERENCIA, FREE / GRATIS
+     * Ejemplos:
+     * EFECTIVO / CASH
+     * TARJETA / CARD
+     * YAPE
+     * PLIN
+     * TRANSFER
+     * NEQUI
+     * DAVIPLATA
+     * PAGO_MOVIL
+     * ZELLE
+     * QR
+     * FREE
+     * DEPOSIT_APPLIED = inicial de reserva ya aprobado
      */
     private String method;
+
     private BigDecimal amount;
 }
