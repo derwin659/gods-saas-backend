@@ -9,7 +9,18 @@ import java.math.BigDecimal;
 @Data
 public class CashMovementRequest {
     private CashMovementType type;
+
+    /**
+     * Para INCOME, EXPENSE, ADVANCE_BARBER y PAYMENT_BARBER.
+     */
     private PaymentMethod paymentMethod;
+
+    /**
+     * Para PAYMENT_METHOD_TRANSFER.
+     */
+    private PaymentMethod fromPaymentMethod;
+    private PaymentMethod toPaymentMethod;
+
     private BigDecimal amount;
     private String concept;
     private String note;

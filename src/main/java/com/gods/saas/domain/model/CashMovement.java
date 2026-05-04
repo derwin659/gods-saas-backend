@@ -53,8 +53,20 @@ public class CashMovement {
     private CashMovementType type;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "payment_method", length = 20)
+    @Column(name = "payment_method", length = 30)
     private PaymentMethod paymentMethod;
+
+    /**
+     * Para traslados entre métodos.
+     * Ejemplo: fromPaymentMethod = YAPE, toPaymentMethod = CASH.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "from_payment_method", length = 30)
+    private PaymentMethod fromPaymentMethod;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "to_payment_method", length = 30)
+    private PaymentMethod toPaymentMethod;
 
     @Column(name = "amount", precision = 12, scale = 2, nullable = false)
     private BigDecimal amount;
