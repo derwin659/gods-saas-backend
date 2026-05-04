@@ -33,5 +33,6 @@ public class CashRegisterResponse {
     private BigDecimal movementsExpenseGeneral;
     private BigDecimal movementsAdvanceBarber;
     private BigDecimal movementsPaymentBarber;
+    private List<PaymentMethodSummaryResponse> paymentMethodsSummary;
     private List<CashMovementResponse> movements;
 }

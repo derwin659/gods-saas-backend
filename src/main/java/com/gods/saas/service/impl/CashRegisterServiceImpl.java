@@ -16,14 +16,16 @@ import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
+import com.gods.saas.domain.dto.response.PaymentMethodSummaryResponse;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-
+import java.util.Map;
+import java.util.LinkedHashMap;
 @Service
 @RequiredArgsConstructor
 @Transactional
@@ -69,9 +71,11 @@ public class CashRegisterServiceImpl implements CashRegisterService {
         ZoneId zoneId = getZoneIdForTenant(tenantId);
         LocalDateTime now = LocalDateTime.now(zoneId);
 
+
         CashRegister cashRegister = CashRegister.builder()
                 .tenant(tenant)
                 .branch(branch)
+
                 .openedByUser(openedBy)
                 .assignedUser(assignedUser)
                 .openingAmount(request.getOpeningAmount() == null ? BigDecimal.ZERO : request.getOpeningAmount())
@@ -315,6 +319,9 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 .map(this::mapMovementResponse)
                 .toList();
 
+        List<PaymentMethodSummaryResponse> paymentMethodsSummary =
+                buildPaymentMethodsSummary(cashRegister);
+
         return CashRegisterResponse.builder()
                 .id(cashRegister.getId())
                 .status(cashRegister.getStatus().name())
@@ -334,6 +341,7 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 .closingNote(cashRegister.getClosingNote())
                 .salesTotal(totals.salesTotal())
                 .cashSalesTotal(totals.cashSalesTotal())
+                .paymentMethodsSummary(paymentMethodsSummary)
                 .movementsIncome(totals.movementsIncome())
                 .movementsExpense(totals.movementsExpense())
                 .movementsExpenseGeneral(totals.movementsExpenseGeneral())
@@ -527,5 +535,83 @@ public class CashRegisterServiceImpl implements CashRegisterService {
             BigDecimal expectedCash,
             List<CashMovement> movements
     ) {
+    }
+
+
+    private List<PaymentMethodSummaryResponse> buildPaymentMethodsSummary(CashRegister cashRegister) {
+        if (cashRegister == null || cashRegister.getId() == null) {
+            return List.of();
+        }
+
+        List<Object[]> rows = saleRepository.getPaymentMethodsSummaryByCashRegisterId(cashRegister.getId());
+
+        if (rows == null || rows.isEmpty()) {
+            return List.of();
+        }
+
+        Map<String, PaymentMethodSummaryResponse> result = new LinkedHashMap<>();
+
+        for (Object[] row : rows) {
+            String method = normalizePaymentMethodCode(row[0]);
+            Long count = toLong(row[1]);
+            BigDecimal total = toBigDecimal(row[2]);
+
+            if (method == null || method.isBlank() || total.compareTo(BigDecimal.ZERO) <= 0) {
+                continue;
+            }
+
+            result.put(
+                    method,
+                    PaymentMethodSummaryResponse.builder()
+                            .paymentMethod(method)
+                            .count(count)
+                            .totalAmount(total)
+                            .build()
+            );
+        }
+
+        return new ArrayList<>(result.values());
+    }
+
+    private String normalizePaymentMethodCode(Object raw) {
+        if (raw == null) return null;
+
+        String value = raw.toString()
+                .trim()
+                .toUpperCase(Locale.ROOT)
+                .replace("Á", "A")
+                .replace("É", "E")
+                .replace("Í", "I")
+                .replace("Ó", "O")
+                .replace("Ú", "U");
+
+        return switch (value) {
+            case "EFECTIVO" -> "CASH";
+            case "TARJETA" -> "CARD";
+            case "TRANSFERENCIA" -> "TRANSFER";
+            case "GRATIS" -> "FREE";
+            default -> value;
+        };
+    }
+
+    private Long toLong(Object value) {
+        if (value == null) return 0L;
+        if (value instanceof Number number) return number.longValue();
+        try {
+            return Long.parseLong(value.toString());
+        } catch (Exception e) {
+            return 0L;
+        }
+    }
+
+    private BigDecimal toBigDecimal(Object value) {
+        if (value == null) return BigDecimal.ZERO;
+        if (value instanceof BigDecimal bigDecimal) return bigDecimal;
+        if (value instanceof Number number) return BigDecimal.valueOf(number.doubleValue());
+        try {
+            return new BigDecimal(value.toString());
+        } catch (Exception e) {
+            return BigDecimal.ZERO;
+        }
     }
 }

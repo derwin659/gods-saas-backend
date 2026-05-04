@@ -602,4 +602,57 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
             @Param("tenantId") Long tenantId,
             @Param("branchId") Long branchId
     );
+
+
+
+    @Query(value = """
+    with payment_rows as (
+        select
+            s.sale_id as sale_id,
+            case
+                when upper(trim(sp.method)) in ('EFECTIVO', 'CASH') then 'CASH'
+                when upper(trim(sp.method)) in ('TARJETA', 'CARD') then 'CARD'
+                when upper(trim(sp.method)) in ('TRANSFERENCIA', 'TRANSFER') then 'TRANSFER'
+                when upper(trim(sp.method)) in ('GRATIS', 'FREE') then 'FREE'
+                else upper(trim(sp.method))
+            end as payment_method,
+            coalesce(sp.amount, 0) as amount
+        from sale s
+        join sale_payment sp on sp.sale_id = s.sale_id
+        where s.cash_register_id = :cashRegisterId
+
+        union all
+
+        select
+            s.sale_id as sale_id,
+            case
+                when upper(trim(coalesce(s.metodo_pago, ''))) in ('EFECTIVO', 'CASH') then 'CASH'
+                when upper(trim(coalesce(s.metodo_pago, ''))) in ('TARJETA', 'CARD') then 'CARD'
+                when upper(trim(coalesce(s.metodo_pago, ''))) in ('TRANSFERENCIA', 'TRANSFER') then 'TRANSFER'
+                when upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE') then 'FREE'
+                else upper(trim(coalesce(s.metodo_pago, 'CASH')))
+            end as payment_method,
+            coalesce(s.total, 0) as amount
+        from sale s
+        where s.cash_register_id = :cashRegisterId
+          and not exists (
+              select 1
+              from sale_payment spx
+              where spx.sale_id = s.sale_id
+          )
+    )
+    select
+        payment_method,
+        count(distinct sale_id),
+        coalesce(sum(amount), 0)
+    from payment_rows
+    where payment_method is not null
+      and payment_method <> ''
+      and payment_method <> 'MIXED'
+    group by payment_method
+    order by payment_method asc
+    """, nativeQuery = true)
+    List<Object[]> getPaymentMethodsSummaryByCashRegisterId(
+            @Param("cashRegisterId") Long cashRegisterId
+    );
 }
