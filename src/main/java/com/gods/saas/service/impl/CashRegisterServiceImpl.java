@@ -194,6 +194,7 @@ public class CashRegisterServiceImpl implements CashRegisterService {
             fromPaymentMethod = request.getFromPaymentMethod();
             toPaymentMethod = request.getToPaymentMethod();
             validatePaymentTransfer(fromPaymentMethod, toPaymentMethod);
+            validateAvailableBalanceForTransfer(cashRegister, fromPaymentMethod, amount, null);
             paymentMethod = toPaymentMethod;
             barberUser = null;
         }
@@ -236,6 +237,27 @@ public class CashRegisterServiceImpl implements CashRegisterService {
             throw new IllegalStateException("El origen y destino no pueden ser el mismo método.");
         }
     }
+
+    private void validateAvailableBalanceForTransfer(
+            CashRegister cashRegister,
+            PaymentMethod fromPaymentMethod,
+            BigDecimal amount,
+            Long excludedMovementId
+    ) {
+        String fromCode = normalizePaymentMethodCode(fromPaymentMethod == null ? null : fromPaymentMethod.name());
+        BigDecimal available = calculatePaymentMethodBalances(cashRegister, excludedMovementId)
+                .getOrDefault(fromCode, BigDecimal.ZERO);
+
+        if (safe(amount).compareTo(available) > 0) {
+            throw new IllegalStateException(
+                    "No puedes trasladar S/ " + safe(amount).setScale(2, java.math.RoundingMode.HALF_UP)
+                            + " desde " + paymentMethodLabel(fromCode)
+                            + " porque solo tienes S/ " + available.setScale(2, java.math.RoundingMode.HALF_UP)
+                            + " disponible."
+            );
+        }
+    }
+
 
     private void validateCashActor(Long actorUserId, Long tenantId) {
         boolean allowed = userTenantRoleRepository.existsByUserIdAndTenantIdAndRoleIn(
@@ -286,6 +308,7 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                     ? movement.getToPaymentMethod()
                     : request.getToPaymentMethod();
             validatePaymentTransfer(fromPaymentMethod, toPaymentMethod);
+            validateAvailableBalanceForTransfer(cashRegister, fromPaymentMethod, amount, movement.getId());
             paymentMethod = toPaymentMethod;
             barberUser = null;
         }
@@ -607,46 +630,8 @@ public class CashRegisterServiceImpl implements CashRegisterService {
             return List.of();
         }
 
-        Map<String, BigDecimal> totals = new LinkedHashMap<>();
-        Map<String, Long> counts = new LinkedHashMap<>();
-
-        // Saldo inicial de caja siempre pertenece a efectivo físico.
-        addToPaymentSummary(totals, counts, "CASH", safe(cashRegister.getOpeningAmount()), 0L);
-
-        List<Object[]> rows = saleRepository.getPaymentMethodsSummaryByCashRegisterId(cashRegister.getId());
-        if (rows != null) {
-            for (Object[] row : rows) {
-                String method = normalizePaymentMethodCode(row[0]);
-                Long count = toLong(row[1]);
-                BigDecimal total = toBigDecimal(row[2]);
-                addToPaymentSummary(totals, counts, method, total, count);
-            }
-        }
-
-        List<CashMovement> movements = cashMovementRepository.findByCashRegister_IdOrderByMovementDateDesc(cashRegister.getId());
-        for (CashMovement movement : movements) {
-            BigDecimal amount = safe(movement.getAmount());
-            if (amount.compareTo(BigDecimal.ZERO) <= 0 || movement.getType() == null) {
-                continue;
-            }
-
-            if (movement.getType() == CashMovementType.PAYMENT_METHOD_TRANSFER) {
-                addToPaymentSummary(totals, counts, movement.getFromPaymentMethod(), amount.negate(), 0L);
-                addToPaymentSummary(totals, counts, movement.getToPaymentMethod(), amount, 0L);
-                continue;
-            }
-
-            if (isIncomeMovement(movement)) {
-                addToPaymentSummary(totals, counts, movement.getPaymentMethod(), amount, 0L);
-                continue;
-            }
-
-            if (movement.getType() == CashMovementType.EXPENSE
-                    || movement.getType() == CashMovementType.ADVANCE_BARBER
-                    || movement.getType() == CashMovementType.PAYMENT_BARBER) {
-                addToPaymentSummary(totals, counts, movement.getPaymentMethod(), amount.negate(), 0L);
-            }
-        }
+        Map<String, BigDecimal> totals = calculatePaymentMethodBalances(cashRegister, null);
+        Map<String, Long> counts = calculatePaymentMethodCounts(cashRegister);
 
         return totals.entrySet().stream()
                 .filter(e -> e.getValue().compareTo(BigDecimal.ZERO) > 0)
@@ -656,6 +641,81 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                         .totalAmount(e.getValue())
                         .build())
                 .toList();
+    }
+
+    private Map<String, BigDecimal> calculatePaymentMethodBalances(CashRegister cashRegister, Long excludedMovementId) {
+        Map<String, BigDecimal> totals = new LinkedHashMap<>();
+        Map<String, Long> ignoredCounts = new LinkedHashMap<>();
+
+        if (cashRegister == null || cashRegister.getId() == null) {
+            return totals;
+        }
+
+        // Saldo inicial de caja siempre pertenece a efectivo físico.
+        addToPaymentSummary(totals, ignoredCounts, "CASH", safe(cashRegister.getOpeningAmount()), 0L);
+
+        List<Object[]> rows = saleRepository.getPaymentMethodsSummaryByCashRegisterId(cashRegister.getId());
+        if (rows != null) {
+            for (Object[] row : rows) {
+                String method = normalizePaymentMethodCode(row[0]);
+                BigDecimal total = toBigDecimal(row[2]);
+                addToPaymentSummary(totals, ignoredCounts, method, total, 0L);
+            }
+        }
+
+        List<CashMovement> movements = cashMovementRepository.findByCashRegister_IdOrderByMovementDateDesc(cashRegister.getId());
+        for (CashMovement movement : movements) {
+            if (movement == null || movement.getId() == null) {
+                continue;
+            }
+            if (excludedMovementId != null && excludedMovementId.equals(movement.getId())) {
+                continue;
+            }
+
+            BigDecimal movementAmount = safe(movement.getAmount());
+            if (movementAmount.compareTo(BigDecimal.ZERO) <= 0 || movement.getType() == null) {
+                continue;
+            }
+
+            if (movement.getType() == CashMovementType.PAYMENT_METHOD_TRANSFER) {
+                addToPaymentSummary(totals, ignoredCounts, movement.getFromPaymentMethod(), movementAmount.negate(), 0L);
+                addToPaymentSummary(totals, ignoredCounts, movement.getToPaymentMethod(), movementAmount, 0L);
+                continue;
+            }
+
+            if (isIncomeMovement(movement)) {
+                addToPaymentSummary(totals, ignoredCounts, movement.getPaymentMethod(), movementAmount, 0L);
+                continue;
+            }
+
+            if (movement.getType() == CashMovementType.EXPENSE
+                    || movement.getType() == CashMovementType.ADVANCE_BARBER
+                    || movement.getType() == CashMovementType.PAYMENT_BARBER) {
+                addToPaymentSummary(totals, ignoredCounts, movement.getPaymentMethod(), movementAmount.negate(), 0L);
+            }
+        }
+
+        return totals;
+    }
+
+    private Map<String, Long> calculatePaymentMethodCounts(CashRegister cashRegister) {
+        Map<String, Long> counts = new LinkedHashMap<>();
+        if (cashRegister == null || cashRegister.getId() == null) {
+            return counts;
+        }
+
+        List<Object[]> rows = saleRepository.getPaymentMethodsSummaryByCashRegisterId(cashRegister.getId());
+        if (rows != null) {
+            for (Object[] row : rows) {
+                String method = normalizePaymentMethodCode(row[0]);
+                Long count = toLong(row[1]);
+                if (method != null && !method.isBlank() && count > 0) {
+                    counts.put(method, counts.getOrDefault(method, 0L) + count);
+                }
+            }
+        }
+
+        return counts;
     }
 
     private void addToPaymentSummary(
@@ -703,6 +763,21 @@ public class CashRegisterServiceImpl implements CashRegisterService {
             case "TRANSFERENCIA" -> "TRANSFER";
             case "GRATIS" -> "FREE";
             default -> value;
+        };
+    }
+
+    private String paymentMethodLabel(String code) {
+        if (code == null || code.isBlank()) {
+            return "el método seleccionado";
+        }
+        return switch (code) {
+            case "CASH" -> "Efectivo";
+            case "YAPE" -> "Yape";
+            case "PLIN" -> "Plin";
+            case "TRANSFER" -> "Transferencia";
+            case "CARD" -> "Tarjeta";
+            case "FREE" -> "Gratis";
+            default -> code;
         };
     }
 
