@@ -42,6 +42,7 @@ public class CashRegisterServiceImpl implements CashRegisterService {
     private final TenantSettingsRepository tenantSettingsRepository;
     private final UserTenantRoleRepository userTenantRoleRepository;
     private final BarberPaymentRepository barberPaymentRepository;
+    private final TenantPaymentMethodRepository tenantPaymentMethodRepository;
 
 
 
@@ -389,6 +390,8 @@ public class CashRegisterServiceImpl implements CashRegisterService {
 
         List<PaymentMethodSummaryResponse> paymentMethodsSummary =
                 buildPaymentMethodsSummary(cashRegister);
+        List<PaymentMethodSummaryResponse> paymentMethodBalances =
+                buildPaymentMethodBalances(cashRegister);
 
         return CashRegisterResponse.builder()
                 .id(cashRegister.getId())
@@ -410,6 +413,7 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 .salesTotal(totals.salesTotal())
                 .cashSalesTotal(totals.cashSalesTotal())
                 .paymentMethodsSummary(paymentMethodsSummary)
+                .paymentMethodBalances(paymentMethodBalances)
                 .movementsIncome(totals.movementsIncome())
                 .movementsExpense(totals.movementsExpense())
                 .movementsExpenseGeneral(totals.movementsExpenseGeneral())
@@ -630,10 +634,20 @@ public class CashRegisterServiceImpl implements CashRegisterService {
             return List.of();
         }
 
-        Map<String, BigDecimal> totals = calculatePaymentMethodBalances(cashRegister, null);
-        Map<String, Long> counts = calculatePaymentMethodCounts(cashRegister);
+        Map<String, BigDecimal> salesTotals = new LinkedHashMap<>();
+        Map<String, Long> counts = new LinkedHashMap<>();
 
-        return totals.entrySet().stream()
+        List<Object[]> rows = saleRepository.getPaymentMethodsSummaryByCashRegisterId(cashRegister.getId());
+        if (rows != null) {
+            for (Object[] row : rows) {
+                String method = normalizePaymentMethodCode(row[0]);
+                Long count = toLong(row[1]);
+                BigDecimal total = toBigDecimal(row[2]);
+                addToPaymentSummary(salesTotals, counts, method, total, count);
+            }
+        }
+
+        return salesTotals.entrySet().stream()
                 .filter(e -> e.getValue().compareTo(BigDecimal.ZERO) > 0)
                 .map(e -> PaymentMethodSummaryResponse.builder()
                         .paymentMethod(e.getKey())
@@ -641,6 +655,74 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                         .totalAmount(e.getValue())
                         .build())
                 .toList();
+    }
+
+    private List<PaymentMethodSummaryResponse> buildPaymentMethodBalances(CashRegister cashRegister) {
+        if (cashRegister == null || cashRegister.getId() == null) {
+            return List.of();
+        }
+
+        Map<String, BigDecimal> balances = calculatePaymentMethodBalances(cashRegister, null);
+        Map<String, Long> counts = calculatePaymentMethodCounts(cashRegister);
+
+        // Asegura que aparezcan los métodos activos configurados por el dueño, aunque estén en S/ 0.00.
+        for (String code : configuredPaymentMethodCodes(cashRegister)) {
+            if (code == null || code.isBlank() || "FREE".equals(code)) {
+                continue;
+            }
+            balances.putIfAbsent(code, BigDecimal.ZERO);
+            counts.putIfAbsent(code, 0L);
+        }
+
+        return balances.entrySet().stream()
+                .filter(e -> e.getKey() != null && !e.getKey().isBlank())
+                .filter(e -> !"FREE".equals(e.getKey()))
+                .map(e -> PaymentMethodSummaryResponse.builder()
+                        .paymentMethod(e.getKey())
+                        .count(counts.getOrDefault(e.getKey(), 0L))
+                        .totalAmount(safe(e.getValue()))
+                        .build())
+                .toList();
+    }
+
+    private List<String> configuredPaymentMethodCodes(CashRegister cashRegister) {
+        if (cashRegister == null || cashRegister.getTenant() == null) {
+            return List.of("CASH", "YAPE", "PLIN", "TRANSFER", "CARD");
+        }
+
+        Long tenantId = cashRegister.getTenant().getId();
+        Long branchId = cashRegister.getBranch() == null ? null : cashRegister.getBranch().getId();
+
+        List<TenantPaymentMethod> configured = List.of();
+        if (branchId != null) {
+            configured = tenantPaymentMethodRepository
+                    .findByTenant_IdAndBranch_IdAndActiveTrueOrderBySortOrderAscDisplayNameAsc(tenantId, branchId);
+        }
+        if (configured == null || configured.isEmpty()) {
+            configured = tenantPaymentMethodRepository
+                    .findByTenant_IdAndActiveTrueOrderBySortOrderAscDisplayNameAsc(tenantId);
+        }
+
+        List<String> codes = new ArrayList<>();
+        codes.add("CASH");
+
+        if (configured != null) {
+            for (TenantPaymentMethod method : configured) {
+                String code = normalizePaymentMethodCode(method == null ? null : method.getCode());
+                if (code != null && !code.isBlank() && !codes.contains(code)) {
+                    codes.add(code);
+                }
+            }
+        }
+
+        // Fallback para tenants que aún no tengan configuración de métodos.
+        if (codes.size() == 1) {
+            for (String code : List.of("YAPE", "PLIN", "TRANSFER", "CARD")) {
+                if (!codes.contains(code)) codes.add(code);
+            }
+        }
+
+        return codes;
     }
 
     private Map<String, BigDecimal> calculatePaymentMethodBalances(CashRegister cashRegister, Long excludedMovementId) {

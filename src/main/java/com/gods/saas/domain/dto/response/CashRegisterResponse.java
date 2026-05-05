@@ -33,6 +33,17 @@ public class CashRegisterResponse {
     private BigDecimal movementsExpenseGeneral;
     private BigDecimal movementsAdvanceBarber;
     private BigDecimal movementsPaymentBarber;
+    /**
+     * Ventas agrupadas por método de pago.
+     * Ejemplo: cuánto se vendió por CASH, YAPE, PLIN, CARD, etc.
+     */
     private List<PaymentMethodSummaryResponse> paymentMethodsSummary;
+
+    /**
+     * Saldo real disponible por método dentro de esta caja.
+     * Incluye apertura, ventas, ingresos, gastos, pagos y traslados entre métodos.
+     */
+    private List<PaymentMethodSummaryResponse> paymentMethodBalances;
+
     private List<CashMovementResponse> movements;
 }
