@@ -6,12 +6,16 @@ import com.gods.saas.domain.enums.NotificationType;
 import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.NotificationDeliveryRepository;
 import com.gods.saas.domain.repository.NotificationRepository;
+import com.gods.saas.domain.repository.UserTenantRoleRepository;
 import com.gods.saas.service.impl.impl.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.format.DateTimeFormatter;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -20,6 +24,7 @@ public class NotificationServiceImpl implements NotificationService {
 
     private final NotificationRepository notificationRepository;
     private final NotificationDeliveryRepository notificationDeliveryRepository;
+    private final UserTenantRoleRepository userTenantRoleRepository;
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
@@ -61,6 +66,8 @@ public class NotificationServiceImpl implements NotificationService {
             );
             registerDefaultChannels(n, false);
         }
+
+        notifyOwnersAndAdminsBookingCreated(appointment, serviceName, date, time);
     }
 
     @Override
@@ -167,6 +174,67 @@ public class NotificationServiceImpl implements NotificationService {
         registerDefaultChannels(n, true);
     }
 
+    private void notifyOwnersAndAdminsBookingCreated(
+            Appointment appointment,
+            String serviceName,
+            String date,
+            String time
+    ) {
+        if (appointment == null || appointment.getTenant() == null) return;
+
+        Long tenantId = appointment.getTenant().getId();
+        Long branchId = appointment.getBranch() != null ? appointment.getBranch().getId() : null;
+
+        String customerName = appointment.getCustomer() != null
+                ? safeFullName(appointment.getCustomer().getNombres(), appointment.getCustomer().getApellidos())
+                : "Cliente";
+
+        String barberName = appointment.getUser() != null
+                ? safeUserName(appointment.getUser())
+                : "Sin barbero";
+
+        Map<Long, AppUser> recipients = new LinkedHashMap<>();
+
+        List<AppUser> owners = userTenantRoleRepository.findActiveUsersByTenantBranchAndRole(
+                tenantId,
+                null,
+                RoleType.OWNER
+        );
+
+        for (AppUser owner : owners) {
+            if (owner != null && owner.getId() != null) {
+                recipients.put(owner.getId(), owner);
+            }
+        }
+
+        List<AppUser> admins = userTenantRoleRepository.findActiveUsersByTenantBranchAndRole(
+                tenantId,
+                branchId,
+                RoleType.ADMIN
+        );
+
+        for (AppUser admin : admins) {
+            if (admin != null && admin.getId() != null) {
+                recipients.put(admin.getId(), admin);
+            }
+        }
+
+        for (AppUser recipient : recipients.values()) {
+            Notification n = saveUserNotification(
+                    appointment.getTenant(),
+                    appointment.getBranch(),
+                    recipient,
+                    NotificationType.BOOKING_CREATED,
+                    "Nueva cita agendada",
+                    "Se agendó una cita para " + customerName + " con " + barberName + " el " + date + " a las " + time + ".",
+                    "APPOINTMENT",
+                    appointment.getId()
+            );
+
+            registerDefaultChannels(n, false);
+        }
+    }
+
     private Notification saveCustomerNotification(
             Tenant tenant,
             Branch branch,
@@ -245,5 +313,14 @@ public class NotificationServiceImpl implements NotificationService {
         String full = ((nombres == null ? "" : nombres.trim()) + " " +
                 (apellidos == null ? "" : apellidos.trim())).trim();
         return full.isBlank() ? "Cliente" : full;
+    }
+
+    private String safeUserName(AppUser user) {
+        if (user == null) return "Usuario";
+
+        String full = ((user.getNombre() == null ? "" : user.getNombre().trim()) + " " +
+                (user.getApellido() == null ? "" : user.getApellido().trim())).trim();
+
+        return full.isBlank() ? "Usuario" : full;
     }
 }

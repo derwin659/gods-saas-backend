@@ -7,6 +7,7 @@ import com.gods.saas.domain.dto.response.OwnerAppointmentAvailabilityResponse;
 import com.gods.saas.domain.dto.response.OwnerAppointmentSlotResponse;
 import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.*;
+import com.gods.saas.service.impl.impl.NotificationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -34,6 +35,7 @@ public class OwnerAgendaAppointmentService {
     private final BarberAvailabilityRepository barberAvailabilityRepository;
     private final BarberTimeBlockRepository barberTimeBlockRepository;
     private final UserTenantRoleRepository userTenantRoleRepository;
+    private final NotificationService notificationService;
 
     @Transactional
     public OwnerAgendaResponse createAppointment(Long tenantId, Long branchId, CreateOwnerAppointmentRequest request) {
@@ -88,7 +90,9 @@ public class OwnerAgendaAppointmentService {
                 .depositNote(clean(request.getDepositNote()))
                 .build();
 
-        return toAgendaResponse(appointmentRepository.save(appointment));
+        Appointment saved = appointmentRepository.save(appointment);
+        notificationService.notifyBookingCreated(saved);
+        return toAgendaResponse(saved);
     }
 
     @Transactional
@@ -177,8 +181,6 @@ public class OwnerAgendaAppointmentService {
         if (request.getDepositEvidenceUrl() != null) appointment.setDepositEvidenceUrl(clean(request.getDepositEvidenceUrl()));
         if (request.getDepositNote() != null) appointment.setDepositNote(clean(request.getDepositNote()));
 
-
-
         return toAgendaResponse(appointmentRepository.save(appointment));
     }
 
@@ -192,7 +194,6 @@ public class OwnerAgendaAppointmentService {
         }
 
         appointment.setEstado("CANCELADO");
-
 
         return toAgendaResponse(appointmentRepository.save(appointment));
     }
@@ -426,7 +427,10 @@ public class OwnerAgendaAppointmentService {
     private BarberAvailability getWorkingAvailabilityOrNull(Long tenantId, Long branchId, Long barberId, LocalDate fecha) {
         return barberAvailabilityRepository
                 .findByTenant_IdAndBranch_IdAndBarber_IdAndDayOfWeek(
-                        tenantId, branchId, barberId, fecha.getDayOfWeek().getValue()
+                        tenantId,
+                        branchId,
+                        barberId,
+                        fecha.getDayOfWeek().getValue()
                 )
                 .filter(a -> Boolean.TRUE.equals(a.getIsWorking()))
                 .orElse(null);
@@ -495,6 +499,8 @@ public class OwnerAgendaAppointmentService {
     }
 
     private String resolveDepositMethod(Appointment appointment) {
+        if (appointment == null) return null;
+
         if (appointment.getDepositMethodName() != null && !appointment.getDepositMethodName().isBlank()) {
             return appointment.getDepositMethodName();
         }
