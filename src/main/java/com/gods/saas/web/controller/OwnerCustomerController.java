@@ -39,7 +39,10 @@ public class OwnerCustomerController {
         List<ClienteResponse> response = customerService
                 .listarClientesOwner(tenantId, q, limit)
                 .stream()
-                .map(ClienteResponse::fromEntity)
+                .map(customer -> ClienteResponse.fromEntity(
+                        customer,
+                        customerService.obtenerPuntosDisponiblesReales(tenantId, customer.getId())
+                ))
                 .toList();
 
         return ResponseEntity.ok(response);
@@ -57,7 +60,12 @@ public class OwnerCustomerController {
         Long tenantId = extractTenantId(authHeader);
         Customer customer = customerService.obtenerClienteOwner(tenantId, customerId);
 
-        return ResponseEntity.ok(ClienteResponse.fromEntity(customer));
+        Integer puntosReales = customerService.obtenerPuntosDisponiblesReales(
+                tenantId,
+                customer.getId()
+        );
+
+        return ResponseEntity.ok(ClienteResponse.fromEntity(customer, puntosReales));
     }
 
     @Operation(summary = "Registrar cliente desde owner/admin")

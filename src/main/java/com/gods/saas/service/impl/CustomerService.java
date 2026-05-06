@@ -121,6 +121,22 @@ public class CustomerService {
             customer.setApellidos(req.getApellido().trim());
         }
 
+        if (req.getTelefono() != null) {
+            String telefono = req.getTelefono().trim();
+
+            if (telefono.isBlank()) {
+                throw new RuntimeException("El teléfono es obligatorio");
+            }
+
+            customerRepository.findByTenant_IdAndTelefono(tenantId, telefono)
+                    .filter(existing -> !existing.getId().equals(customerId))
+                    .ifPresent(existing -> {
+                        throw new RuntimeException("El teléfono ya está registrado en esta barbería");
+                    });
+
+            customer.setTelefono(telefono);
+        }
+
         if (req.getEmail() != null) {
             String email = req.getEmail().trim();
             if (!email.isBlank()) {
@@ -514,5 +530,14 @@ public class CustomerService {
                 .puntosMes(acumulados)
                 .racha(0)
                 .build();
+    }
+
+    public Integer obtenerPuntosDisponiblesReales(Long tenantId, Long customerId) {
+        return loyaltyAccountRepository
+                .findByTenant_IdAndCustomer_Id(tenantId, customerId)
+                .map(account -> account.getPuntosDisponibles() != null
+                        ? account.getPuntosDisponibles()
+                        : 0)
+                .orElse(0);
     }
 }

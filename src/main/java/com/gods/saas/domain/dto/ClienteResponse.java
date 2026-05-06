@@ -24,7 +24,13 @@ public class ClienteResponse {
         r.setEmail(u.getEmail());
         r.setTenantId(u.getTenant().getId());
         r.setOrigenCliente(u.getOrigenCliente());
-        r.setPuntosDisponibles(u.getPuntosDisponibles());
+        r.setPuntosDisponibles(u.getPuntosDisponibles() != null ? u.getPuntosDisponibles() : 0);
+        return r;
+    }
+
+    public static ClienteResponse fromEntity(Customer u, Integer puntosDisponiblesReales) {
+        ClienteResponse r = fromEntity(u);
+        r.setPuntosDisponibles(puntosDisponiblesReales != null ? puntosDisponiblesReales : 0);
         return r;
     }
 }

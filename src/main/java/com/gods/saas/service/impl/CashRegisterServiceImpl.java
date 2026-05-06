@@ -167,6 +167,7 @@ public class CashRegisterServiceImpl implements CashRegisterService {
     ) {
         ZoneId zoneId = getZoneIdForTenant(tenantId);
         LocalDateTime now = LocalDateTime.now(zoneId);
+        LocalDateTime movementDate = resolveMovementDate(request, now, zoneId);
 
         validateCashActor(actorUserId, tenantId);
 
@@ -213,11 +214,30 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 .amount(amount)
                 .concept(resolveConcept(type, request.getConcept()))
                 .note(trimToNull(request.getNote()))
-                .movementDate(now)
+                .movementDate(movementDate)
                 .createdAt(now)
                 .build();
 
         return mapMovementResponse(cashMovementRepository.save(movement));
+    }
+
+    private LocalDateTime resolveMovementDate(
+            CashMovementRequest request,
+            LocalDateTime now,
+            ZoneId zoneId
+    ) {
+        if (request == null || request.getMovementDate() == null) {
+            return now;
+        }
+
+        LocalDate requestedDate = request.getMovementDate();
+        LocalDate today = LocalDate.now(zoneId);
+
+        if (requestedDate.isAfter(today)) {
+            throw new IllegalStateException("No puedes registrar un movimiento con fecha futura.");
+        }
+
+        return requestedDate.atTime(now.toLocalTime());
     }
 
     private PaymentMethod resolvePaymentMethod(CashMovementType type, PaymentMethod paymentMethod) {
@@ -276,6 +296,9 @@ public class CashRegisterServiceImpl implements CashRegisterService {
 
     @Override
     public CashMovementResponse updateMovement(Long tenantId, Long branchId, Long movementId, Long actorUserId, CashMovementRequest request) {
+        ZoneId zoneId = getZoneIdForTenant(tenantId);
+        LocalDateTime now = LocalDateTime.now(zoneId);
+
         validateCashActor(actorUserId, tenantId);
 
         CashMovement movement = cashMovementRepository.findByIdAndTenant_Id(movementId, tenantId)
@@ -322,6 +345,10 @@ public class CashRegisterServiceImpl implements CashRegisterService {
         movement.setConcept(resolveConcept(type, request.getConcept()));
         movement.setNote(trimToNull(request.getNote()));
         movement.setBarberUser(barberUser);
+
+        if (request.getMovementDate() != null) {
+            movement.setMovementDate(resolveMovementDate(request, now, zoneId));
+        }
 
         return mapMovementResponse(cashMovementRepository.save(movement));
     }
