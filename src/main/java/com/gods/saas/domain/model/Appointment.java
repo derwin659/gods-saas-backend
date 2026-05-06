@@ -44,6 +44,7 @@ public class Appointment {
 
     private LocalDate fecha;
 
+
     @Column(name = "hora_inicio")
     private LocalTime horaInicio;
 
