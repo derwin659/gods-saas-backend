@@ -4,6 +4,7 @@ import com.gods.saas.domain.dto.ActualizarClienteRequest;
 import com.gods.saas.domain.dto.ClienteResponse;
 import com.gods.saas.domain.dto.VentaRapidaRequest;
 import com.gods.saas.domain.model.Customer;
+import com.gods.saas.service.impl.AdminPermissionService;
 import com.gods.saas.service.impl.CustomerService;
 import com.gods.saas.utils.JwtUtil;
 import io.swagger.v3.oas.annotations.Operation;
@@ -21,6 +22,7 @@ public class OwnerCustomerController {
 
     private final CustomerService customerService;
     private final JwtUtil jwtUtil;
+    private final AdminPermissionService adminPermissionService;
 
     @Operation(summary = "Listar clientes para owner/admin")
     @SecurityRequirement(name = "bearerAuth")
@@ -30,6 +32,8 @@ public class OwnerCustomerController {
             @RequestParam(required = false) String q,
             @RequestParam(defaultValue = "50") int limit
     ) {
+        adminPermissionService.checkPermission("CUSTOMERS_ACCESS");
+
         Long tenantId = extractTenantId(authHeader);
 
         List<ClienteResponse> response = customerService
@@ -48,8 +52,11 @@ public class OwnerCustomerController {
             @RequestHeader("Authorization") String authHeader,
             @PathVariable Long customerId
     ) {
+        adminPermissionService.checkPermission("CUSTOMERS_ACCESS");
+
         Long tenantId = extractTenantId(authHeader);
         Customer customer = customerService.obtenerClienteOwner(tenantId, customerId);
+
         return ResponseEntity.ok(ClienteResponse.fromEntity(customer));
     }
 
@@ -60,8 +67,11 @@ public class OwnerCustomerController {
             @RequestHeader("Authorization") String authHeader,
             @RequestBody VentaRapidaRequest request
     ) {
+        adminPermissionService.checkPermission("CUSTOMERS_ACCESS");
+
         Long tenantId = extractTenantId(authHeader);
         Customer customer = customerService.registrarCliente(tenantId, request);
+
         return ResponseEntity.ok(ClienteResponse.fromEntity(customer));
     }
 
@@ -73,8 +83,11 @@ public class OwnerCustomerController {
             @PathVariable Long customerId,
             @RequestBody ActualizarClienteRequest request
     ) {
+        adminPermissionService.checkPermission("CUSTOMERS_ACCESS");
+
         Long tenantId = extractTenantId(authHeader);
         Customer customer = customerService.actualizarCliente(tenantId, customerId, request);
+
         return ResponseEntity.ok(ClienteResponse.fromEntity(customer));
     }
 
@@ -85,8 +98,11 @@ public class OwnerCustomerController {
             @RequestHeader("Authorization") String authHeader,
             @PathVariable Long customerId
     ) {
+        adminPermissionService.checkPermission("CUSTOMERS_ACCESS");
+
         Long tenantId = extractTenantId(authHeader);
         customerService.eliminarClienteOwner(tenantId, customerId);
+
         return ResponseEntity.ok().body(java.util.Map.of(
                 "success", true,
                 "message", "Cliente eliminado correctamente"

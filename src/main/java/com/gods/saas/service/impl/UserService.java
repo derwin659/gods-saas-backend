@@ -37,6 +37,7 @@ public class UserService {
     private final TenantRepository tenantRepository;
     private final BranchRepository branchRepository;
     private final SubscriptionService subscriptionService;
+    private final AdminPermissionService adminPermissionService;
 
     private void validarOwner() {
         Authentication auth = SecurityContextHolder.getContext().getAuthentication();
@@ -299,6 +300,10 @@ public class UserService {
                 .role(RoleType.valueOf(role))
                 .build();
         userTenantRoleRepository.save(userTenantRole);
+
+        if ("ADMIN".equals(role)) {
+            adminPermissionService.createDefaultPermissionsForNewAdmin(tenantId, user.getId());
+        }
 
         return AppUserResponse.from(user);
     }

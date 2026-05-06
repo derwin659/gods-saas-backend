@@ -17,6 +17,8 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
+import org.springframework.http.HttpMethod;
+
 import java.util.List;
 
 @Configuration
@@ -53,6 +55,9 @@ public class SecurityConfig {
                 .cors(Customizer.withDefaults())
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
+
+                        // Necesario para CORS preflight desde React/Vercel/local
+                        .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
 
                         .requestMatchers(
                                 "/api/auth/login-basic",
@@ -91,7 +96,8 @@ public class SecurityConfig {
 
                         .requestMatchers("/api/internal/users/**").hasRole("OWNER")
                         .requestMatchers("/api/internal/users/login/**").hasRole("OWNER")
-                        .requestMatchers("/api/internal/me").hasAnyRole("OWNER", "ADMIN", "BARBER", "CASHIER", "SUPER_ADMIN")
+                        .requestMatchers("/api/internal/me")
+                        .hasAnyRole("OWNER", "ADMIN", "BARBER", "CASHIER", "SUPER_ADMIN")
 
                         .requestMatchers("/api/owner/device-tokens/**")
                         .hasAnyRole("OWNER", "ADMIN", "BARBER", "CASHIER")
@@ -107,13 +113,21 @@ public class SecurityConfig {
                         .requestMatchers("/api/clients/device-tokens/**")
                         .authenticated()
 
+                        .requestMatchers("/api/owner/admin-permissions/me")
+                        .hasAnyRole("OWNER", "ADMIN")
+
+                        .requestMatchers("/api/owner/admin-permissions/**")
+                        .hasRole("OWNER")
+
                         .requestMatchers("/api/owner/cash-registers/**").hasAnyRole("OWNER", "ADMIN")
                         .requestMatchers("/api/owner/cash-sales/**").hasAnyRole("OWNER", "ADMIN")
                         .requestMatchers("/api/owner/marketing-campaigns/**").hasRole("OWNER")
                         .requestMatchers("/api/owner/products/**").hasAnyRole("OWNER", "ADMIN")
                         .requestMatchers("/api/owner/sale-catalog/**").hasAnyRole("OWNER", "ADMIN")
                         .requestMatchers("/api/owner/services/**").hasAnyRole("OWNER", "ADMIN")
-                        .requestMatchers("/api/customers/quick").hasAnyRole("OWNER", "ADMIN", "BARBER", "CASHIER")
+
+                        .requestMatchers("/api/customers/quick")
+                        .hasAnyRole("OWNER", "ADMIN", "BARBER", "CASHIER")
 
                         .requestMatchers("/api/cash-register/current").hasAnyRole("OWNER", "BARBER")
                         .requestMatchers("/api/barber/**").hasAnyRole("OWNER", "ADMIN", "BARBER")

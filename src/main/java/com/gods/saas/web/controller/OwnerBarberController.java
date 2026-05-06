@@ -4,6 +4,7 @@ import com.gods.saas.domain.dto.request.BarberCreateRequest;
 import com.gods.saas.domain.dto.request.BarberStatusRequest;
 import com.gods.saas.domain.dto.request.BarberUpdateRequest;
 import com.gods.saas.domain.dto.response.BarberResponse;
+import com.gods.saas.service.impl.AdminPermissionService;
 import com.gods.saas.service.impl.impl.OwnerBarberService;
 import com.gods.saas.utils.JwtUtil;
 import jakarta.servlet.http.HttpServletRequest;
@@ -22,6 +23,7 @@ public class OwnerBarberController {
 
     private final OwnerBarberService ownerBarberService;
     private final JwtUtil jwtUtil;
+    private final AdminPermissionService adminPermissionService;
 
     @GetMapping
     public List<BarberResponse> listBarbers(
@@ -29,6 +31,7 @@ public class OwnerBarberController {
             HttpServletRequest request
     ) {
         Long tenantId = jwtUtil.getTenantIdFromToken(extractToken(request));
+        adminPermissionService.checkPermission("CONFIG_BARBERS");
         return ownerBarberService.listBarbers(tenantId, branchId);
     }
 
@@ -38,6 +41,7 @@ public class OwnerBarberController {
             HttpServletRequest request
     ) {
         Long tenantId = jwtUtil.getTenantIdFromToken(extractToken(request));
+        adminPermissionService.checkPermission("CONFIG_BARBERS");
         return ownerBarberService.createBarber(tenantId, requestBody);
     }
 
@@ -48,6 +52,7 @@ public class OwnerBarberController {
             HttpServletRequest request
     ) {
         Long tenantId = jwtUtil.getTenantIdFromToken(extractToken(request));
+        adminPermissionService.checkPermission("CONFIG_BARBERS");
         return ownerBarberService.updateBarber(tenantId, barberId, requestBody);
     }
 
@@ -58,6 +63,7 @@ public class OwnerBarberController {
             HttpServletRequest request
     ) {
         Long tenantId = jwtUtil.getTenantIdFromToken(extractToken(request));
+        adminPermissionService.checkPermission("CONFIG_BARBERS");
         return ownerBarberService.updateStatus(tenantId, barberId, requestBody);
     }
 
@@ -68,6 +74,7 @@ public class OwnerBarberController {
             HttpServletRequest request
     ) {
         Long tenantId = jwtUtil.getTenantIdFromToken(extractToken(request));
+        adminPermissionService.checkPermission("CONFIG_BARBERS");
         return ownerBarberService.uploadPhoto(tenantId, barberId, file);
     }
 

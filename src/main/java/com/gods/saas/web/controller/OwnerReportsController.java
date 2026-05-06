@@ -1,6 +1,7 @@
 package com.gods.saas.web.controller;
 
 import com.gods.saas.domain.dto.response.*;
+import com.gods.saas.service.impl.AdminPermissionService;
 import com.gods.saas.service.impl.impl.OwnerReportsService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -18,6 +19,7 @@ import org.springframework.security.access.AccessDeniedException;
 public class OwnerReportsController {
 
     private final OwnerReportsService ownerReportsService;
+    private final AdminPermissionService adminPermissionService;
 
     @GetMapping("/profitability")
     public ProfitabilityReportResponse getProfitabilityReport(
@@ -26,6 +28,7 @@ public class OwnerReportsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
+        adminPermissionService.checkPermission("REPORTS_PROFITABILITY");
         Long tenantId = extractTenantId(authentication);
         return ownerReportsService.getProfitabilityReport(tenantId, effectiveBranchIdForReports(authentication, branchId), from, to);
     }
@@ -37,6 +40,7 @@ public class OwnerReportsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
+        adminPermissionService.checkPermission("REPORTS_ACCESS");
         Long tenantId = extractTenantId(authentication);
         return ownerReportsService.getSalesReport(tenantId, effectiveBranchIdForReports(authentication, branchId), from, to);
     }
@@ -49,6 +53,7 @@ public class OwnerReportsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
+        adminPermissionService.checkPermission("REPORTS_BARBER_PAYMENTS");
         Long tenantId = extractTenantId(authentication);
         return ownerReportsService.getBarberSalesDetail(tenantId, effectiveBranchIdForReports(authentication, branchId), barberId, from, to);
     }
@@ -59,6 +64,7 @@ public class OwnerReportsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
+        adminPermissionService.checkPermission("REPORTS_ACCESS");
         Long tenantId = extractTenantId(authentication);
         return ownerReportsService.getBranchSummary(tenantId, from, to);
     }
@@ -70,6 +76,7 @@ public class OwnerReportsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
+        adminPermissionService.checkPermission("REPORTS_ACCESS");
         Long tenantId = extractTenantId(authentication);
         return ownerReportsService.getBranchDetail(tenantId, requireAllowedBranch(authentication, branchId), from, to);
     }
@@ -81,6 +88,7 @@ public class OwnerReportsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
+        adminPermissionService.checkPermission("REPORTS_BARBER_PAYMENTS");
         Long tenantId = extractTenantId(authentication);
         return ownerReportsService.getBranchBarbersReport(tenantId, requireAllowedBranch(authentication, branchId), from, to);
     }
@@ -92,6 +100,7 @@ public class OwnerReportsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
+        adminPermissionService.checkPermission("REPORTS_BARBER_PAYMENTS");
         Long tenantId = extractTenantId(authentication);
         return ownerReportsService.getBarberSummary(tenantId, effectiveBranchIdForReports(authentication, branchId), from, to);
     }
@@ -104,6 +113,7 @@ public class OwnerReportsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
+        adminPermissionService.checkPermission("REPORTS_BARBER_PAYMENTS");
         Long tenantId = extractTenantId(authentication);
         return ownerReportsService.getBarberDetail(tenantId, effectiveBranchIdForReports(authentication, branchId), barberId, from, to);
     }
@@ -115,6 +125,7 @@ public class OwnerReportsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
+        adminPermissionService.checkPermission("REPORTS_ACCESS");
         Long tenantId = extractTenantId(authentication);
         return ownerReportsService.getDailySales(tenantId, effectiveBranchIdForReports(authentication, branchId), from, to);
     }
@@ -126,6 +137,7 @@ public class OwnerReportsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
+        adminPermissionService.checkPermission("REPORTS_ACCESS");
         Long tenantId = extractTenantId(authentication);
         return ownerReportsService.getTopServices(tenantId, effectiveBranchIdForReports(authentication, branchId), from, to);
     }
@@ -137,6 +149,7 @@ public class OwnerReportsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
+        adminPermissionService.checkPermission("REPORTS_ACCESS");
         Long tenantId = extractTenantId(authentication);
         return ownerReportsService.getPaymentSummary(tenantId, effectiveBranchIdForReports(authentication, branchId), from, to);
     }

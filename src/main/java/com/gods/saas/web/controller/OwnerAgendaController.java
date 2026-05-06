@@ -1,6 +1,7 @@
 package com.gods.saas.web.controller;
 
 import com.gods.saas.domain.dto.response.OwnerAgendaResponse;
+import com.gods.saas.service.impl.AdminPermissionService;
 import com.gods.saas.service.impl.JwtService;
 import com.gods.saas.service.impl.impl.OwnerAgendaService;
 import lombok.RequiredArgsConstructor;
@@ -21,6 +22,7 @@ public class OwnerAgendaController {
 
     private final OwnerAgendaService ownerAgendaService;
     private final JwtService jwtService;
+    private final AdminPermissionService adminPermissionService;
 
     @GetMapping
     public List<OwnerAgendaResponse> getAgendaDelDia(
@@ -28,6 +30,8 @@ public class OwnerAgendaController {
             @RequestParam(required = false) String fecha,
             @RequestParam(required = false) Long branchId
     ) {
+        adminPermissionService.checkPermission("AGENDA_ACCESS");
+
         final String token = authHeader.replace("Bearer ", "");
         final Map<String, Object> claims = jwtService.extractAllClaims(token);
 
