@@ -25,7 +25,7 @@ public class OwnerAgendaAppointmentService {
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("America/Lima");
     private static final LocalTime DEFAULT_OPENING_TIME = LocalTime.of(8, 0);
     private static final LocalTime DEFAULT_CLOSING_TIME = LocalTime.of(21, 0);
-    private static final int SLOT_INTERVAL_MINUTES = 15;
+    private static final int SLOT_INTERVAL_MINUTES = 60;
 
     private final AppointmentRepository appointmentRepository;
     private final BranchRepository branchRepository;
