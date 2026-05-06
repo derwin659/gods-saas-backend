@@ -11,10 +11,12 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.MediaType;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/owner/barbers")
@@ -30,9 +32,10 @@ public class OwnerBarberController {
             @RequestParam(required = false) Long branchId,
             HttpServletRequest request
     ) {
-        Long tenantId = jwtUtil.getTenantIdFromToken(extractToken(request));
-        adminPermissionService.checkPermission("CONFIG_BARBERS");
-        return ownerBarberService.listBarbers(tenantId, branchId);
+        SessionData session = extractSession(request);
+        checkConfigBarbers(session);
+
+        return ownerBarberService.listBarbers(session.tenantId(), branchId);
     }
 
     @PostMapping
@@ -40,9 +43,10 @@ public class OwnerBarberController {
             @Valid @RequestBody BarberCreateRequest requestBody,
             HttpServletRequest request
     ) {
-        Long tenantId = jwtUtil.getTenantIdFromToken(extractToken(request));
-        adminPermissionService.checkPermission("CONFIG_BARBERS");
-        return ownerBarberService.createBarber(tenantId, requestBody);
+        SessionData session = extractSession(request);
+        checkConfigBarbers(session);
+
+        return ownerBarberService.createBarber(session.tenantId(), requestBody);
     }
 
     @PutMapping("/{barberId}")
@@ -51,9 +55,10 @@ public class OwnerBarberController {
             @Valid @RequestBody BarberUpdateRequest requestBody,
             HttpServletRequest request
     ) {
-        Long tenantId = jwtUtil.getTenantIdFromToken(extractToken(request));
-        adminPermissionService.checkPermission("CONFIG_BARBERS");
-        return ownerBarberService.updateBarber(tenantId, barberId, requestBody);
+        SessionData session = extractSession(request);
+        checkConfigBarbers(session);
+
+        return ownerBarberService.updateBarber(session.tenantId(), barberId, requestBody);
     }
 
     @PatchMapping("/{barberId}/status")
@@ -62,9 +67,10 @@ public class OwnerBarberController {
             @Valid @RequestBody BarberStatusRequest requestBody,
             HttpServletRequest request
     ) {
-        Long tenantId = jwtUtil.getTenantIdFromToken(extractToken(request));
-        adminPermissionService.checkPermission("CONFIG_BARBERS");
-        return ownerBarberService.updateStatus(tenantId, barberId, requestBody);
+        SessionData session = extractSession(request);
+        checkConfigBarbers(session);
+
+        return ownerBarberService.updateStatus(session.tenantId(), barberId, requestBody);
     }
 
     @PostMapping(value = "/{barberId}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
@@ -73,9 +79,10 @@ public class OwnerBarberController {
             @RequestParam("file") MultipartFile file,
             HttpServletRequest request
     ) {
-        Long tenantId = jwtUtil.getTenantIdFromToken(extractToken(request));
-        adminPermissionService.checkPermission("CONFIG_BARBERS");
-        return ownerBarberService.uploadPhoto(tenantId, barberId, file);
+        SessionData session = extractSession(request);
+        checkConfigBarbers(session);
+
+        return ownerBarberService.uploadPhoto(session.tenantId(), barberId, file);
     }
 
     @DeleteMapping("/{barberId}/photo")
@@ -83,17 +90,98 @@ public class OwnerBarberController {
             @PathVariable Long barberId,
             HttpServletRequest request
     ) {
-        Long tenantId = jwtUtil.getTenantIdFromToken(extractToken(request));
-        return ownerBarberService.deletePhoto(tenantId, barberId);
+        SessionData session = extractSession(request);
+        checkConfigBarbers(session);
+
+        return ownerBarberService.deletePhoto(session.tenantId(), barberId);
+    }
+
+    private void checkConfigBarbers(SessionData session) {
+        if ("OWNER".equalsIgnoreCase(session.role())) {
+            return;
+        }
+
+        boolean allowed = adminPermissionService.hasPermission(
+                session.tenantId(),
+                session.userId(),
+                "CONFIG_BARBERS"
+        );
+
+        if (!allowed) {
+            throw new AccessDeniedException("No tienes permiso para esta acción");
+        }
+    }
+
+    private SessionData extractSession(HttpServletRequest request) {
+        Long tenantId = getLongRequestAttribute(request, "tenantId");
+        Long userId = getLongRequestAttribute(request, "userId");
+        String role = getStringRequestAttribute(request, "role");
+
+        if (tenantId != null && userId != null && role != null && !role.isBlank()) {
+            return new SessionData(tenantId, userId, role);
+        }
+
+        String token = extractToken(request);
+
+        Map<String, Object> claims = jwtUtil.extractAllClaims(token);
+
+        tenantId = toLong(claims.get("tenantId"));
+        userId = toLong(claims.get("userId"));
+        role = claims.get("role") == null ? "" : claims.get("role").toString();
+
+        if (tenantId == null) {
+            throw new IllegalArgumentException("No se encontró tenantId en la sesión.");
+        }
+
+        if (userId == null) {
+            throw new IllegalArgumentException("No se encontró userId en la sesión.");
+        }
+
+        if (role == null || role.isBlank()) {
+            throw new IllegalArgumentException("No se encontró role en la sesión.");
+        }
+
+        return new SessionData(tenantId, userId, role);
+    }
+
+    private Long getLongRequestAttribute(HttpServletRequest request, String key) {
+        Object value = request.getAttribute(key);
+        return toLong(value);
+    }
+
+    private String getStringRequestAttribute(HttpServletRequest request, String key) {
+        Object value = request.getAttribute(key);
+        return value == null ? null : value.toString();
+    }
+
+    private Long toLong(Object value) {
+        if (value == null) return null;
+
+        if (value instanceof Number n) {
+            return n.longValue();
+        }
+
+        try {
+            return Long.parseLong(value.toString());
+        } catch (Exception e) {
+            return null;
+        }
     }
 
     private String extractToken(HttpServletRequest request) {
         String authHeader = request.getHeader("Authorization");
+
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
             throw new IllegalArgumentException("Token JWT no enviado o inválido.");
         }
+
         return authHeader.substring(7);
     }
 
-
+    private record SessionData(
+            Long tenantId,
+            Long userId,
+            String role
+    ) {
+    }
 }
