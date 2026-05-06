@@ -5,6 +5,7 @@ import com.gods.saas.domain.dto.request.BarberStatusRequest;
 import com.gods.saas.domain.dto.request.BarberUpdateRequest;
 import com.gods.saas.domain.dto.response.BarberResponse;
 import com.gods.saas.service.impl.AdminPermissionService;
+import com.gods.saas.service.impl.JwtService;
 import com.gods.saas.service.impl.impl.OwnerBarberService;
 import com.gods.saas.utils.JwtUtil;
 import jakarta.servlet.http.HttpServletRequest;
@@ -24,7 +25,7 @@ import java.util.Map;
 public class OwnerBarberController {
 
     private final OwnerBarberService ownerBarberService;
-    private final JwtUtil jwtUtil;
+    private final JwtService jwtUtil;
     private final AdminPermissionService adminPermissionService;
 
     @GetMapping
