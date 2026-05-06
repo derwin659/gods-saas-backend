@@ -102,10 +102,16 @@ public class AdminPermissionService {
         Long tenantId = TenantContext.getTenantId();
 
         AppUser admin = appUserRepository.findByIdAndTenantId(adminUserId, tenantId)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Administrador no encontrado"));
+                .orElseThrow(() -> new ResponseStatusException(
+                        HttpStatus.NOT_FOUND,
+                        "Administrador no encontrado"
+                ));
 
         if (!"ADMIN".equalsIgnoreCase(admin.getRol())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Solo puedes asignar permisos a usuarios ADMIN");
+            throw new ResponseStatusException(
+                    HttpStatus.BAD_REQUEST,
+                    "Solo puedes asignar permisos a usuarios ADMIN"
+            );
         }
 
         Set<String> cleanPermissions = new LinkedHashSet<>();
@@ -113,24 +119,62 @@ public class AdminPermissionService {
         if (request != null && request.getPermissions() != null) {
             for (String raw : request.getPermissions()) {
                 String key = normalizePermission(raw);
+
                 if (!AdminPermissionKey.isValid(key)) {
-                    throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Permiso inválido: " + raw);
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST,
+                            "Permiso inválido: " + raw
+                    );
                 }
+
                 cleanPermissions.add(key);
             }
         }
 
-        adminPermissionRepository.deleteByTenant_IdAndUser_Id(tenantId, adminUserId);
+        // Si el dueño activa cualquier permiso interno de configuración,
+        // activamos también CONFIG_ACCESS para que aparezca la pestaña Config.
+        boolean hasAnyConfigChild = cleanPermissions.stream()
+                .anyMatch(p -> p.startsWith("CONFIG_") && !"CONFIG_ACCESS".equals(p));
 
+        if (hasAnyConfigChild) {
+            cleanPermissions.add("CONFIG_ACCESS");
+        }
+
+        // Traemos todos los permisos existentes de ese admin.
+        List<AdminPermission> existingPermissions =
+                adminPermissionRepository.findByTenant_IdAndUser_IdOrderByPermissionKeyAsc(
+                        tenantId,
+                        adminUserId
+                );
+
+        // Primero desactivamos todos.
+        for (AdminPermission permission : existingPermissions) {
+            permission.setEnabled(false);
+            permission.setUpdatedAt(LocalDateTime.now());
+            adminPermissionRepository.save(permission);
+        }
+
+        // Luego activamos o creamos los seleccionados.
         for (String key : cleanPermissions) {
-            AdminPermission permission = AdminPermission.builder()
-                    .tenant(new Tenant(tenantId))
-                    .branch(admin.getBranch())
-                    .user(admin)
-                    .permissionKey(key)
-                    .enabled(true)
-                    .createdAt(LocalDateTime.now())
-                    .build();
+            AdminPermission permission = existingPermissions.stream()
+                    .filter(p -> key.equalsIgnoreCase(p.getPermissionKey()))
+                    .findFirst()
+                    .orElse(null);
+
+            if (permission == null) {
+                permission = AdminPermission.builder()
+                        .tenant(new Tenant(tenantId))
+                        .branch(admin.getBranch())
+                        .user(admin)
+                        .permissionKey(key)
+                        .enabled(true)
+                        .createdAt(LocalDateTime.now())
+                        .build();
+            } else {
+                permission.setEnabled(true);
+                permission.setBranch(admin.getBranch());
+                permission.setUpdatedAt(LocalDateTime.now());
+            }
 
             adminPermissionRepository.save(permission);
         }
