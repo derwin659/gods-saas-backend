@@ -39,6 +39,7 @@ public class OwnerLoyaltyServiceImpl implements OwnerLoyaltyService {
                 .orElseGet(() -> createEmptyAccount(customer));
 
         int puntosDisponibles = safeInt(loyaltyAccount.getPuntosDisponibles());
+        int puntosAcumulados = safeInt(loyaltyAccount.getPuntosAcumulados());
 
         return new OwnerCustomerLoyaltyResponse(
                 customer.getId(),
@@ -46,6 +47,7 @@ public class OwnerLoyaltyServiceImpl implements OwnerLoyaltyService {
                 customer.getApellidos(),
                 customer.getTelefono(),
                 puntosDisponibles,
+                puntosAcumulados,
                 customer.getMigrated(),
                 customer.getAppActivated()
         );
@@ -86,13 +88,10 @@ public class OwnerLoyaltyServiceImpl implements OwnerLoyaltyService {
 
         loyaltyAccount.setPuntosDisponibles(newPoints);
 
-        Integer acumulados = loyaltyAccount.getPuntosAcumulados();
-        if (acumulados == null) {
-            acumulados = 0;
-        }
+        int puntosAcumulados = safeInt(loyaltyAccount.getPuntosAcumulados());
 
         if (request.pointsDelta() > 0) {
-            loyaltyAccount.setPuntosAcumulados(acumulados + request.pointsDelta());
+            loyaltyAccount.setPuntosAcumulados(puntosAcumulados + request.pointsDelta());
         }
 
         loyaltyAccount.setFechaUltimoMovimiento(LocalDateTime.now());

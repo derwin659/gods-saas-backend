@@ -1,5 +1,6 @@
 package com.gods.saas.domain.dto.response;
 
+
 public record OwnerCustomerLoyaltyResponse(
         Long customerId,
         String nombres,
