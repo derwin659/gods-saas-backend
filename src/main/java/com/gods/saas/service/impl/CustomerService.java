@@ -602,11 +602,11 @@ public class CustomerService {
                         .barbero(v.getBarbero() != null && !v.getBarbero().isBlank()
                                 ? v.getBarbero()
                                 : "Sin asignar")
+                        .barberPhotoUrl(v.getBarberPhotoUrl() != null ? v.getBarberPhotoUrl() : "")
                         .puntos(0)
                         .total(v.getTotal() != null ? BigDecimal.valueOf(v.getTotal()) : BigDecimal.ZERO)
                         .tipo("SALE")
                         .build())
                 .collect(Collectors.toList());
     }
-
 }

@@ -16,6 +16,7 @@ public class OwnerCustomerHistoryResponse {
     private String fecha;
     private String servicio;
     private String barbero;
+    private String barberPhotoUrl;
     private Integer puntos;
     private BigDecimal total;
     private String tipo;

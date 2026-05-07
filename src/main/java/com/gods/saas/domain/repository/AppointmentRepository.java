@@ -161,6 +161,7 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
             @Param("nowTime") LocalTime nowTime
     );
 
+
     @Query(value = """
 select
     s.sale_id as appointmentId,
@@ -181,6 +182,7 @@ select
         ),
         'Sin asignar'
     ) as barbero,
+    coalesce(max(u.photo_url), '') as barberPhotoUrl,
     coalesce(sum(si.subtotal), 0) as total
 from sale s
 left join sale_item si
