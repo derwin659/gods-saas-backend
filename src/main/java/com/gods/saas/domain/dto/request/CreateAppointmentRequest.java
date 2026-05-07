@@ -13,6 +13,12 @@ public class CreateAppointmentRequest {
     private String horaInicio; // HH:mm
 
     /**
+     * Promoción seleccionada desde la app del cliente.
+     * Si viene null, la reserva se crea sin promoción.
+     */
+    private Long promotionId;
+
+    /**
      * Si el cliente confirma con inicial.
      */
     private Boolean depositRequired;

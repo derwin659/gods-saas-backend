@@ -44,6 +44,7 @@ public class ClientBookingService {
     private final BarberAvailabilityRepository barberAvailabilityRepository;
     private final BarberTimeBlockRepository barberTimeBlockRepository;
     private final NotificationService notificationService;
+    private final PromotionRepository promotionRepository;
 
     public BookingBootstrapResponse getBootstrap(Long tenantId) {
         List<Branch> branches = branchRepository.findByTenant_IdAndActivoTrue(tenantId);
@@ -310,7 +311,19 @@ public class ClientBookingService {
             );
         }
 
-        BigDecimal totalAmount = BigDecimal.valueOf(service.getPrecio())
+        BigDecimal originalAmount = BigDecimal.valueOf(service.getPrecio())
+                .setScale(2, RoundingMode.HALF_UP);
+
+        Promotion appliedPromotion = resolvePromotionOrNull(
+                tenantId,
+                req.getPromotionId(),
+                branch,
+                service
+        );
+
+        BigDecimal discountAmount = calculatePromotionDiscount(appliedPromotion, originalAmount);
+        BigDecimal totalAmount = originalAmount.subtract(discountAmount)
+                .max(BigDecimal.ZERO)
                 .setScale(2, RoundingMode.HALF_UP);
 
         boolean depositRequired = Boolean.TRUE.equals(req.getDepositRequired());
@@ -385,8 +398,14 @@ public class ClientBookingService {
                 .estado(appointmentStatus)
                 .notas(null)
 
-                // Pago inicial
+                // Promoción / precio final
+                .promotion(appliedPromotion)
+                .promotionTitle(appliedPromotion != null ? appliedPromotion.getTitulo() : null)
+                .originalAmount(originalAmount)
+                .discountAmount(discountAmount)
                 .totalAmount(totalAmount)
+
+                // Pago inicial
                 .depositRequired(depositRequired)
                 .depositAmount(depositAmount)
                 .remainingAmount(remainingAmount)
@@ -648,6 +667,131 @@ public class ClientBookingService {
         int minutesToAdd = remainder == 0 ? SLOT_INTERVAL_MINUTES : SLOT_INTERVAL_MINUTES - remainder;
 
         return time.withSecond(0).withNano(0).plusMinutes(minutesToAdd);
+    }
+
+    private Promotion resolvePromotionOrNull(
+            Long tenantId,
+            Long promotionId,
+            Branch branch,
+            ServiceEntity service
+    ) {
+        if (promotionId == null) {
+            return null;
+        }
+
+        Promotion promotion = promotionRepository.findByIdAndTenant_Id(promotionId, tenantId)
+                .orElseThrow(() -> new RuntimeException("La promoción seleccionada no existe"));
+
+        if (!promotion.isActivo()) {
+            throw new RuntimeException("La promoción seleccionada ya no está activa");
+        }
+
+        LocalDateTime now = LocalDateTime.now(BUSINESS_ZONE);
+
+        if (promotion.getFechaInicio() != null && promotion.getFechaInicio().isAfter(now)) {
+            throw new RuntimeException("La promoción aún no está disponible");
+        }
+
+        if (promotion.getFechaFin() != null && promotion.getFechaFin().isBefore(now)) {
+            throw new RuntimeException("La promoción ya venció");
+        }
+
+        if (promotion.getBranch() != null
+                && branch != null
+                && !promotion.getBranch().getId().equals(branch.getId())) {
+            throw new RuntimeException("La promoción no aplica para la sede seleccionada");
+        }
+
+        // Si redirectType=SERVICE y redirectValue trae un serviceId, validamos que coincida.
+        if (promotion.getRedirectType() != null
+                && "SERVICE".equalsIgnoreCase(promotion.getRedirectType().name())
+                && promotion.getRedirectValue() != null
+                && !promotion.getRedirectValue().isBlank()) {
+            try {
+                Long promoServiceId = Long.parseLong(promotion.getRedirectValue().trim());
+                if (service != null && !promoServiceId.equals(service.getId())) {
+                    throw new RuntimeException("La promoción no aplica para el servicio seleccionado");
+                }
+            } catch (NumberFormatException ignored) {
+                // redirectValue puede contener otro dato en promociones antiguas.
+            }
+        }
+
+        return promotion;
+    }
+
+    private BigDecimal calculatePromotionDiscount(Promotion promotion, BigDecimal originalAmount) {
+        if (promotion == null || originalAmount == null || originalAmount.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        String type = promotion.getDiscountType() != null
+                ? promotion.getDiscountType().trim().toUpperCase()
+                : null;
+
+        BigDecimal value = promotion.getDiscountValue();
+
+        // Compatibilidad temporal con promociones antiguas:
+        // Si aún no llenaste discount_type/discount_value, intentamos leer priceText como precio final.
+        if ((type == null || type.isBlank()) && value == null) {
+            BigDecimal fixedPriceFromText = extractFirstMoneyValue(promotion.getPriceText());
+            if (fixedPriceFromText != null
+                    && fixedPriceFromText.compareTo(BigDecimal.ZERO) > 0
+                    && fixedPriceFromText.compareTo(originalAmount) < 0) {
+                type = "FIXED_PRICE";
+                value = fixedPriceFromText;
+            }
+        }
+
+        if (type == null || type.isBlank() || value == null) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        BigDecimal discount = BigDecimal.ZERO;
+
+        switch (type) {
+            case "AMOUNT" -> discount = value;
+            case "PERCENT" -> discount = originalAmount
+                    .multiply(value)
+                    .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+            case "FIXED_PRICE" -> discount = originalAmount.subtract(value);
+            default -> discount = BigDecimal.ZERO;
+        }
+
+        if (discount.compareTo(BigDecimal.ZERO) < 0) {
+            discount = BigDecimal.ZERO;
+        }
+
+        if (discount.compareTo(originalAmount) > 0) {
+            discount = originalAmount;
+        }
+
+        return discount.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal extractFirstMoneyValue(String text) {
+        if (text == null || text.isBlank()) {
+            return null;
+        }
+
+        String normalized = text
+                .replace(",", ".")
+                .replaceAll("[^0-9.]", " ")
+                .trim();
+
+        if (normalized.isBlank()) {
+            return null;
+        }
+
+        String[] parts = normalized.split("\\s+");
+        for (String part : parts) {
+            try {
+                return new BigDecimal(part).setScale(2, RoundingMode.HALF_UP);
+            } catch (Exception ignored) {
+            }
+        }
+
+        return null;
     }
 
     private String trimToNull(String value) {

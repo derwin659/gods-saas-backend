@@ -265,7 +265,9 @@ public class PromotionServiceImpl implements PromotionService {
                 p.getCtaLabel(),
                 p.getRedirectType() != null ? p.getRedirectType().name() : "NONE",
                 p.getRedirectValue(),
-                p.isDestacado()
+                p.isDestacado(),
+                p.getDiscountType(),
+                p.getDiscountValue()
         );
     }
 

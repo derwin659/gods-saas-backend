@@ -54,6 +54,19 @@ public class Appointment {
     private String estado;
     private String notas;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "promotion_id")
+    private Promotion promotion;
+
+    @Column(name = "promotion_title", length = 150)
+    private String promotionTitle;
+
+    @Column(name = "original_amount", precision = 12, scale = 2)
+    private BigDecimal originalAmount;
+
+    @Column(name = "discount_amount", precision = 12, scale = 2)
+    private BigDecimal discountAmount;
+
     @Column(name = "total_amount", precision = 12, scale = 2)
     private BigDecimal totalAmount;
 
@@ -108,6 +121,9 @@ public class Appointment {
     @PreUpdate
     private void ensureDepositDefaults() {
         if (depositRequired == null) depositRequired = false;
+        if (originalAmount == null) originalAmount = BigDecimal.ZERO;
+        if (discountAmount == null) discountAmount = BigDecimal.ZERO;
+        if (totalAmount == null) totalAmount = originalAmount.subtract(discountAmount);
         if (depositAmount == null) depositAmount = BigDecimal.ZERO;
         if (remainingAmount == null) remainingAmount = BigDecimal.ZERO;
         if (depositStatus == null || depositStatus.isBlank()) {

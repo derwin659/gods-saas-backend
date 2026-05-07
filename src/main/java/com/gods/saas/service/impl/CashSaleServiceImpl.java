@@ -80,7 +80,13 @@ public class CashSaleServiceImpl implements CashSaleService {
         saleRequest.setUserId(userId);
         saleRequest.setAppointmentId(request.getAppointmentId());
         saleRequest.setMetodoPago(normalizeMethod(request.getMetodoPago()));
-        saleRequest.setDiscount(safe(request.getDiscount()));
+
+        BigDecimal requestDiscount = safe(request.getDiscount());
+        BigDecimal appointmentDiscount = appointment != null
+                ? safe(appointment.getDiscountAmount())
+                : BigDecimal.ZERO;
+
+        saleRequest.setDiscount(requestDiscount.add(appointmentDiscount));
         saleRequest.setCashReceived(safe(request.getCashReceived()));
 
         // IMPORTANTE: copiar propina y pagos mixtos al servicio real de ventas.

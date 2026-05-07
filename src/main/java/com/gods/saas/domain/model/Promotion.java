@@ -5,6 +5,7 @@ import com.gods.saas.domain.enums.PromotionType;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
@@ -53,6 +54,19 @@ public class Promotion {
 
     @Column(name = "price_text", length = 80)
     private String priceText;
+
+    /**
+     * Descuento real que se aplica al reservar desde esta promoción.
+     * Valores recomendados:
+     * AMOUNT      => descuenta un monto fijo.
+     * PERCENT     => descuenta un porcentaje.
+     * FIXED_PRICE => deja el servicio en un precio final.
+     */
+    @Column(name = "discount_type", length = 20)
+    private String discountType;
+
+    @Column(name = "discount_value", precision = 12, scale = 2)
+    private BigDecimal discountValue;
 
     @Column(name = "cta_label", length = 40)
     private String ctaLabel;
