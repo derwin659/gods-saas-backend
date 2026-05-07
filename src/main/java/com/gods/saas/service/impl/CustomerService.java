@@ -6,6 +6,8 @@ import com.gods.saas.domain.dto.ClienteResponse;
 import com.gods.saas.domain.dto.VentaRapidaRequest;
 import com.gods.saas.domain.dto.response.ClientHomeResponse;
 import com.gods.saas.domain.dto.response.ClientLoginResponse;
+import com.gods.saas.domain.dto.response.OwnerCustomerHistoryResponse;
+import com.gods.saas.domain.dto.response.OwnerCustomerLoyaltyResponse;
 import com.gods.saas.domain.model.Customer;
 import com.gods.saas.domain.model.LoyaltyAccount;
 import com.gods.saas.domain.model.OtpCode;
@@ -26,6 +28,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -540,4 +543,70 @@ public class CustomerService {
                         : 0)
                 .orElse(0);
     }
+
+    public OwnerCustomerLoyaltyResponse obtenerLoyaltyOwner(Long tenantId, Long customerId) {
+        Customer customer = obtenerClienteOwner(tenantId, customerId);
+
+        LoyaltyAccount account = loyaltyAccountRepository
+                .findByTenant_IdAndCustomer_Id(tenantId, customerId)
+                .orElse(null);
+
+        int disponibles = account != null && account.getPuntosDisponibles() != null
+                ? account.getPuntosDisponibles()
+                : 0;
+
+        int acumulados = account != null && account.getPuntosAcumulados() != null
+                ? account.getPuntosAcumulados()
+                : 0;
+
+        return new OwnerCustomerLoyaltyResponse(
+                customer.getId(),
+                customer.getNombres(),
+                customer.getApellidos(),
+                customer.getTelefono(),
+                disponibles,
+                acumulados,
+                customer.getMigrated(),
+                customer.getAppActivated()
+        );
+    }
+    public Integer obtenerPuntosAcumuladosReales(Long tenantId, Long customerId) {
+        return loyaltyAccountRepository
+                .findByTenant_IdAndCustomer_Id(tenantId, customerId)
+                .map(account -> account.getPuntosAcumulados() != null
+                        ? account.getPuntosAcumulados()
+                        : 0)
+                .orElse(0);
+    }
+
+    public List<OwnerCustomerHistoryResponse> obtenerHistorialOwner(Long tenantId, Long customerId, int limit) {
+        obtenerClienteOwner(tenantId, customerId);
+
+        int safeLimit = Math.min(Math.max(limit, 1), 30);
+
+        List<LastVisitProjection> rows = appointmentRepository.findLastVisits(
+                tenantId,
+                customerId,
+                safeLimit
+        );
+
+        if (rows == null || rows.isEmpty()) {
+            return Collections.emptyList();
+        }
+
+        return rows.stream()
+                .map(v -> OwnerCustomerHistoryResponse.builder()
+                        .id(v.getAppointmentId())
+                        .fecha(v.getFecha() != null ? v.getFecha().toString() : null)
+                        .servicio(v.getServicio() != null ? v.getServicio() : "Servicio")
+                        .barbero(v.getBarbero() != null && !v.getBarbero().isBlank()
+                                ? v.getBarbero()
+                                : "Sin asignar")
+                        .puntos(v.getPuntos() != null ? v.getPuntos() : 0)
+                        .total(v.getTotal() != null ? BigDecimal.valueOf(v.getTotal()) : BigDecimal.ZERO)
+                        .tipo("SALE")
+                        .build())
+                .collect(Collectors.toList());
+    }
+
 }

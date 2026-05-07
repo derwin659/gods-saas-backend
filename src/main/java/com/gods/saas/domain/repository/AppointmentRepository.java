@@ -162,32 +162,38 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     );
 
     @Query(value = """
-    select
-        sa.sale_id as appointmentId,
-        sa.fecha_creacion::date as fecha,
-        coalesce(
-            string_agg(distinct s.nombre, ', '),
-            'Servicio'
-        ) as servicio,
-        coalesce(sum(distinct lm.puntos), 0) as puntos,
-        coalesce(sum(si.subtotal), 0) as total
-    from sale sa
-    left join sale_item si
-           on si.sale_id = sa.sale_id
-    left join service s
-           on s.service_id = si.service_id
-    left join loyalty_movement lm
-           on lm.referencia_id = sa.sale_id
-          and lm.tipo = 'EARN'
-          and lm.origen = 'SALE'
-          and lm.tenant_id = sa.tenant_id
-          and lm.customer_id = sa.customer_id
-    where sa.tenant_id = :tenantId
-      and sa.customer_id = :customerId
-    group by sa.sale_id, sa.fecha_creacion
-    order by sa.fecha_creacion desc
-    limit :limit
-    """, nativeQuery = true)
+select
+    sa.sale_id as appointmentId,
+    sa.fecha_creacion::date as fecha,
+    coalesce(
+        string_agg(distinct s.nombre, ', '),
+        'Servicio'
+    ) as servicio,
+    coalesce(
+        nullif(trim(string_agg(distinct coalesce(u.nombre, '') || ' ' || coalesce(u.apellido, ''))), ''),
+        'Sin asignar'
+    ) as barbero,
+    coalesce(sum(distinct lm.puntos), 0) as puntos,
+    coalesce(sum(si.subtotal), 0) as total
+from sale sa
+left join sale_item si
+       on si.sale_id = sa.sale_id
+left join service s
+       on s.service_id = si.service_id
+left join app_user u
+       on u.user_id = coalesce(si.barber_user_id, sa.user_id)
+left join loyalty_movement lm
+       on lm.referencia_id = sa.sale_id
+      and lm.tipo = 'EARN'
+      and lm.origen = 'SALE'
+      and lm.tenant_id = sa.tenant_id
+      and lm.customer_id = sa.customer_id
+where sa.tenant_id = :tenantId
+  and sa.customer_id = :customerId
+group by sa.sale_id, sa.fecha_creacion
+order by sa.fecha_creacion desc
+limit :limit
+""", nativeQuery = true)
     List<LastVisitProjection> findLastVisits(
             @Param("tenantId") Long tenantId,
             @Param("customerId") Long customerId,

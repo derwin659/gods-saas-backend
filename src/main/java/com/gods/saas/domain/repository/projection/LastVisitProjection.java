@@ -6,6 +6,10 @@ public interface LastVisitProjection {
     Long getAppointmentId();
     LocalDate getFecha();
     String getServicio();
+    String getBarbero();
     Integer getPuntos();
     Double getTotal();
 }
+
+
+

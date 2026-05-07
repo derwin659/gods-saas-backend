@@ -3,6 +3,8 @@ package com.gods.saas.web.controller;
 import com.gods.saas.domain.dto.ActualizarClienteRequest;
 import com.gods.saas.domain.dto.ClienteResponse;
 import com.gods.saas.domain.dto.VentaRapidaRequest;
+import com.gods.saas.domain.dto.response.OwnerCustomerHistoryResponse;
+import com.gods.saas.domain.dto.response.OwnerCustomerLoyaltyResponse;
 import com.gods.saas.domain.model.Customer;
 import com.gods.saas.service.impl.AdminPermissionService;
 import com.gods.saas.service.impl.CustomerService;
@@ -66,6 +68,33 @@ public class OwnerCustomerController {
         );
 
         return ResponseEntity.ok(ClienteResponse.fromEntity(customer, puntosReales));
+    }
+
+    @Operation(summary = "Obtener puntos reales del cliente para owner/admin")
+    @SecurityRequirement(name = "bearerAuth")
+    @GetMapping("/{customerId}/loyalty")
+    public ResponseEntity<OwnerCustomerLoyaltyResponse> loyalty(
+            @RequestHeader("Authorization") String authHeader,
+            @PathVariable Long customerId
+    ) {
+        adminPermissionService.checkPermission("CUSTOMERS_ACCESS");
+
+        Long tenantId = extractTenantId(authHeader);
+        return ResponseEntity.ok(customerService.obtenerLoyaltyOwner(tenantId, customerId));
+    }
+
+    @Operation(summary = "Obtener historial de visitas/cortes del cliente para owner/admin")
+    @SecurityRequirement(name = "bearerAuth")
+    @GetMapping("/{customerId}/history")
+    public ResponseEntity<List<OwnerCustomerHistoryResponse>> history(
+            @RequestHeader("Authorization") String authHeader,
+            @PathVariable Long customerId,
+            @RequestParam(defaultValue = "10") int limit
+    ) {
+        adminPermissionService.checkPermission("CUSTOMERS_ACCESS");
+
+        Long tenantId = extractTenantId(authHeader);
+        return ResponseEntity.ok(customerService.obtenerHistorialOwner(tenantId, customerId, limit));
     }
 
     @Operation(summary = "Registrar cliente desde owner/admin")

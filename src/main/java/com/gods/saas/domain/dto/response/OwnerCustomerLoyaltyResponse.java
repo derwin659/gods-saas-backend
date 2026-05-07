@@ -6,6 +6,7 @@ public record OwnerCustomerLoyaltyResponse(
         String apellidos,
         String telefono,
         Integer puntosDisponibles,
+        Integer puntosAcumulados,
         Boolean migrated,
         Boolean appActivated
 ) {
