@@ -93,6 +93,8 @@ public class PromotionServiceImpl implements PromotionService {
                 .imageUrl(trim(request.getImageUrl()))
                 .iconName(trim(request.getIconName()))
                 .priceText(trim(request.getPriceText()))
+                .discountType(normalizeDiscountType(request.getDiscountType()))
+                .discountValue(normalizeDiscountValue(request.getDiscountType(), request.getDiscountValue()))
                 .ctaLabel(trim(request.getCtaLabel()))
                 .redirectType(request.getRedirectType() != null ? request.getRedirectType() : PromotionRedirectType.NONE)
                 .redirectValue(trim(request.getRedirectValue()))
@@ -134,6 +136,8 @@ public class PromotionServiceImpl implements PromotionService {
         promotion.setImageUrl(trim(request.getImageUrl()));
         promotion.setIconName(trim(request.getIconName()));
         promotion.setPriceText(trim(request.getPriceText()));
+        promotion.setDiscountType(normalizeDiscountType(request.getDiscountType()));
+        promotion.setDiscountValue(normalizeDiscountValue(request.getDiscountType(), request.getDiscountValue()));
         promotion.setCtaLabel(trim(request.getCtaLabel()));
         promotion.setRedirectType(request.getRedirectType() != null ? request.getRedirectType() : PromotionRedirectType.NONE);
         promotion.setRedirectValue(trim(request.getRedirectValue()));
@@ -212,6 +216,22 @@ public class PromotionServiceImpl implements PromotionService {
         if (!p.isSoloClientesConPuntos()) {
             p.setPuntosMinimos(null);
         }
+
+        String discountType = normalizeDiscountType(p.getDiscountType());
+        p.setDiscountType(discountType);
+
+        if (discountType == null) {
+            p.setDiscountValue(null);
+        } else {
+            if (p.getDiscountValue() == null || p.getDiscountValue().compareTo(java.math.BigDecimal.ZERO) <= 0) {
+                throw new IllegalArgumentException("Debes indicar un valor de descuento mayor a cero");
+            }
+
+            if ("PERCENT".equals(discountType)
+                    && p.getDiscountValue().compareTo(java.math.BigDecimal.valueOf(100)) > 0) {
+                throw new IllegalArgumentException("El porcentaje de descuento no puede ser mayor a 100");
+            }
+        }
     }
 
     private void validatePromotionsFeatureAllowed(Long tenantId) {
@@ -287,6 +307,8 @@ public class PromotionServiceImpl implements PromotionService {
                 .ctaLabel(p.getCtaLabel())
                 .redirectType(p.getRedirectType() != null ? p.getRedirectType().name() : "NONE")
                 .redirectValue(p.getRedirectValue())
+                .discountType(p.getDiscountType())
+                .discountValue(p.getDiscountValue())
                 .destacado(p.isDestacado())
                 .soloClientesConPuntos(p.isSoloClientesConPuntos())
                 .puntosMinimos(p.getPuntosMinimos())
@@ -297,6 +319,38 @@ public class PromotionServiceImpl implements PromotionService {
                 .createdAt(p.getCreatedAt())
                 .updatedAt(p.getUpdatedAt())
                 .build();
+    }
+
+    private String normalizeDiscountType(String value) {
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        String type = value.trim().toUpperCase();
+
+        if ("NONE".equals(type) || "SIN_DESCUENTO".equals(type)) {
+            return null;
+        }
+
+        if (!type.equals("AMOUNT") && !type.equals("PERCENT") && !type.equals("FIXED_PRICE")) {
+            throw new IllegalArgumentException("Tipo de descuento inválido");
+        }
+
+        return type;
+    }
+
+    private java.math.BigDecimal normalizeDiscountValue(String discountType, java.math.BigDecimal value) {
+        String type = normalizeDiscountType(discountType);
+
+        if (type == null) {
+            return null;
+        }
+
+        if (value == null) {
+            return null;
+        }
+
+        return value.setScale(2, java.math.RoundingMode.HALF_UP);
     }
 
     private String trim(String value) {

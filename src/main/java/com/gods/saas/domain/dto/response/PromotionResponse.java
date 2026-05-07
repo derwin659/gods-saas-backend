@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
@@ -30,6 +31,13 @@ public class PromotionResponse {
 
     private String redirectType;
     private String redirectValue;
+
+    /**
+     * Descuento real configurable desde dueño.
+     * AMOUNT / PERCENT / FIXED_PRICE / null.
+     */
+    private String discountType;
+    private BigDecimal discountValue;
 
     private boolean destacado;
     private boolean soloClientesConPuntos;
