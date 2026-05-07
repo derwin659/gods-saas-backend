@@ -6,21 +6,18 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.math.BigDecimal;
-import java.util.List;
 
 @Data
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class OwnerCustomerHistoryResponse {
+public class OwnerCustomerHistoryItemResponse {
     private Long id;
-    private String fecha;
-    private String servicio;
+    private String nombre;
+    private String tipo;
+    private Integer cantidad;
+    private BigDecimal precioUnitario;
+    private BigDecimal subtotal;
     private String barbero;
     private String barberPhotoUrl;
-    private Integer puntos;
-    private BigDecimal total;
-    private String tipo;
-
-    private List<OwnerCustomerHistoryItemResponse> items;
 }

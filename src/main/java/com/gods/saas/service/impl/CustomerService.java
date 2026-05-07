@@ -7,6 +7,7 @@ import com.gods.saas.domain.dto.VentaRapidaRequest;
 import com.gods.saas.domain.dto.response.ClientHomeResponse;
 import com.gods.saas.domain.dto.response.ClientLoginResponse;
 import com.gods.saas.domain.dto.response.OwnerCustomerHistoryResponse;
+import com.gods.saas.domain.dto.response.OwnerCustomerHistoryItemResponse;
 import com.gods.saas.domain.dto.response.OwnerCustomerLoyaltyResponse;
 import com.gods.saas.domain.model.Customer;
 import com.gods.saas.domain.model.LoyaltyAccount;
@@ -18,8 +19,10 @@ import com.gods.saas.domain.repository.LoyaltyAccountRepository;
 import com.gods.saas.domain.repository.LoyaltyMovementRepository;
 import com.gods.saas.domain.repository.OtpCodeRepository;
 import com.gods.saas.domain.repository.RewardRedemptionRepository;
+import com.gods.saas.domain.repository.SaleItemRepository;
 import com.gods.saas.domain.repository.TenantRepository;
 import com.gods.saas.domain.repository.projection.LastVisitProjection;
+import com.gods.saas.domain.repository.projection.CustomerHistorySaleItemProjection;
 import com.gods.saas.service.impl.impl.LoyaltyService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -36,6 +39,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Random;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
@@ -47,6 +51,7 @@ public class CustomerService {
     private final OtpCodeRepository otpCodeRepository;
     private final TenantRepository tenantRepository;
     private final AppointmentRepository appointmentRepository;
+    private final SaleItemRepository saleItemRepository;
     private final LoyaltyMovementRepository loyaltyMovementRepository;
     private final RewardRedemptionRepository rewardRedemptionRepository;
     private final LoyaltyService loyaltyService;
@@ -594,19 +599,65 @@ public class CustomerService {
             return Collections.emptyList();
         }
 
+        List<Long> saleIds = rows.stream()
+                .map(LastVisitProjection::getAppointmentId)
+                .filter(Objects::nonNull)
+                .toList();
+
+        Map<Long, List<CustomerHistorySaleItemProjection>> itemsBySaleId = saleIds.isEmpty()
+                ? Collections.emptyMap()
+                : saleIds.stream().collect(Collectors.toMap(
+                id -> id,
+                id -> saleItemRepository.findCustomerHistoryItemsBySale(
+                        tenantId,
+                        customerId,
+                        id
+                )
+        ));
+
         return rows.stream()
-                .map(v -> OwnerCustomerHistoryResponse.builder()
-                        .id(v.getAppointmentId())
-                        .fecha(v.getFecha() != null ? v.getFecha().toString() : null)
-                        .servicio(v.getServicio() != null ? v.getServicio() : "Producto / venta")
-                        .barbero(v.getBarbero() != null && !v.getBarbero().isBlank()
-                                ? v.getBarbero()
-                                : "Sin asignar")
-                        .barberPhotoUrl(v.getBarberPhotoUrl() != null ? v.getBarberPhotoUrl() : "")
-                        .puntos(0)
-                        .total(v.getTotal() != null ? BigDecimal.valueOf(v.getTotal()) : BigDecimal.ZERO)
-                        .tipo("SALE")
-                        .build())
+                .map(v -> {
+                    List<OwnerCustomerHistoryItemResponse> items = itemsBySaleId
+                            .getOrDefault(v.getAppointmentId(), Collections.emptyList())
+                            .stream()
+                            .map(item -> OwnerCustomerHistoryItemResponse.builder()
+                                    .id(item.getId())
+                                    .nombre(item.getNombre() != null && !item.getNombre().isBlank()
+                                            ? item.getNombre()
+                                            : "Item")
+                                    .tipo(item.getTipo() != null && !item.getTipo().isBlank()
+                                            ? item.getTipo()
+                                            : "SERVICE")
+                                    .cantidad(item.getCantidad() != null ? item.getCantidad() : 1)
+                                    .precioUnitario(item.getPrecioUnitario() != null
+                                            ? item.getPrecioUnitario()
+                                            : BigDecimal.ZERO)
+                                    .subtotal(item.getSubtotal() != null
+                                            ? item.getSubtotal()
+                                            : BigDecimal.ZERO)
+                                    .barbero(item.getBarbero() != null && !item.getBarbero().isBlank()
+                                            ? item.getBarbero()
+                                            : "Sin asignar")
+                                    .barberPhotoUrl(item.getBarberPhotoUrl() != null
+                                            ? item.getBarberPhotoUrl()
+                                            : "")
+                                    .build())
+                            .collect(Collectors.toList());
+
+                    return OwnerCustomerHistoryResponse.builder()
+                            .id(v.getAppointmentId())
+                            .fecha(v.getFecha() != null ? v.getFecha().toString() : null)
+                            .servicio(v.getServicio() != null ? v.getServicio() : "Producto / venta")
+                            .barbero(v.getBarbero() != null && !v.getBarbero().isBlank()
+                                    ? v.getBarbero()
+                                    : "Sin asignar")
+                            .barberPhotoUrl(v.getBarberPhotoUrl() != null ? v.getBarberPhotoUrl() : "")
+                            .puntos(0)
+                            .total(v.getTotal() != null ? BigDecimal.valueOf(v.getTotal()) : BigDecimal.ZERO)
+                            .tipo("SALE")
+                            .items(items)
+                            .build();
+                })
                 .collect(Collectors.toList());
     }
 }
