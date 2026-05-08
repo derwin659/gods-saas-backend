@@ -3,6 +3,7 @@ package com.gods.saas.web.controller;
 import com.gods.saas.domain.dto.request.AdjustProductStockRequest;
 import com.gods.saas.domain.dto.request.SaveProductRequest;
 import com.gods.saas.domain.dto.response.ProductResponse;
+import com.gods.saas.domain.dto.response.StockMovementResponse;
 import com.gods.saas.service.impl.AdminPermissionService;
 import com.gods.saas.service.impl.impl.OwnerProductService;
 import lombok.RequiredArgsConstructor;
@@ -86,6 +87,20 @@ public class OwnerProductController {
 
         Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
         return ownerProductService.toggleActive(tenantId, effectiveBranchId, userId, productId);
+    }
+
+    @GetMapping("/{productId}/stock-movements")
+    public List<StockMovementResponse> findStockMovements(
+            @RequestAttribute("tenantId") Long tenantId,
+            @RequestAttribute("branchId") Long sessionBranchId,
+            @PathVariable Long productId,
+            @RequestParam(required = false) Long branchId,
+            @RequestParam(defaultValue = "10") int limit
+    ) {
+        adminPermissionService.checkPermission("CONFIG_PRODUCTS");
+
+        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        return ownerProductService.findStockMovements(tenantId, effectiveBranchId, productId, limit);
     }
 
     @PostMapping("/{productId}/image")

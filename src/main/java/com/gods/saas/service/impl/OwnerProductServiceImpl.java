@@ -3,6 +3,7 @@ package com.gods.saas.service.impl;
 import com.gods.saas.domain.dto.request.AdjustProductStockRequest;
 import com.gods.saas.domain.dto.request.SaveProductRequest;
 import com.gods.saas.domain.dto.response.ProductResponse;
+import com.gods.saas.domain.dto.response.StockMovementResponse;
 import com.gods.saas.domain.model.AppUser;
 import com.gods.saas.domain.model.Branch;
 import com.gods.saas.domain.model.Product;
@@ -21,6 +22,9 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Locale;
+
+import org.springframework.data.domain.PageRequest;
 
 @Service
 @RequiredArgsConstructor
@@ -75,6 +79,10 @@ public class OwnerProductServiceImpl implements OwnerProductService {
                     0,
                     safeInt(saved.getStockActual()),
                     "ENTRADA",
+                    safe(saved.getPrecioCompra()),
+                    null,
+                    null,
+                    null,
                     "Stock inicial del producto"
             );
         }
@@ -104,6 +112,10 @@ public class OwnerProductServiceImpl implements OwnerProductService {
                     previousStock,
                     newStock,
                     "AJUSTE",
+                    safe(saved.getPrecioCompra()),
+                    null,
+                    null,
+                    null,
                     "Ajuste manual desde edición de producto"
             );
         }
@@ -136,6 +148,11 @@ public class OwnerProductServiceImpl implements OwnerProductService {
         product.setStockActual(stockNuevo);
         Product saved = productRepository.save(product);
 
+        String tipoMovimiento = normalizeMovementType(request.getTipoMovimiento(), request.getQuantityDelta());
+        BigDecimal costoUnitario = request.getCostoUnitario() != null
+                ? request.getCostoUnitario()
+                : safe(saved.getPrecioCompra());
+
         registerStockMovement(
                 tenantId,
                 branchId,
@@ -144,13 +161,37 @@ public class OwnerProductServiceImpl implements OwnerProductService {
                 request.getQuantityDelta(),
                 stockAnterior,
                 stockNuevo,
-                request.getQuantityDelta() > 0 ? "ENTRADA" : "AJUSTE",
+                tipoMovimiento,
+                safe(costoUnitario),
+                clean(request.getProveedor()),
+                request.getFechaRecepcion(),
+                clean(request.getNumeroComprobante()),
                 clean(request.getObservacion()) != null
                         ? clean(request.getObservacion())
-                        : (request.getQuantityDelta() > 0 ? "Entrada manual de stock" : "Ajuste manual de stock")
+                        : defaultMovementObservation(tipoMovimiento, request.getQuantityDelta())
         );
 
         return toResponse(saved);
+    }
+
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<StockMovementResponse> findStockMovements(Long tenantId, Long branchId, Long productId, int limit) {
+        getProduct(tenantId, productId);
+
+        int safeLimit = Math.min(Math.max(limit, 1), 50);
+
+        return stockMovementRepository
+                .findByTenant_IdAndBranch_IdAndProduct_IdOrderByFechaCreacionDesc(
+                        tenantId,
+                        branchId,
+                        productId,
+                        PageRequest.of(0, safeLimit)
+                )
+                .stream()
+                .map(StockMovementResponse::fromEntity)
+                .toList();
     }
 
 
@@ -297,6 +338,10 @@ public class OwnerProductServiceImpl implements OwnerProductService {
             Integer stockAnterior,
             Integer stockNuevo,
             String type,
+            BigDecimal costoUnitario,
+            String proveedor,
+            java.time.LocalDate fechaRecepcion,
+            String numeroComprobante,
             String observacion
     ) {
         Branch branch = branchRepository.findById(branchId)
@@ -322,13 +367,50 @@ public class OwnerProductServiceImpl implements OwnerProductService {
                 .cantidad(Math.abs(quantityDelta))
                 .stockAnterior(stockAnterior)
                 .stockNuevo(stockNuevo)
-                .costoUnitario(safe(product.getPrecioCompra()))
+                .costoUnitario(safe(costoUnitario))
                 .precioUnitario(resolvePrecioVenta(product))
+                .proveedor(proveedor)
+                .fechaRecepcion(fechaRecepcion)
+                .numeroComprobante(numeroComprobante)
                 .observacion(observacion)
                 .fechaCreacion(tenantTimeService.now(tenantId))
                 .build();
 
         stockMovementRepository.save(movement);
+    }
+
+    private String normalizeMovementType(String rawType, Integer quantityDelta) {
+        String type = clean(rawType);
+
+        if (type == null) {
+            return quantityDelta != null && quantityDelta > 0 ? "ENTRADA" : "AJUSTE";
+        }
+
+        String normalized = type
+                .trim()
+                .toUpperCase(Locale.ROOT)
+                .replace(' ', '_')
+                .replace('-', '_');
+
+        return switch (normalized) {
+            case "ENTRADA", "AJUSTE", "PERDIDA", "DEVOLUCION", "SALIDA_INTERNA", "VENTA" -> normalized;
+            default -> quantityDelta != null && quantityDelta > 0 ? "ENTRADA" : "AJUSTE";
+        };
+    }
+
+    private String defaultMovementObservation(String tipoMovimiento, Integer quantityDelta) {
+        String type = tipoMovimiento == null ? "AJUSTE" : tipoMovimiento;
+
+        return switch (type) {
+            case "ENTRADA" -> "Recepción o entrada manual de stock";
+            case "PERDIDA" -> "Salida por pérdida o merma";
+            case "DEVOLUCION" -> "Devolución de stock";
+            case "SALIDA_INTERNA" -> "Salida interna de inventario";
+            case "VENTA" -> "Salida por venta";
+            default -> quantityDelta != null && quantityDelta > 0
+                    ? "Entrada manual de stock"
+                    : "Ajuste manual de stock";
+        };
     }
 
     private BigDecimal safe(BigDecimal value) {

@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
@@ -41,7 +42,7 @@ public class StockMovement {
     private AppUser user;
 
     @Column(name = "tipo_movimiento", length = 20, nullable = false)
-    private String tipoMovimiento; // ENTRADA / AJUSTE / VENTA / DEVOLUCION
+    private String tipoMovimiento; // ENTRADA / AJUSTE / PERDIDA / VENTA / DEVOLUCION / SALIDA_INTERNA
 
     @Column(nullable = false)
     private Integer cantidad;
@@ -57,6 +58,15 @@ public class StockMovement {
 
     @Column(name = "precio_unitario", precision = 12, scale = 2)
     private BigDecimal precioUnitario;
+
+    @Column(length = 120)
+    private String proveedor;
+
+    @Column(name = "fecha_recepcion")
+    private LocalDate fechaRecepcion;
+
+    @Column(name = "numero_comprobante", length = 80)
+    private String numeroComprobante;
 
     @Column(length = 250)
     private String observacion;
