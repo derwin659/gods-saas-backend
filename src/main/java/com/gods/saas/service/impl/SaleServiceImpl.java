@@ -33,6 +33,7 @@ public class SaleServiceImpl implements SaleService {
     private final SaleRepository saleRepository;
     private final ServiceRepository serviceRepository;
     private final ProductRepository productRepository;
+    private final ProductBranchStockRepository productBranchStockRepository;
     private final TenantRepository tenantRepository;
     private final BranchRepository branchRepository;
     private final CustomerRepository customerRepository;
@@ -161,7 +162,8 @@ public class SaleServiceImpl implements SaleService {
                     throw new RuntimeException("El producto está inactivo: " + product.getNombre());
                 }
 
-                int stockActual = product.getStockActual() == null ? 0 : product.getStockActual();
+                ProductBranchStock branchStock = getOrCreateBranchStock(tenant, branch, product);
+                int stockActual = branchStock.getStockActual() == null ? 0 : branchStock.getStockActual();
                 boolean permiteVentaSinStock = Boolean.TRUE.equals(product.getPermiteVentaSinStock());
 
                 if (!permiteVentaSinStock && stockActual < cantidad) {
@@ -628,11 +630,22 @@ public class SaleServiceImpl implements SaleService {
             }
 
             Product product = savedItem.getProduct();
-            int stockAnterior = product.getStockActual() == null ? 0 : product.getStockActual();
+            ProductBranchStock branchStock = getOrCreateBranchStock(tenant, branch, product);
+
+            int stockAnterior = branchStock.getStockActual() == null ? 0 : branchStock.getStockActual();
             int cantidadVendida = savedItem.getCantidad() == null ? 0 : savedItem.getCantidad();
             int stockNuevo = stockAnterior - cantidadVendida;
 
+            if (stockNuevo < 0 && !Boolean.TRUE.equals(product.getPermiteVentaSinStock())) {
+                throw new RuntimeException("Stock insuficiente para el producto: " + product.getNombre());
+            }
+
+            branchStock.setStockActual(stockNuevo);
+            productBranchStockRepository.save(branchStock);
+
+            // Campo legacy para compatibilidad con pantallas antiguas. El stock real viene de product_branch_stock.
             product.setStockActual(stockNuevo);
+            product.setStockMinimo(branchStock.getStockMinimo());
             productRepository.save(product);
 
             StockMovement movement = StockMovement.builder()
@@ -653,6 +666,23 @@ public class SaleServiceImpl implements SaleService {
 
             stockMovementRepository.save(movement);
         }
+    }
+
+    private ProductBranchStock getOrCreateBranchStock(Tenant tenant, Branch branch, Product product) {
+        return productBranchStockRepository
+                .findByTenant_IdAndBranch_IdAndProduct_Id(tenant.getId(), branch.getId(), product.getId())
+                .orElseGet(() -> productBranchStockRepository.save(
+                        ProductBranchStock.builder()
+                                .tenant(tenant)
+                                .branch(branch)
+                                .product(product)
+                                .stockActual(product.getStockActual() == null ? 0 : product.getStockActual())
+                                .stockMinimo(product.getStockMinimo() == null ? 0 : product.getStockMinimo())
+                                .activo(Boolean.TRUE.equals(product.getActivo()))
+                                .fechaCreacion(tenantTimeService.now(tenant.getId()))
+                                .fechaActualizacion(tenantTimeService.now(tenant.getId()))
+                                .build()
+                ));
     }
 
     private BigDecimal resolveProductSalePrice(Product product) {

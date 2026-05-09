@@ -9,6 +9,7 @@ import java.math.BigDecimal;
 @Builder
 public class ProductResponse {
     private Long id;
+    private Long branchId;
     private String nombre;
     private String sku;
     private String descripcion;

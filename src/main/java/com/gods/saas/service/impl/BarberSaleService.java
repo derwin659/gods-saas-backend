@@ -10,9 +10,11 @@ import com.gods.saas.domain.dto.response.SimpleServiceResponse;
 import com.gods.saas.domain.model.Appointment;
 import com.gods.saas.domain.model.Customer;
 import com.gods.saas.domain.model.Product;
+import com.gods.saas.domain.model.ProductBranchStock;
 import com.gods.saas.domain.model.ServiceEntity;
 import com.gods.saas.domain.repository.AppointmentRepository;
 import com.gods.saas.domain.repository.ProductRepository;
+import com.gods.saas.domain.repository.ProductBranchStockRepository;
 import com.gods.saas.domain.repository.ServiceRepository;
 import com.gods.saas.service.impl.impl.SaleService;
 import jakarta.transaction.Transactional;
@@ -31,6 +33,7 @@ public class BarberSaleService {
 
     private final AppointmentRepository appointmentRepository;
     private final ProductRepository productRepository;
+    private final ProductBranchStockRepository productBranchStockRepository;
     private final ServiceRepository serviceRepository;
     private final SaleService saleService;
     private final CustomerCutHistoryService customerCutHistoryService;
@@ -52,16 +55,31 @@ public class BarberSaleService {
     }
 
     @Transactional(Transactional.TxType.SUPPORTS)
-    public List<ProductResponse> getAvailableProducts(Long tenantId) {
+    public List<ProductResponse> getAvailableProducts(Long tenantId, Long branchId) {
+        List<ProductBranchStock> branchStocks = productBranchStockRepository
+                .findByTenantAndBranchWithProduct(tenantId, branchId, true);
+
+        if (!branchStocks.isEmpty()) {
+            return branchStocks.stream()
+                    .filter(stock -> Boolean.TRUE.equals(stock.getActivo()))
+                    .map(stock -> toProductResponse(stock.getProduct(), stock))
+                    .toList();
+        }
+
+        // Fallback mientras se migra product_branch_stock.
         return productRepository.findByTenant_IdAndActivoTrueOrderByNombreAsc(tenantId)
                 .stream()
-                .map(this::toProductResponse)
+                .map(product -> toProductResponse(product, null))
                 .toList();
     }
 
-    private ProductResponse toProductResponse(Product product) {
-        int stockActual = product.getStockActual() == null ? 0 : product.getStockActual();
-        int stockMinimo = product.getStockMinimo() == null ? 0 : product.getStockMinimo();
+    private ProductResponse toProductResponse(Product product, ProductBranchStock branchStock) {
+        int stockActual = branchStock != null && branchStock.getStockActual() != null
+                ? branchStock.getStockActual()
+                : (product.getStockActual() == null ? 0 : product.getStockActual());
+        int stockMinimo = branchStock != null && branchStock.getStockMinimo() != null
+                ? branchStock.getStockMinimo()
+                : (product.getStockMinimo() == null ? 0 : product.getStockMinimo());
 
         BigDecimal precioVenta = product.getPrecioVenta() != null
                 && product.getPrecioVenta().compareTo(BigDecimal.ZERO) > 0
@@ -72,6 +90,7 @@ public class BarberSaleService {
 
         return ProductResponse.builder()
                 .id(product.getId())
+                .branchId(branchStock != null && branchStock.getBranch() != null ? branchStock.getBranch().getId() : null)
                 .nombre(product.getNombre())
                 .sku(product.getSku())
                 .descripcion(product.getDescripcion())
@@ -187,7 +206,10 @@ public class BarberSaleService {
                         : extra.getCantidad();
 
                 if (!Boolean.TRUE.equals(product.getPermiteVentaSinStock())) {
-                    int stock = product.getStockActual() == null ? 0 : product.getStockActual();
+                    int stock = productBranchStockRepository
+                            .findByTenant_IdAndBranch_IdAndProduct_Id(tenantId, branchId, product.getId())
+                            .map(ProductBranchStock::getStockActual)
+                            .orElse(product.getStockActual() == null ? 0 : product.getStockActual());
 
                     if (stock < cantidad) {
                         throw new RuntimeException("Stock insuficiente para " + product.getNombre());

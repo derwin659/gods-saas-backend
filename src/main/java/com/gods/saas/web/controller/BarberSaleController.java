@@ -67,11 +67,15 @@ public class BarberSaleController {
         Map<String, Object> claims = getClaims(authentication);
 
         Long tenantId = toLong(claims.get("tenantId"));
+        Long branchId = toLong(claims.get("branchId"));
         if (tenantId == null) {
             throw new RuntimeException("El token no contiene tenantId");
         }
+        if (branchId == null) {
+            throw new RuntimeException("El token no contiene branchId");
+        }
 
-        return barberSaleService.getAvailableProducts(tenantId);
+        return barberSaleService.getAvailableProducts(tenantId, branchId);
     }
 
     @SuppressWarnings("unchecked")

@@ -7,11 +7,13 @@ import com.gods.saas.domain.dto.response.StockMovementResponse;
 import com.gods.saas.domain.model.AppUser;
 import com.gods.saas.domain.model.Branch;
 import com.gods.saas.domain.model.Product;
+import com.gods.saas.domain.model.ProductBranchStock;
 import com.gods.saas.domain.model.StockMovement;
 import com.gods.saas.domain.model.Tenant;
 import com.gods.saas.domain.repository.AppUserRepository;
 import com.gods.saas.domain.repository.BranchRepository;
 import com.gods.saas.domain.repository.ProductRepository;
+import com.gods.saas.domain.repository.ProductBranchStockRepository;
 import com.gods.saas.domain.repository.StockMovementRepository;
 import com.gods.saas.domain.repository.TenantRepository;
 import com.gods.saas.service.impl.impl.OwnerProductService;
@@ -32,6 +34,7 @@ import org.springframework.data.domain.PageRequest;
 public class OwnerProductServiceImpl implements OwnerProductService {
 
     private final ProductRepository productRepository;
+    private final ProductBranchStockRepository productBranchStockRepository;
     private final TenantRepository tenantRepository;
     private final BranchRepository branchRepository;
     private final AppUserRepository appUserRepository;
@@ -42,18 +45,33 @@ public class OwnerProductServiceImpl implements OwnerProductService {
     @Override
     @Transactional(readOnly = true)
     public List<ProductResponse> findAll(Long tenantId, Long branchId, Boolean activeOnly) {
+        validateBranch(tenantId, branchId);
+
+        List<ProductBranchStock> branchStocks = productBranchStockRepository
+                .findByTenantAndBranchWithProduct(tenantId, branchId, activeOnly);
+
+        if (!branchStocks.isEmpty()) {
+            return branchStocks.stream()
+                    .map(stock -> toResponse(stock.getProduct(), stock))
+                    .toList();
+        }
+
+        // Fallback mientras se migra product_branch_stock.
         List<Product> products = Boolean.TRUE.equals(activeOnly)
                 ? productRepository.findByTenant_IdAndActivoTrueOrderByNombreAsc(tenantId)
                 : productRepository.findByTenant_IdOrderByNombreAsc(tenantId);
 
-        return products.stream().map(this::toResponse).toList();
+        return products.stream()
+                .map(product -> toResponse(product, null, branchId))
+                .toList();
     }
 
     @Override
     @Transactional(readOnly = true)
     public ProductResponse findById(Long tenantId, Long branchId, Long productId) {
         Product product = getProduct(tenantId, productId);
-        return toResponse(product);
+        ProductBranchStock stock = findBranchStock(tenantId, branchId, productId).orElse(null);
+        return toResponse(product, stock, branchId);
     }
 
     @Override
@@ -69,25 +87,35 @@ public class OwnerProductServiceImpl implements OwnerProductService {
 
         Product saved = productRepository.save(product);
 
-        if (safeInt(saved.getStockActual()) > 0) {
+        Branch branch = validateBranch(tenantId, branchId);
+        ProductBranchStock branchStock = createOrUpdateBranchStock(
+                tenant,
+                branch,
+                saved,
+                safeInt(saved.getStockActual()),
+                safeInt(saved.getStockMinimo()),
+                Boolean.TRUE.equals(saved.getActivo())
+        );
+
+        if (safeInt(branchStock.getStockActual()) > 0) {
             registerStockMovement(
                     tenantId,
                     branchId,
                     userId,
                     saved,
-                    safeInt(saved.getStockActual()),
+                    safeInt(branchStock.getStockActual()),
                     0,
-                    safeInt(saved.getStockActual()),
+                    safeInt(branchStock.getStockActual()),
                     "ENTRADA",
                     safe(saved.getPrecioCompra()),
                     null,
                     null,
                     null,
-                    "Stock inicial del producto"
+                    "Stock inicial del producto en sede " + branch.getId()
             );
         }
 
-        return toResponse(saved);
+        return toResponse(saved, branchStock);
     }
 
     @Override
@@ -95,14 +123,29 @@ public class OwnerProductServiceImpl implements OwnerProductService {
         validateRequest(request, false);
 
         Product product = getProduct(tenantId, productId);
-        int previousStock = safeInt(product.getStockActual());
+        Branch branch = validateBranch(tenantId, branchId);
+        ProductBranchStock branchStock = getOrCreateBranchStock(product.getTenant(), branch, product);
+
+        int previousStock = safeInt(branchStock.getStockActual());
 
         applyRequest(product, request);
-
         Product saved = productRepository.save(product);
 
+        if (request.getStockMinimo() != null) {
+            branchStock.setStockMinimo(Math.max(0, request.getStockMinimo()));
+        }
+
+        if (request.getActivo() != null) {
+            branchStock.setActivo(request.getActivo());
+        }
+
         if (request.getStockActual() != null && request.getStockActual() != previousStock) {
-            int newStock = safeInt(saved.getStockActual());
+            int newStock = Math.max(0, request.getStockActual());
+            branchStock.setStockActual(newStock);
+            branchStock = productBranchStockRepository.save(branchStock);
+
+            syncLegacyStock(saved, branchStock);
+
             registerStockMovement(
                     tenantId,
                     branchId,
@@ -118,16 +161,28 @@ public class OwnerProductServiceImpl implements OwnerProductService {
                     null,
                     "Ajuste manual desde edición de producto"
             );
+        } else {
+            branchStock = productBranchStockRepository.save(branchStock);
+            syncLegacyStock(saved, branchStock);
         }
 
-        return toResponse(saved);
+        return toResponse(saved, branchStock);
     }
 
     @Override
     public ProductResponse toggleActive(Long tenantId, Long branchId, Long userId, Long productId) {
         Product product = getProduct(tenantId, productId);
-        product.setActivo(!Boolean.TRUE.equals(product.getActivo()));
-        return toResponse(productRepository.save(product));
+        Branch branch = validateBranch(tenantId, branchId);
+        ProductBranchStock branchStock = getOrCreateBranchStock(product.getTenant(), branch, product);
+
+        boolean next = !Boolean.TRUE.equals(product.getActivo());
+        product.setActivo(next);
+        branchStock.setActivo(next);
+
+        Product saved = productRepository.save(product);
+        branchStock = productBranchStockRepository.save(branchStock);
+
+        return toResponse(saved, branchStock);
     }
 
     @Override
@@ -137,27 +192,30 @@ public class OwnerProductServiceImpl implements OwnerProductService {
         }
 
         Product product = getProduct(tenantId, productId);
+        Branch branch = validateBranch(tenantId, branchId);
+        ProductBranchStock branchStock = getOrCreateBranchStock(product.getTenant(), branch, product);
 
-        int stockAnterior = safeInt(product.getStockActual());
+        int stockAnterior = safeInt(branchStock.getStockActual());
         int stockNuevo = stockAnterior + request.getQuantityDelta();
 
         if (stockNuevo < 0 && !Boolean.TRUE.equals(product.getPermiteVentaSinStock())) {
             throw new RuntimeException("El stock no puede quedar negativo");
         }
 
-        product.setStockActual(stockNuevo);
-        Product saved = productRepository.save(product);
+        branchStock.setStockActual(stockNuevo);
+        branchStock = productBranchStockRepository.save(branchStock);
+        syncLegacyStock(product, branchStock);
 
         String tipoMovimiento = normalizeMovementType(request.getTipoMovimiento(), request.getQuantityDelta());
         BigDecimal costoUnitario = request.getCostoUnitario() != null
                 ? request.getCostoUnitario()
-                : safe(saved.getPrecioCompra());
+                : safe(product.getPrecioCompra());
 
         registerStockMovement(
                 tenantId,
                 branchId,
                 userId,
-                saved,
+                product,
                 request.getQuantityDelta(),
                 stockAnterior,
                 stockNuevo,
@@ -171,7 +229,7 @@ public class OwnerProductServiceImpl implements OwnerProductService {
                         : defaultMovementObservation(tipoMovimiento, request.getQuantityDelta())
         );
 
-        return toResponse(saved);
+        return toResponse(product, branchStock);
     }
 
 
@@ -209,7 +267,7 @@ public class OwnerProductServiceImpl implements OwnerProductService {
         product.setImageUrl(upload.getSecureUrl());
         product.setImagePublicId(upload.getPublicId());
 
-        return toResponse(productRepository.save(product));
+        return toResponse(productRepository.save(product), findBranchStock(tenantId, branchId, productId).orElse(null), branchId);
     }
 
     private void applyRequest(Product product, SaveProductRequest request) {
@@ -295,12 +353,19 @@ public class OwnerProductServiceImpl implements OwnerProductService {
                 .orElseThrow(() -> new RuntimeException("Producto no encontrado"));
     }
 
-    private ProductResponse toResponse(Product product) {
-        int stockActual = safeInt(product.getStockActual());
-        int stockMinimo = safeInt(product.getStockMinimo());
+    private ProductResponse toResponse(Product product, ProductBranchStock branchStock) {
+        return toResponse(product, branchStock, branchStock != null && branchStock.getBranch() != null ? branchStock.getBranch().getId() : null);
+    }
+
+    private ProductResponse toResponse(Product product, ProductBranchStock branchStock, Long branchId) {
+        int stockActual = branchStock != null ? safeInt(branchStock.getStockActual()) : safeInt(product.getStockActual());
+        int stockMinimo = branchStock != null ? safeInt(branchStock.getStockMinimo()) : safeInt(product.getStockMinimo());
+        boolean active = Boolean.TRUE.equals(product.getActivo())
+                && (branchStock == null || Boolean.TRUE.equals(branchStock.getActivo()));
 
         return ProductResponse.builder()
                 .id(product.getId())
+                .branchId(branchId)
                 .nombre(product.getNombre())
                 .sku(product.getSku())
                 .descripcion(product.getDescripcion())
@@ -313,7 +378,7 @@ public class OwnerProductServiceImpl implements OwnerProductService {
                 .categoria(product.getCategoria())
                 .imageUrl(product.getImageUrl())
                 .imagePublicId(product.getImagePublicId())
-                .activo(Boolean.TRUE.equals(product.getActivo()))
+                .activo(active)
                 .permiteVentaSinStock(Boolean.TRUE.equals(product.getPermiteVentaSinStock()))
                 .stockBajo(stockActual <= stockMinimo)
                 .build();
@@ -327,6 +392,68 @@ public class OwnerProductServiceImpl implements OwnerProductService {
             return BigDecimal.valueOf(product.getPrecio());
         }
         return BigDecimal.ZERO;
+    }
+
+    private Branch validateBranch(Long tenantId, Long branchId) {
+        Branch branch = branchRepository.findById(branchId)
+                .orElseThrow(() -> new RuntimeException("Sede no encontrada"));
+
+        if (!branch.getTenant().getId().equals(tenantId)) {
+            throw new RuntimeException("La sede no pertenece al tenant");
+        }
+
+        return branch;
+    }
+
+    private java.util.Optional<ProductBranchStock> findBranchStock(Long tenantId, Long branchId, Long productId) {
+        return productBranchStockRepository.findByTenant_IdAndBranch_IdAndProduct_Id(tenantId, branchId, productId);
+    }
+
+    private ProductBranchStock getOrCreateBranchStock(Tenant tenant, Branch branch, Product product) {
+        return productBranchStockRepository
+                .findByTenant_IdAndBranch_IdAndProduct_Id(tenant.getId(), branch.getId(), product.getId())
+                .orElseGet(() -> productBranchStockRepository.save(
+                        ProductBranchStock.builder()
+                                .tenant(tenant)
+                                .branch(branch)
+                                .product(product)
+                                .stockActual(safeInt(product.getStockActual()))
+                                .stockMinimo(safeInt(product.getStockMinimo()))
+                                .activo(Boolean.TRUE.equals(product.getActivo()))
+                                .fechaCreacion(tenantTimeService.now(tenant.getId()))
+                                .fechaActualizacion(tenantTimeService.now(tenant.getId()))
+                                .build()
+                ));
+    }
+
+    private ProductBranchStock createOrUpdateBranchStock(
+            Tenant tenant,
+            Branch branch,
+            Product product,
+            int stockActual,
+            int stockMinimo,
+            boolean activo
+    ) {
+        ProductBranchStock branchStock = productBranchStockRepository
+                .findByTenant_IdAndBranch_IdAndProduct_Id(tenant.getId(), branch.getId(), product.getId())
+                .orElseGet(() -> ProductBranchStock.builder()
+                        .tenant(tenant)
+                        .branch(branch)
+                        .product(product)
+                        .fechaCreacion(tenantTimeService.now(tenant.getId()))
+                        .build());
+
+        branchStock.setStockActual(Math.max(0, stockActual));
+        branchStock.setStockMinimo(Math.max(0, stockMinimo));
+        branchStock.setActivo(activo);
+        branchStock.setFechaActualizacion(tenantTimeService.now(tenant.getId()));
+        return productBranchStockRepository.save(branchStock);
+    }
+
+    private void syncLegacyStock(Product product, ProductBranchStock branchStock) {
+        product.setStockActual(safeInt(branchStock.getStockActual()));
+        product.setStockMinimo(safeInt(branchStock.getStockMinimo()));
+        productRepository.save(product);
     }
 
     private void registerStockMovement(
