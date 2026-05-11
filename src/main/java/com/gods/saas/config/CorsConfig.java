@@ -18,7 +18,9 @@ public class CorsConfig {
         config.setAllowedOrigins(List.of(
                 "http://localhost:5173",
                 "http://localhost:3000",
-                "https://super-gods-landing.vercel.app"
+                "https://super-gods-landing.vercel.app",
+                "https://supergodsapp.com",
+                "https://www.supergodsapp.com"
         ));
 
         config.setAllowedMethods(List.of(
