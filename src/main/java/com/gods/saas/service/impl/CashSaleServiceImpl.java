@@ -16,6 +16,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -204,7 +205,7 @@ public class CashSaleServiceImpl implements CashSaleService {
         }
 
         if (request.getMetodoPago() != null && !request.getMetodoPago().isBlank()) {
-            sale.setMetodoPago(request.getMetodoPago().trim());
+            sale.setMetodoPago(normalizeMethod(request.getMetodoPago()));
         }
 
         if (request.getSubtotal() != null) {
@@ -227,8 +228,105 @@ public class CashSaleServiceImpl implements CashSaleService {
             sale.setChangeAmount(request.getChangeAmount());
         }
 
+        // Compatibilidad hacia atrás:
+        // - Flutter o versiones antiguas pueden seguir enviando solo metodoPago/cashReceived/changeAmount.
+        // - Si payments viene null, NO tocamos la tabla sale_payment.
+        // - Si payments viene con datos, reemplazamos los pagos de la venta.
+        if (request.getPayments() != null) {
+            replaceSalePaymentsFromUpdateRequest(sale, request);
+        }
+
         Sale saved = saleRepository.save(sale);
         return mapResponse(saved, 0);
+    }
+
+    private void replaceSalePaymentsFromUpdateRequest(Sale sale, UpdateSaleRequest request) {
+        BigDecimal total = safe(request.getTotal() != null ? request.getTotal() : sale.getTotal())
+                .setScale(2, RoundingMode.HALF_UP);
+
+        List<SalePaymentRequest> rawPayments = request.getPayments();
+
+        sale.getPayments().clear();
+
+        BigDecimal paidTotal = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        int validPayments = 0;
+        String firstMethod = null;
+
+        if (rawPayments != null) {
+            for (SalePaymentRequest paymentRequest : rawPayments) {
+                if (paymentRequest == null) continue;
+
+                String method = normalizeMethod(paymentRequest.getMethod());
+                BigDecimal amount = safe(paymentRequest.getAmount()).setScale(2, RoundingMode.HALF_UP);
+
+                if (amount.compareTo(BigDecimal.ZERO) <= 0) continue;
+                if ("FREE".equals(method) && total.compareTo(BigDecimal.ZERO) > 0) {
+                    throw new IllegalArgumentException("Una venta con total mayor a cero no puede pagarse como gratis.");
+                }
+
+                SalePayment payment = SalePayment.builder()
+                        .method(method)
+                        .amount(amount)
+                        .build();
+
+                sale.addPayment(payment);
+
+                paidTotal = paidTotal.add(amount).setScale(2, RoundingMode.HALF_UP);
+                validPayments++;
+                if (firstMethod == null) {
+                    firstMethod = method;
+                }
+            }
+        }
+
+        if (validPayments == 0 && total.compareTo(BigDecimal.ZERO) > 0) {
+            throw new IllegalArgumentException("Debes registrar al menos un método de pago.");
+        }
+
+        if (paidTotal.compareTo(total) != 0) {
+            throw new IllegalArgumentException(
+                    "La suma de pagos debe ser igual al total de la venta. Total: "
+                            + total + ", pagado: " + paidTotal
+            );
+        }
+
+        if (total.compareTo(BigDecimal.ZERO) == 0) {
+            sale.setMetodoPago("FREE");
+            sale.setCashReceived(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+            sale.setChangeAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+            return;
+        }
+
+        sale.setMetodoPago(validPayments > 1 ? "MIXED" : firstMethod);
+
+        BigDecimal cashAmount = sale.getPayments().stream()
+                .filter(payment -> isCashMethod(payment.getMethod()))
+                .map(SalePayment::getAmount)
+                .map(this::safe)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal cashReceived = safe(request.getCashReceived()).setScale(2, RoundingMode.HALF_UP);
+        if (cashAmount.compareTo(BigDecimal.ZERO) > 0 && cashReceived.compareTo(cashAmount) < 0) {
+            throw new IllegalArgumentException("El efectivo recibido no puede ser menor al monto pagado en efectivo.");
+        }
+
+        if (cashAmount.compareTo(BigDecimal.ZERO) == 0) {
+            sale.setCashReceived(total);
+            sale.setChangeAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+        } else {
+            BigDecimal change = cashReceived.subtract(cashAmount).setScale(2, RoundingMode.HALF_UP);
+            if (change.compareTo(BigDecimal.ZERO) < 0) {
+                change = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+            }
+            sale.setCashReceived(cashReceived);
+            sale.setChangeAmount(change);
+        }
+    }
+
+    private boolean isCashMethod(String method) {
+        String code = normalizeMethod(method);
+        return "CASH".equals(code) || "EFECTIVO".equals(code);
     }
 
     private LocalDateTime resolveSaleDate(Long tenantId, CreateCashSaleRequest request) {
@@ -326,7 +424,12 @@ public class CashSaleServiceImpl implements CashSaleService {
         if (metodoPago == null || metodoPago.isBlank()) {
             return "CASH";
         }
-        return metodoPago.trim().toUpperCase();
+
+        String code = metodoPago.trim().toUpperCase();
+        if ("EFECTIVO".equals(code)) return "CASH";
+        if ("TARJETA".equals(code)) return "CARD";
+        if ("TRANSFERENCIA".equals(code)) return "TRANSFER";
+        return code;
     }
 
     private String resolveBarberName(Sale sale) {
