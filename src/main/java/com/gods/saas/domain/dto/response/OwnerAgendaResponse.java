@@ -30,6 +30,14 @@ public class OwnerAgendaResponse {
     private String telefono;
 
     // =========================
+    // Promoción / importes
+    // =========================
+    private String promotionTitle;
+    private BigDecimal originalAmount;
+    private BigDecimal discountAmount;
+    private BigDecimal totalAmount;
+
+    // =========================
     // Pago inicial / reserva
     // =========================
     private Boolean requierePagoInicial;

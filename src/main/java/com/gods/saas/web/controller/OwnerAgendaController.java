@@ -108,6 +108,31 @@ public class OwnerAgendaController {
         );
     }
 
+    @PostMapping("/appointments/{appointmentId}/deposit/validate")
+    public OwnerAgendaResponse validateDeposit(
+            @RequestHeader("Authorization") String authHeader,
+            @PathVariable Long appointmentId,
+            @RequestParam(required = false) Long branchId,
+            @RequestBody(required = false) Map<String, Object> request
+    ) {
+        adminPermissionService.checkPermission("AGENDA_ACCESS");
+
+        SessionData session = readSession(authHeader);
+        Long branchIdFinal = branchId != null ? branchId : session.branchId();
+
+        boolean approved = getBoolean(request, "approved", false);
+        String note = getString(request, "note");
+
+        return ownerAgendaAppointmentService.validateDeposit(
+                session.tenantId(),
+                branchIdFinal,
+                appointmentId,
+                session.userId(),
+                approved,
+                note
+        );
+    }
+
     @DeleteMapping("/appointments/{appointmentId}")
     public OwnerAgendaResponse cancelAppointment(
             @RequestHeader("Authorization") String authHeader,
@@ -149,6 +174,28 @@ public class OwnerAgendaController {
         }
 
         return branchIdFinal;
+    }
+
+    private boolean getBoolean(Map<String, Object> request, String key, boolean defaultValue) {
+        if (request == null || !request.containsKey(key) || request.get(key) == null) {
+            return defaultValue;
+        }
+
+        Object value = request.get(key);
+        if (value instanceof Boolean b) return b;
+        if (value instanceof Number n) return n.intValue() != 0;
+
+        String text = value.toString().trim().toLowerCase();
+        return text.equals("true") || text.equals("1") || text.equals("yes") || text.equals("si") || text.equals("sí");
+    }
+
+    private String getString(Map<String, Object> request, String key) {
+        if (request == null || !request.containsKey(key) || request.get(key) == null) {
+            return null;
+        }
+
+        String value = request.get(key).toString().trim();
+        return value.isEmpty() ? null : value;
     }
 
     private record SessionData(Long tenantId, Long branchId, Long userId) {

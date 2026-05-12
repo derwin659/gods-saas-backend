@@ -78,6 +78,8 @@ public class OwnerAgendaAppointmentService {
                 .horaFin(horaFin)
                 .estado(depositRequired ? "PENDING_DEPOSIT_VALIDATION" : "RESERVADO")
                 .notas(clean(request.getNotas()))
+                .originalAmount(totalAmount)
+                .discountAmount(BigDecimal.ZERO)
                 .totalAmount(totalAmount)
                 .depositRequired(depositRequired)
                 .depositAmount(depositAmount)
@@ -157,6 +159,8 @@ public class OwnerAgendaAppointmentService {
         appointment.setHoraInicio(horaInicio);
         appointment.setHoraFin(horaFin);
         appointment.setNotas(clean(request.getNotas()));
+        appointment.setOriginalAmount(totalAmount);
+        appointment.setDiscountAmount(BigDecimal.ZERO);
         appointment.setTotalAmount(totalAmount);
         appointment.setDepositRequired(depositRequired);
         appointment.setDepositAmount(depositAmount);
@@ -180,6 +184,53 @@ public class OwnerAgendaAppointmentService {
         if (request.getDepositOperationCode() != null) appointment.setDepositOperationCode(clean(request.getDepositOperationCode()));
         if (request.getDepositEvidenceUrl() != null) appointment.setDepositEvidenceUrl(clean(request.getDepositEvidenceUrl()));
         if (request.getDepositNote() != null) appointment.setDepositNote(clean(request.getDepositNote()));
+
+        return toAgendaResponse(appointmentRepository.save(appointment));
+    }
+
+    @Transactional
+    public OwnerAgendaResponse validateDeposit(
+            Long tenantId,
+            Long branchId,
+            Long appointmentId,
+            Long actorUserId,
+            boolean approved,
+            String note
+    ) {
+        Appointment appointment = appointmentRepository.findByIdAndTenant_Id(appointmentId, tenantId)
+                .orElseThrow(() -> new RuntimeException("Cita no encontrada"));
+
+        if (branchId != null
+                && appointment.getBranch() != null
+                && !appointment.getBranch().getId().equals(branchId)) {
+            throw new RuntimeException("La cita no pertenece a la sede seleccionada");
+        }
+
+        if (!Boolean.TRUE.equals(appointment.getDepositRequired())) {
+            throw new RuntimeException("Esta cita no requiere pago inicial");
+        }
+
+        appointment.setDepositValidatedAt(LocalDateTime.now(BUSINESS_ZONE));
+        appointment.setDepositValidatedByUserId(actorUserId);
+
+        String cleanNote = clean(note);
+        if (cleanNote != null) {
+            appointment.setDepositNote(cleanNote);
+        }
+
+        if (approved) {
+            appointment.setDepositStatus("PAID");
+            String currentStatus = nullSafe(appointment.getEstado()).toUpperCase();
+            if (currentStatus.isBlank()
+                    || "PENDING_DEPOSIT_VALIDATION".equals(currentStatus)
+                    || "DEPOSIT_REJECTED".equals(currentStatus)
+                    || "REJECTED".equals(currentStatus)) {
+                appointment.setEstado("RESERVADO");
+            }
+        } else {
+            appointment.setDepositStatus("REJECTED");
+            appointment.setEstado("DEPOSIT_REJECTED");
+        }
 
         return toAgendaResponse(appointmentRepository.save(appointment));
     }
@@ -460,6 +511,11 @@ public class OwnerAgendaAppointmentService {
         DateTimeFormatter timeFormatter = DateTimeFormatter.ofPattern("HH:mm");
 
         BigDecimal precioServicio = a.getTotalAmount() != null ? a.getTotalAmount() : BigDecimal.ZERO;
+        BigDecimal originalAmount = a.getOriginalAmount() != null ? a.getOriginalAmount() : precioServicio;
+        BigDecimal discountAmount = a.getDiscountAmount() != null ? a.getDiscountAmount() : BigDecimal.ZERO;
+        BigDecimal totalAmount = a.getTotalAmount() != null
+                ? a.getTotalAmount()
+                : originalAmount.subtract(discountAmount).max(BigDecimal.ZERO);
         BigDecimal montoPagoInicial = a.getDepositAmount() != null ? a.getDepositAmount() : BigDecimal.ZERO;
         BigDecimal saldoPendiente = a.getRemainingAmount() != null ? a.getRemainingAmount() : precioServicio.subtract(montoPagoInicial);
         if (saldoPendiente.compareTo(BigDecimal.ZERO) < 0) saldoPendiente = BigDecimal.ZERO;
@@ -486,6 +542,10 @@ public class OwnerAgendaAppointmentService {
                 .servicio(a.getService() != null ? a.getService().getNombre() : "Servicio")
                 .barbero(a.getUser() != null ? resolveUserName(a.getUser()) : "Sin asignar")
                 .estado(a.getEstado() != null ? a.getEstado() : "RESERVADO")
+                .promotionTitle(a.getPromotionTitle())
+                .originalAmount(originalAmount)
+                .discountAmount(discountAmount)
+                .totalAmount(totalAmount)
                 .requierePagoInicial(requierePagoInicial)
                 .montoPagoInicial(montoPagoInicial)
                 .precioServicio(precioServicio)

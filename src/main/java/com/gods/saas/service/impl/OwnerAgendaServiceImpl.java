@@ -49,6 +49,18 @@ public class OwnerAgendaServiceImpl implements OwnerAgendaService {
                         saldoPendiente = BigDecimal.ZERO;
                     }
 
+                    BigDecimal originalAmount = a.getOriginalAmount() != null
+                            ? a.getOriginalAmount()
+                            : precioServicio;
+
+                    BigDecimal discountAmount = a.getDiscountAmount() != null
+                            ? a.getDiscountAmount()
+                            : BigDecimal.ZERO;
+
+                    BigDecimal totalAmount = a.getTotalAmount() != null
+                            ? a.getTotalAmount()
+                            : originalAmount.subtract(discountAmount).max(BigDecimal.ZERO);
+
                     Boolean requierePagoInicial = Boolean.TRUE.equals(a.getDepositRequired());
 
                     String depositStatus = a.getDepositStatus() != null && !a.getDepositStatus().isBlank()
@@ -76,6 +88,12 @@ public class OwnerAgendaServiceImpl implements OwnerAgendaService {
                             .servicio(a.getService() != null ? a.getService().getNombre() : "Servicio")
                             .barbero(a.getUser() != null ? a.getUser().getNombre() : "Sin asignar")
                             .estado(a.getEstado() != null ? a.getEstado() : "RESERVADO")
+
+                            // Promoción / importes
+                            .promotionTitle(a.getPromotionTitle())
+                            .originalAmount(originalAmount)
+                            .discountAmount(discountAmount)
+                            .totalAmount(totalAmount)
 
                             // Pago inicial
                             .requierePagoInicial(requierePagoInicial)
