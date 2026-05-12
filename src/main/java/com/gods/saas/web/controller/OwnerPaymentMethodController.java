@@ -35,11 +35,28 @@ public class OwnerPaymentMethodController {
 
         Map<String, OwnerPaymentMethodResponse> result = new LinkedHashMap<>();
 
+        // Métodos estándar cuando el negocio ya tiene configuración personalizada.
+        result.put("CASH", base("CASH", "Efectivo", 1));
+        result.put("CARD", base("CARD", "Tarjeta", 2));
+
+        int order = 10;
+
         for (TenantPaymentMethod method : configuredMethods) {
             if (method == null) continue;
 
             String code = normalizeCode(method.getCode());
             if (code == null || code.isBlank()) continue;
+
+            // Evita duplicar efectivo/tarjeta si también están configurados en tabla.
+            if ("CASH".equals(code) || "EFECTIVO".equals(code)) {
+                result.put("CASH", base("CASH", "Efectivo", 1));
+                continue;
+            }
+
+            if ("CARD".equals(code) || "TARJETA".equals(code)) {
+                result.put("CARD", base("CARD", "Tarjeta", 2));
+                continue;
+            }
 
             String displayName = clean(method.getDisplayName());
             if (displayName == null || displayName.isBlank()) {
@@ -54,13 +71,11 @@ public class OwnerPaymentMethodController {
                             .displayName(displayName)
                             .countryCode(clean(method.getCountryCode()))
                             .active(Boolean.TRUE.equals(method.getActive()))
-                            .sortOrder(method.getSortOrder() == null ? 0 : method.getSortOrder())
+                            .sortOrder(method.getSortOrder() == null ? order : method.getSortOrder())
                             .build()
             );
-        }
 
-        if (result.isEmpty()) {
-            return defaultPeruFallback();
+            order++;
         }
 
         return new ArrayList<>(result.values());
