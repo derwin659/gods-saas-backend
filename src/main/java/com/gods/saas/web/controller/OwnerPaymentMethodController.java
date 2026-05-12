@@ -25,60 +25,103 @@ public class OwnerPaymentMethodController {
     @GetMapping
     public List<OwnerPaymentMethodResponse> list(
             @RequestAttribute("tenantId") Long tenantId,
-            @RequestAttribute("branchId") Long sessionBranchId,
             @RequestParam(required = false) Long branchId
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        List<TenantPaymentMethod> configuredMethods = loadConfiguredMethods(tenantId, branchId);
 
-        List<TenantPaymentMethod> allMethods = tenantPaymentMethodRepository
-                .findByTenant_IdAndActiveTrueOrderBySortOrderAscDisplayNameAsc(tenantId);
-
-        List<TenantPaymentMethod> configured = allMethods.stream()
-                .filter(method -> method.getBranch() == null
-                        || (effectiveBranchId != null && method.getBranch().getId().equals(effectiveBranchId)))
-                .toList();
+        if (configuredMethods == null || configuredMethods.isEmpty()) {
+            return defaultPeruFallback();
+        }
 
         Map<String, OwnerPaymentMethodResponse> result = new LinkedHashMap<>();
 
-        addBase(result, "CASH", "Efectivo", 1);
-        addBase(result, "CARD", "Tarjeta", 2);
-        addBase(result, "TRANSFER", "Transferencia", 3);
+        for (TenantPaymentMethod method : configuredMethods) {
+            if (method == null) continue;
 
-        if (configured.isEmpty()) {
-            // Compatibilidad para negocios actuales de Perú que ya usan la app instalada.
-            addBase(result, "YAPE", "Yape", 4);
-            addBase(result, "PLIN", "Plin", 5);
-            return new ArrayList<>(result.values());
+            String code = normalizeCode(method.getCode());
+            if (code == null || code.isBlank()) continue;
+
+            String displayName = clean(method.getDisplayName());
+            if (displayName == null || displayName.isBlank()) {
+                displayName = code;
+            }
+
+            result.putIfAbsent(
+                    code,
+                    OwnerPaymentMethodResponse.builder()
+                            .id(method.getId())
+                            .code(code)
+                            .displayName(displayName)
+                            .countryCode(clean(method.getCountryCode()))
+                            .active(Boolean.TRUE.equals(method.getActive()))
+                            .sortOrder(method.getSortOrder() == null ? 0 : method.getSortOrder())
+                            .build()
+            );
         }
 
-        // Primero métodos globales del tenant.
-        configured.stream()
-                .filter(method -> method.getBranch() == null)
-                .forEach(method -> putConfigured(result, method));
-
-        // Luego métodos específicos de la sede; si el code coincide, sobreescribe el global.
-        configured.stream()
-                .filter(method -> method.getBranch() != null)
-                .forEach(method -> putConfigured(result, method));
+        if (result.isEmpty()) {
+            return defaultPeruFallback();
+        }
 
         return new ArrayList<>(result.values());
     }
 
-    private void addBase(
-            Map<String, OwnerPaymentMethodResponse> map,
-            String code,
-            String displayName,
-            Integer sortOrder
-    ) {
-        map.put(code, OwnerPaymentMethodResponse.base(code, displayName, sortOrder));
-    }
+    private List<TenantPaymentMethod> loadConfiguredMethods(Long tenantId, Long branchId) {
+        if (branchId != null) {
+            List<TenantPaymentMethod> branchMethods =
+                    tenantPaymentMethodRepository
+                            .findByTenant_IdAndBranch_IdAndActiveTrueOrderBySortOrderAscDisplayNameAsc(
+                                    tenantId,
+                                    branchId
+                            );
 
-    private void putConfigured(Map<String, OwnerPaymentMethodResponse> map, TenantPaymentMethod method) {
-        if (method == null || method.getCode() == null || method.getCode().isBlank()) {
-            return;
+            if (branchMethods != null && !branchMethods.isEmpty()) {
+                return branchMethods;
+            }
         }
 
-        String code = method.getCode().trim().toUpperCase();
-        map.put(code, OwnerPaymentMethodResponse.fromEntity(method));
+        return tenantPaymentMethodRepository
+                .findByTenant_IdAndActiveTrueOrderBySortOrderAscDisplayNameAsc(tenantId);
+    }
+
+    private List<OwnerPaymentMethodResponse> defaultPeruFallback() {
+        return List.of(
+                base("CASH", "Efectivo", 1),
+                base("CARD", "Tarjeta", 2),
+                base("TRANSFER", "Transferencia", 3),
+                base("YAPE", "Yape", 4),
+                base("PLIN", "Plin", 5)
+        );
+    }
+
+    private OwnerPaymentMethodResponse base(String code, String displayName, int sortOrder) {
+        return OwnerPaymentMethodResponse.builder()
+                .id(null)
+                .code(code)
+                .displayName(displayName)
+                .countryCode("PE")
+                .active(true)
+                .sortOrder(sortOrder)
+                .build();
+    }
+
+    private String normalizeCode(String value) {
+        if (value == null) return null;
+
+        return value
+                .trim()
+                .toUpperCase()
+                .replace("Á", "A")
+                .replace("É", "E")
+                .replace("Í", "I")
+                .replace("Ó", "O")
+                .replace("Ú", "U")
+                .replace(" ", "_");
+    }
+
+    private String clean(String value) {
+        if (value == null) return null;
+        String text = value.trim();
+        return text.isEmpty() ? null : text;
     }
 }
