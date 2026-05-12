@@ -20,6 +20,7 @@ public class BarberPaymentResponse {
     private LocalDate periodTo;
     private BigDecimal baseAmount;
     private BigDecimal percentageApplied;
+    private BigDecimal serviceCommissionAmount;
     private BigDecimal commissionAmount;
     private BigDecimal productCommissionAmount;
     private BigDecimal tipsAmount;

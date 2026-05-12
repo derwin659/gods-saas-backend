@@ -113,6 +113,7 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 .periodTo(periodTo)
                 .baseSales(salesBase)
                 .percentageApplied(salaryMode ? null : commissionPercentage)
+                .serviceCommissionAmount(serviceCommissionAmount)
                 .commissionAmount(commissionAmount)
                 .productCommissionAmount(productCommissionsAmount)
                 .salaryAmount(salaryAmount)
@@ -315,6 +316,14 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
             ));
         }
 
+        BigDecimal serviceCommissionAmount = BigDecimal.ZERO;
+        if (bp.getPaymentMode() != BarberPaymentMode.SALARY) {
+            serviceCommissionAmount = safe(bp.getCommissionAmount())
+                    .subtract(productCommissionsAmount)
+                    .max(BigDecimal.ZERO)
+                    .setScale(2, RoundingMode.HALF_UP);
+        }
+
         BigDecimal baseGross = bp.getPaymentMode() == BarberPaymentMode.SALARY
                 ? safe(bp.getSalaryAmount()).add(safe(bp.getCommissionAmount()))
                 : safe(bp.getCommissionAmount());
@@ -330,6 +339,7 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 .periodTo(bp.getPeriodTo())
                 .baseAmount(safe(bp.getBaseAmount()))
                 .percentageApplied(bp.getPercentageApplied())
+                .serviceCommissionAmount(serviceCommissionAmount)
                 .commissionAmount(safe(bp.getCommissionAmount()))
                 .productCommissionAmount(productCommissionsAmount)
                 .tipsAmount(tipsAmount)

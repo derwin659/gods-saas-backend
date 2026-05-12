@@ -17,6 +17,7 @@ public class BarberPaymentPreviewResponse {
 
     private BigDecimal baseSales;
     private BigDecimal percentageApplied;
+    private BigDecimal serviceCommissionAmount;
     private BigDecimal commissionAmount;
     private BigDecimal productCommissionAmount;
 
