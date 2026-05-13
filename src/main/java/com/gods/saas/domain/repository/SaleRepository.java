@@ -81,33 +81,64 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
     );
 
     @Query(value = """
-        select coalesce(sum(
+    with payment_rows as (
+        select
+            s.sale_id as sale_id,
             case
-                when exists (select 1 from sale_payment spx where spx.sale_id = s.sale_id)
-                    then coalesce(sp.amount, 0)
-                when (
-                    (upper(:paymentMethod) in ('EFECTIVO','CASH') and upper(trim(coalesce(s.metodo_pago, ''))) in ('EFECTIVO','CASH')) or
-                    (upper(:paymentMethod) in ('TARJETA','CARD') and upper(trim(coalesce(s.metodo_pago, ''))) in ('TARJETA','CARD')) or
-                    (upper(:paymentMethod) in ('GRATIS','FREE') and upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS','FREE')) or
-                    upper(trim(coalesce(s.metodo_pago, ''))) = upper(:paymentMethod)
-                ) then s.total
-                else 0
-            end
-        ), 0)
+                when upper(trim(sp.method)) in ('EFECTIVO', 'CASH') then 'EFECTIVO'
+                when upper(trim(sp.method)) in ('TARJETA', 'CARD') then 'TARJETA'
+                when upper(trim(sp.method)) in ('TRANSFERENCIA', 'TRANSFER') then 'TRANSFER'
+                when upper(trim(sp.method)) in ('GRATIS', 'FREE') then 'GRATIS'
+                when upper(trim(sp.method)) = 'YAPE' then 'YAPE'
+                when upper(trim(sp.method)) = 'PLIN' then 'PLIN'
+                else upper(trim(sp.method))
+            end as normalized_method,
+            coalesce(sp.amount, 0) as amount
         from sale s
-        left join sale_payment sp
-          on sp.sale_id = s.sale_id
-         and (
-              (upper(:paymentMethod) in ('EFECTIVO','CASH') and upper(trim(sp.method)) in ('EFECTIVO','CASH')) or
-              (upper(:paymentMethod) in ('TARJETA','CARD') and upper(trim(sp.method)) in ('TARJETA','CARD')) or
-              (upper(:paymentMethod) in ('GRATIS','FREE') and upper(trim(sp.method)) in ('GRATIS','FREE')) or
-              upper(trim(sp.method)) = upper(:paymentMethod)
-         )
+        join sale_payment sp on sp.sale_id = s.sale_id
         where s.tenant_id = :tenantId
           and (:branchId is null or s.branch_id = :branchId)
           and COALESCE(s.sale_date, s.fecha_creacion) >= :start
           and COALESCE(s.sale_date, s.fecha_creacion) < :end
-        """, nativeQuery = true)
+
+        union all
+
+        select
+            s.sale_id as sale_id,
+            case
+                when upper(trim(coalesce(s.metodo_pago, ''))) in ('EFECTIVO', 'CASH') then 'EFECTIVO'
+                when upper(trim(coalesce(s.metodo_pago, ''))) in ('TARJETA', 'CARD') then 'TARJETA'
+                when upper(trim(coalesce(s.metodo_pago, ''))) in ('TRANSFERENCIA', 'TRANSFER') then 'TRANSFER'
+                when upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE') then 'GRATIS'
+                when upper(trim(coalesce(s.metodo_pago, ''))) = 'YAPE' then 'YAPE'
+                when upper(trim(coalesce(s.metodo_pago, ''))) = 'PLIN' then 'PLIN'
+                else upper(trim(coalesce(s.metodo_pago, '')))
+            end as normalized_method,
+            coalesce(s.total, 0) as amount
+        from sale s
+        where s.tenant_id = :tenantId
+          and (:branchId is null or s.branch_id = :branchId)
+          and COALESCE(s.sale_date, s.fecha_creacion) >= :start
+          and COALESCE(s.sale_date, s.fecha_creacion) < :end
+          and not exists (
+              select 1
+              from sale_payment spx
+              where spx.sale_id = s.sale_id
+          )
+    )
+    select coalesce(sum(pr.amount), 0)
+    from payment_rows pr
+    where pr.normalized_method =
+        case
+            when upper(trim(:paymentMethod)) in ('EFECTIVO', 'CASH') then 'EFECTIVO'
+            when upper(trim(:paymentMethod)) in ('TARJETA', 'CARD') then 'TARJETA'
+            when upper(trim(:paymentMethod)) in ('TRANSFERENCIA', 'TRANSFER') then 'TRANSFER'
+            when upper(trim(:paymentMethod)) in ('GRATIS', 'FREE') then 'GRATIS'
+            when upper(trim(:paymentMethod)) = 'YAPE' then 'YAPE'
+            when upper(trim(:paymentMethod)) = 'PLIN' then 'PLIN'
+            else upper(trim(:paymentMethod))
+        end
+    """, nativeQuery = true)
     BigDecimal getTotalByPaymentMethod(
             @Param("tenantId") Long tenantId,
             @Param("branchId") Long branchId,
