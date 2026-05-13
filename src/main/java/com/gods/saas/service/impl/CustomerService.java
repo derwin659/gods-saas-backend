@@ -4,23 +4,12 @@ import com.gods.saas.domain.dto.ActualizarClienteRequest;
 import com.gods.saas.domain.dto.CambiarTelefonoRequest;
 import com.gods.saas.domain.dto.ClienteResponse;
 import com.gods.saas.domain.dto.VentaRapidaRequest;
-import com.gods.saas.domain.dto.response.ClientHomeResponse;
-import com.gods.saas.domain.dto.response.ClientLoginResponse;
-import com.gods.saas.domain.dto.response.OwnerCustomerHistoryResponse;
-import com.gods.saas.domain.dto.response.OwnerCustomerHistoryItemResponse;
-import com.gods.saas.domain.dto.response.OwnerCustomerLoyaltyResponse;
+import com.gods.saas.domain.dto.response.*;
 import com.gods.saas.domain.model.Customer;
 import com.gods.saas.domain.model.LoyaltyAccount;
 import com.gods.saas.domain.model.OtpCode;
 import com.gods.saas.domain.model.Tenant;
-import com.gods.saas.domain.repository.AppointmentRepository;
-import com.gods.saas.domain.repository.CustomerRepository;
-import com.gods.saas.domain.repository.LoyaltyAccountRepository;
-import com.gods.saas.domain.repository.LoyaltyMovementRepository;
-import com.gods.saas.domain.repository.OtpCodeRepository;
-import com.gods.saas.domain.repository.RewardRedemptionRepository;
-import com.gods.saas.domain.repository.SaleItemRepository;
-import com.gods.saas.domain.repository.TenantRepository;
+import com.gods.saas.domain.repository.*;
 import com.gods.saas.domain.repository.projection.LastVisitProjection;
 import com.gods.saas.domain.repository.projection.CustomerHistorySaleItemProjection;
 import com.gods.saas.service.impl.impl.LoyaltyService;
@@ -55,6 +44,7 @@ public class CustomerService {
     private final LoyaltyMovementRepository loyaltyMovementRepository;
     private final RewardRedemptionRepository rewardRedemptionRepository;
     private final LoyaltyService loyaltyService;
+    private final SaleRepository saleRepository;
 
     @Transactional
     public Customer registrarCliente(VentaRapidaRequest req) {
@@ -659,5 +649,19 @@ public class CustomerService {
                             .build();
                 })
                 .collect(Collectors.toList());
+    }
+
+    public List<InactiveCustomerResponse> listarClientesInactivosOwner(Long tenantId, Integer daysInactive) {
+        int safeDays = daysInactive == null ? 30 : Math.max(7, Math.min(daysInactive, 365));
+
+        return saleRepository.findInactiveCustomers(tenantId, safeDays)
+                .stream()
+                .map(item -> InactiveCustomerResponse.builder()
+                        .customerId(item.getCustomerId())
+                        .nombre(item.getNombre())
+                        .telefono(item.getTelefono())
+                        .ultimaVisita(item.getUltimaVisita())
+                        .build())
+                .toList();
     }
 }

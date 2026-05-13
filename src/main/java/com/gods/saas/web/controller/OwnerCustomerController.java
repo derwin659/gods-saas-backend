@@ -3,6 +3,7 @@ package com.gods.saas.web.controller;
 import com.gods.saas.domain.dto.ActualizarClienteRequest;
 import com.gods.saas.domain.dto.ClienteResponse;
 import com.gods.saas.domain.dto.VentaRapidaRequest;
+import com.gods.saas.domain.dto.response.InactiveCustomerResponse;
 import com.gods.saas.domain.dto.response.OwnerCustomerHistoryResponse;
 import com.gods.saas.domain.dto.response.OwnerCustomerLoyaltyResponse;
 import com.gods.saas.domain.model.Customer;
@@ -48,6 +49,22 @@ public class OwnerCustomerController {
                 .toList();
 
         return ResponseEntity.ok(response);
+    }
+
+    @Operation(summary = "Listar clientes inactivos para campañas")
+    @SecurityRequirement(name = "bearerAuth")
+    @GetMapping("/inactive")
+    public ResponseEntity<List<InactiveCustomerResponse>> inactiveCustomers(
+            @RequestHeader("Authorization") String authHeader,
+            @RequestParam(defaultValue = "30") Integer days
+    ) {
+        adminPermissionService.checkPermission("CUSTOMERS_ACCESS");
+
+        Long tenantId = extractTenantId(authHeader);
+
+        return ResponseEntity.ok(
+                customerService.listarClientesInactivosOwner(tenantId, days)
+        );
     }
 
     @Operation(summary = "Obtener detalle de cliente para owner/admin")
@@ -146,8 +163,13 @@ public class OwnerCustomerController {
         ));
     }
 
+
+
+
     private Long extractTenantId(String authHeader) {
         String token = authHeader.replace("Bearer ", "");
         return jwtUtil.getTenantIdFromToken(token);
     }
+
+
 }
