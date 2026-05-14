@@ -486,21 +486,44 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
     );
 
     /**
-     * Base para comisión porcentual del barbero.
-     * IMPORTANTE: solo servicios. Los productos NO deben entrar al porcentaje;
-     * los productos pagan una comisión fija separada.
+     * Base neta para comisión porcentual del barbero.
+     * Solo servicios.
+     *
+     * Importante:
+     * - No incluye productos.
+     * - No incluye propina.
+     * - Descuenta proporcionalmente el descuento/promoción de la venta.
      */
-    @Query("""
-        select coalesce(sum(si.subtotal), 0)
-        from SaleItem si
-        join si.sale s
-        where s.tenant.id = :tenantId
-          and (:branchId is null or s.branch.id = :branchId)
-          and si.barberUser.id = :barberUserId
-          and si.service is not null
-          and coalesce(s.saleDate, s.fechaCreacion) >= :start
-          and coalesce(s.saleDate, s.fechaCreacion) < :end
-        """)
+    @Query(value = """
+    with sale_item_totals as (
+        select
+            si2.sale_id,
+            coalesce(sum(si2.subtotal), 0) as items_subtotal
+        from sale_item si2
+        group by si2.sale_id
+    )
+    select coalesce(sum(
+        greatest(
+            coalesce(si.subtotal, 0)
+            -
+            case
+                when coalesce(st.items_subtotal, 0) > 0
+                    then coalesce(s.discount, 0) * coalesce(si.subtotal, 0) / st.items_subtotal
+                else 0
+            end,
+            0
+        )
+    ), 0)
+    from sale_item si
+    join sale s on s.sale_id = si.sale_id
+    join sale_item_totals st on st.sale_id = s.sale_id
+    where s.tenant_id = :tenantId
+      and (:branchId is null or s.branch_id = :branchId)
+      and si.barber_user_id = :barberUserId
+      and si.service_id is not null
+      and COALESCE(s.sale_date, s.fecha_creacion) >= :start
+      and COALESCE(s.sale_date, s.fecha_creacion) < :end
+    """, nativeQuery = true)
     BigDecimal sumBarberItemSalesByRange(
             @Param("tenantId") Long tenantId,
             @Param("branchId") Long branchId,
