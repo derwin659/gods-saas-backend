@@ -486,41 +486,26 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
     );
 
     /**
-     * Base neta para comisión porcentual del barbero.
-     * Solo servicios.
+     * Base para comisión porcentual del barbero.
+     * Solo servicios reales o items marcados como SERVICE.
      *
      * Importante:
      * - No incluye productos.
-     * - No incluye propina.
-     * - Descuenta proporcionalmente el descuento/promoción de la venta.
+     * - No incluye propinas.
+     * - No descuenta promociones/descuentos.
+     * - Incluye servicios antiguos/manuales aunque service_id esté null.
      */
     @Query(value = """
-    with sale_item_totals as (
-        select
-            si2.sale_id,
-            coalesce(sum(si2.subtotal), 0) as items_subtotal
-        from sale_item si2
-        group by si2.sale_id
-    )
-    select coalesce(sum(
-        greatest(
-            coalesce(si.subtotal, 0)
-            -
-            case
-                when coalesce(st.items_subtotal, 0) > 0
-                    then coalesce(s.discount, 0) * coalesce(si.subtotal, 0) / st.items_subtotal
-                else 0
-            end,
-            0
-        )
-    ), 0)
+    select coalesce(sum(si.subtotal), 0)
     from sale_item si
     join sale s on s.sale_id = si.sale_id
-    join sale_item_totals st on st.sale_id = s.sale_id
     where s.tenant_id = :tenantId
       and (:branchId is null or s.branch_id = :branchId)
       and si.barber_user_id = :barberUserId
-      and si.service_id is not null
+      and (
+            si.service_id is not null
+            or upper(coalesce(si.tipo_item, '')) = 'SERVICE'
+          )
       and COALESCE(s.sale_date, s.fecha_creacion) >= :start
       and COALESCE(s.sale_date, s.fecha_creacion) < :end
     """, nativeQuery = true)
