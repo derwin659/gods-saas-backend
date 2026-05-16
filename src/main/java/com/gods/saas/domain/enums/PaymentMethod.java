@@ -2,6 +2,7 @@ package com.gods.saas.domain.enums;
 
 public enum PaymentMethod {
     CASH,
+    MIXED,
     EFECTIVO,
 
     CARD,

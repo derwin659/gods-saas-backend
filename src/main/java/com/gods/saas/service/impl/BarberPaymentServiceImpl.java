@@ -169,7 +169,12 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 request.getPeriodTo()
         );
 
-        BigDecimal amountPaid = safe(request.getAmountPaid());
+        List<PaymentSplit> paymentSplits = resolvePaymentSplits(request);
+        BigDecimal amountPaid = paymentSplits.stream()
+                .map(PaymentSplit::amount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+
         if (amountPaid.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalStateException("El monto a pagar debe ser mayor a cero.");
         }
@@ -178,68 +183,97 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
             throw new IllegalStateException("El monto excede el pendiente calculado.");
         }
 
-        PaymentMethod paymentMethod = request.getPaymentMethod() == null
-                ? PaymentMethod.CASH
-                : request.getPaymentMethod();
-
         String concept = "Pago barbero " + fullName(barber)
-                + " [" + request.getPeriodFrom() + " a " + request.getPeriodTo() + "]";
+                + " [" + preview.getPeriodFrom() + " a " + preview.getPeriodTo() + "]";
 
         ZoneId zoneId = getZoneIdForTenant(tenantId);
         LocalDateTime now = LocalDateTime.now(zoneId);
 
-        CashMovement movement = CashMovement.builder()
-                .tenant(cashRegister.getTenant())
-                .branch(cashRegister.getBranch())
-                .cashRegister(cashRegister)
-                .user(actor)
-                .barberUser(barber)
-                .type(CashMovementType.PAYMENT_BARBER)
-                .paymentMethod(paymentMethod)
-                .amount(amountPaid)
-                .concept(concept)
-                .note(trimToNull(request.getNote()))
-                .movementDate(now)
-                .createdAt(now)
-                .build();
-
-        movement = cashMovementRepository.save(movement);
-
-        BigDecimal remaining = preview.getPendingAmount().subtract(amountPaid);
-        BarberPaymentStatus status = remaining.compareTo(BigDecimal.ZERO) == 0
+        BigDecimal remainingAfterAll = preview.getPendingAmount().subtract(amountPaid).setScale(2, RoundingMode.HALF_UP);
+        BarberPaymentStatus finalStatus = remainingAfterAll.compareTo(BigDecimal.ZERO) == 0
                 ? BarberPaymentStatus.PAID
                 : BarberPaymentStatus.PARTIAL;
 
-        BarberPayment entity = BarberPayment.builder()
-                .tenant(cashRegister.getTenant())
-                .branch(cashRegister.getBranch())
-                .cashRegister(cashRegister)
-                .barberUser(barber)
-                .registeredByUser(actor)
-                .paymentMode(BarberPaymentMode.valueOf(preview.getPaymentMode()))
-                .salaryAmount(preview.getSalaryAmount() == null ? BigDecimal.ZERO : preview.getSalaryAmount())
-                .status(status)
-                .periodFrom(preview.getPeriodFrom())
-                .periodTo(preview.getPeriodTo())
-                .baseAmount(preview.getBaseSales() == null ? BigDecimal.ZERO : preview.getBaseSales())
-                .percentageApplied(preview.getPercentageApplied())
-                .commissionAmount(preview.getCommissionAmount() == null ? BigDecimal.ZERO : preview.getCommissionAmount())
-                .advancesApplied(preview.getAdvancesApplied() == null ? BigDecimal.ZERO : preview.getAdvancesApplied())
-                .previousPaymentsApplied(preview.getPreviousPaymentsApplied() == null ? BigDecimal.ZERO : preview.getPreviousPaymentsApplied())
-                .amountPaid(amountPaid)
-                .remainingAmount(remaining)
-                .paymentMethod(paymentMethod)
-                .cashMovement(movement)
-                .concept(concept)
-                .note(trimToNull(request.getNote()))
-                .createdAt(now)
-                .build();
+        boolean mixedPayment = paymentSplits.size() > 1;
+        BarberPayment lastSaved = null;
+        BigDecimal accumulated = BigDecimal.ZERO;
 
+        for (int i = 0; i < paymentSplits.size(); i++) {
+            PaymentSplit split = paymentSplits.get(i);
+            accumulated = accumulated.add(split.amount()).setScale(2, RoundingMode.HALF_UP);
 
+            String splitConcept = mixedPayment
+                    ? concept + " (" + paymentMethodLabel(split.paymentMethod()) + " S/ " + split.amount().setScale(2, RoundingMode.HALF_UP) + ")"
+                    : concept;
 
-        BarberPayment saved = barberPaymentRepository.save(entity);
-        notificationService.notifyBarberPaymentCreated(saved);
-        return map(saved);
+            CashMovement movement = CashMovement.builder()
+                    .tenant(cashRegister.getTenant())
+                    .branch(cashRegister.getBranch())
+                    .cashRegister(cashRegister)
+                    .user(actor)
+                    .barberUser(barber)
+                    .type(CashMovementType.PAYMENT_BARBER)
+                    .paymentMethod(split.paymentMethod())
+                    .amount(split.amount())
+                    .concept(splitConcept)
+                    .note(trimToNull(request.getNote()))
+                    .movementDate(now)
+                    .createdAt(now)
+                    .build();
+
+            movement = cashMovementRepository.save(movement);
+
+            BigDecimal remainingForThisSplit = preview.getPendingAmount()
+                    .subtract(accumulated)
+                    .max(BigDecimal.ZERO)
+                    .setScale(2, RoundingMode.HALF_UP);
+
+            BarberPaymentStatus statusForThisSplit = i == paymentSplits.size() - 1
+                    ? finalStatus
+                    : BarberPaymentStatus.PARTIAL;
+
+            BarberPayment entity = BarberPayment.builder()
+                    .tenant(cashRegister.getTenant())
+                    .branch(cashRegister.getBranch())
+                    .cashRegister(cashRegister)
+                    .barberUser(barber)
+                    .registeredByUser(actor)
+                    .paymentMode(BarberPaymentMode.valueOf(preview.getPaymentMode()))
+                    .salaryAmount(preview.getSalaryAmount() == null ? BigDecimal.ZERO : preview.getSalaryAmount())
+                    .status(statusForThisSplit)
+                    .periodFrom(preview.getPeriodFrom())
+                    .periodTo(preview.getPeriodTo())
+                    .baseAmount(preview.getBaseSales() == null ? BigDecimal.ZERO : preview.getBaseSales())
+                    .percentageApplied(preview.getPercentageApplied())
+                    .commissionAmount(preview.getCommissionAmount() == null ? BigDecimal.ZERO : preview.getCommissionAmount())
+                    .advancesApplied(preview.getAdvancesApplied() == null ? BigDecimal.ZERO : preview.getAdvancesApplied())
+                    .previousPaymentsApplied(preview.getPreviousPaymentsApplied() == null ? BigDecimal.ZERO : preview.getPreviousPaymentsApplied())
+                    .amountPaid(split.amount())
+                    .remainingAmount(remainingForThisSplit)
+                    .paymentMethod(split.paymentMethod())
+                    .cashMovement(movement)
+                    .concept(splitConcept)
+                    .note(trimToNull(request.getNote()))
+                    .createdAt(now)
+                    .build();
+
+            lastSaved = barberPaymentRepository.save(entity);
+        }
+
+        if (lastSaved == null) {
+            throw new IllegalStateException("No se pudo registrar el pago del barbero.");
+        }
+
+        notificationService.notifyBarberPaymentCreated(lastSaved);
+
+        BarberPaymentResponse response = map(lastSaved);
+        response.setAmountPaid(amountPaid);
+        response.setRemainingAmount(remainingAfterAll);
+        response.setStatus(finalStatus.name());
+        response.setPaymentMethod(mixedPayment ? PaymentMethod.MIXED.name() : paymentSplits.get(0).paymentMethod().name());
+        response.setCashMovementId(mixedPayment ? null : lastSaved.getCashMovement().getId());
+        response.setConcept(concept);
+        return response;
     }
 
     @Override
@@ -300,6 +334,70 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 .previousPaymentsApplied(BigDecimal.ZERO)
                 .pendingAmount(BigDecimal.ZERO)
                 .build();
+    }
+
+
+    private List<PaymentSplit> resolvePaymentSplits(CreateBarberPaymentRequest request) {
+        if (request.getPayments() != null && !request.getPayments().isEmpty()) {
+            return request.getPayments().stream()
+                    .map(item -> {
+                        PaymentMethod method = parsePaymentMethod(item.getMethod());
+                        BigDecimal amount = safe(item.getAmount()).setScale(2, RoundingMode.HALF_UP);
+                        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+                            throw new IllegalStateException("Cada método de pago debe tener un monto mayor a cero.");
+                        }
+                        return new PaymentSplit(method, amount);
+                    })
+                    .toList();
+        }
+
+        BigDecimal amount = safe(request.getAmountPaid()).setScale(2, RoundingMode.HALF_UP);
+        PaymentMethod method = request.getPaymentMethod() == null ? PaymentMethod.CASH : request.getPaymentMethod();
+        return List.of(new PaymentSplit(method, amount));
+    }
+
+    private PaymentMethod parsePaymentMethod(String rawMethod) {
+        if (rawMethod == null || rawMethod.trim().isEmpty()) {
+            return PaymentMethod.CASH;
+        }
+
+        String value = rawMethod.trim().toUpperCase(Locale.ROOT);
+        return switch (value) {
+            case "EFECTIVO" -> PaymentMethod.CASH;
+            case "TARJETA" -> PaymentMethod.CARD;
+            case "TRANSFERENCIA" -> PaymentMethod.TRANSFER;
+            case "GRATIS" -> PaymentMethod.FREE;
+            default -> {
+                try {
+                    yield PaymentMethod.valueOf(value);
+                } catch (Exception e) {
+                    throw new IllegalStateException("Método de pago inválido: " + rawMethod);
+                }
+            }
+        };
+    }
+
+    private String paymentMethodLabel(PaymentMethod method) {
+        if (method == null) return "Efectivo";
+        return switch (method) {
+            case CASH, EFECTIVO -> "Efectivo";
+            case CARD, TARJETA -> "Tarjeta";
+            case TRANSFER, TRANSFERENCIA -> "Transferencia";
+            case YAPE -> "Yape";
+            case PLIN -> "Plin";
+            case NEQUI -> "Nequi";
+            case DAVIPLATA -> "Daviplata";
+            case PAGO_MOVIL -> "Pago móvil";
+            case ZELLE -> "Zelle";
+            case QR -> "QR";
+            case FREE, GRATIS -> "Gratis";
+            case DEPOSIT_APPLIED -> "Inicial aplicada";
+            case MIXED -> "Mixto";
+            case OTHER -> "Otro";
+        };
+    }
+
+    private record PaymentSplit(PaymentMethod paymentMethod, BigDecimal amount) {
     }
 
     private void validateActor(Long actorUserId, Long tenantId) {
