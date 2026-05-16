@@ -39,6 +39,27 @@ public interface BarberPaymentRepository extends JpaRepository<BarberPayment, Lo
             @Param("periodTo") LocalDate periodTo
     );
 
+
+
+    @Query("""
+        select max(bp.periodTo)
+        from BarberPayment bp
+        where bp.tenant.id = :tenantId
+          and (:branchId is null or bp.branch.id = :branchId)
+          and bp.barberUser.id = :barberUserId
+          and bp.status = com.gods.saas.domain.enums.BarberPaymentStatus.PAID
+          and bp.periodFrom <= :periodTo
+          and bp.periodTo >= :periodFrom
+        """)
+    Optional<LocalDate> findLatestPaidPeriodToOverlapping(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("barberUserId") Long barberUserId,
+            @Param("periodFrom") LocalDate periodFrom,
+            @Param("periodTo") LocalDate periodTo
+    );
+
+
     @Query("""
         select bp
         from BarberPayment bp

@@ -49,7 +49,15 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
         validatePeriod(periodFrom, periodTo);
         AppUser barber = resolveBarber(tenantId, branchId, barberUserId);
 
-        LocalDateTime start = periodFrom.atStartOfDay();
+        LocalDate effectivePeriodFrom = resolveEffectivePeriodFrom(
+                tenantId, branchId, barberUserId, periodFrom, periodTo
+        );
+
+        if (effectivePeriodFrom.isAfter(periodTo)) {
+            return emptyPreview(barber, periodFrom, periodTo);
+        }
+
+        LocalDateTime start = effectivePeriodFrom.atStartOfDay();
         LocalDateTime end = periodTo.plusDays(1).atStartOfDay();
 
         boolean salaryMode = Boolean.TRUE.equals(barber.getSalaryMode());
@@ -89,12 +97,12 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
 
         BigDecimal previousPayments = safe(
                 barberPaymentRepository.sumPaidInPeriod(
-                        tenantId, branchId, barberUserId, periodFrom, periodTo
+                        tenantId, branchId, barberUserId, effectivePeriodFrom, periodTo
                 )
         );
 
         BigDecimal salaryAmount = salaryMode
-                ? resolveSalaryAmountForPeriod(barber, periodFrom, periodTo)
+                ? resolveSalaryAmountForPeriod(barber, effectivePeriodFrom, periodTo)
                 : BigDecimal.ZERO;
 
         BigDecimal gross = (salaryMode ? salaryAmount.add(productCommissionsAmount) : commissionAmount)
@@ -109,7 +117,7 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 .barberUserId(barber.getId())
                 .barberName(fullName(barber))
                 .paymentMode(salaryMode ? "SALARY" : "COMMISSION")
-                .periodFrom(periodFrom)
+                .periodFrom(effectivePeriodFrom)
                 .periodTo(periodTo)
                 .baseSales(salesBase)
                 .percentageApplied(salaryMode ? null : commissionPercentage)
@@ -211,8 +219,8 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 .paymentMode(BarberPaymentMode.valueOf(preview.getPaymentMode()))
                 .salaryAmount(preview.getSalaryAmount() == null ? BigDecimal.ZERO : preview.getSalaryAmount())
                 .status(status)
-                .periodFrom(request.getPeriodFrom())
-                .periodTo(request.getPeriodTo())
+                .periodFrom(preview.getPeriodFrom())
+                .periodTo(preview.getPeriodTo())
                 .baseAmount(preview.getBaseSales() == null ? BigDecimal.ZERO : preview.getBaseSales())
                 .percentageApplied(preview.getPercentageApplied())
                 .commissionAmount(preview.getCommissionAmount() == null ? BigDecimal.ZERO : preview.getCommissionAmount())
@@ -244,6 +252,54 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 .stream()
                 .map(this::map)
                 .toList();
+    }
+
+
+    private LocalDate resolveEffectivePeriodFrom(
+            Long tenantId,
+            Long branchId,
+            Long barberUserId,
+            LocalDate periodFrom,
+            LocalDate periodTo
+    ) {
+        LocalDate latestPaidPeriodTo = barberPaymentRepository
+                .findLatestPaidPeriodToOverlapping(tenantId, branchId, barberUserId, periodFrom, periodTo)
+                .orElse(null);
+
+        if (latestPaidPeriodTo == null) {
+            return periodFrom;
+        }
+
+        LocalDate nextUnpaidDay = latestPaidPeriodTo.plusDays(1);
+        return nextUnpaidDay.isAfter(periodFrom) ? nextUnpaidDay : periodFrom;
+    }
+
+    private BarberPaymentPreviewResponse emptyPreview(
+            AppUser barber,
+            LocalDate periodFrom,
+            LocalDate periodTo
+    ) {
+        boolean salaryMode = Boolean.TRUE.equals(barber.getSalaryMode());
+        BigDecimal commissionPercentage = salaryMode ? null : safe(barber.getCommissionPercentage());
+
+        return BarberPaymentPreviewResponse.builder()
+                .barberUserId(barber.getId())
+                .barberName(fullName(barber))
+                .paymentMode(salaryMode ? "SALARY" : "COMMISSION")
+                .periodFrom(periodFrom)
+                .periodTo(periodTo)
+                .baseSales(BigDecimal.ZERO)
+                .percentageApplied(commissionPercentage)
+                .serviceCommissionAmount(BigDecimal.ZERO)
+                .commissionAmount(BigDecimal.ZERO)
+                .productCommissionAmount(BigDecimal.ZERO)
+                .salaryAmount(BigDecimal.ZERO)
+                .tipsAmount(BigDecimal.ZERO)
+                .grossAmount(BigDecimal.ZERO)
+                .advancesApplied(BigDecimal.ZERO)
+                .previousPaymentsApplied(BigDecimal.ZERO)
+                .pendingAmount(BigDecimal.ZERO)
+                .build();
     }
 
     private void validateActor(Long actorUserId, Long tenantId) {
