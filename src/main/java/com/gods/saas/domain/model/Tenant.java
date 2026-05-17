@@ -44,6 +44,9 @@ public class Tenant {
     @Column(name = "fecha_actualizacion")
     private LocalDateTime fechaActualizacion;
 
+    @Column(name = "business_type", length = 50)
+    private String businessType;
+
     @OneToOne(mappedBy = "tenant", cascade = CascadeType.ALL)
     private TenantSettings settings;
 
