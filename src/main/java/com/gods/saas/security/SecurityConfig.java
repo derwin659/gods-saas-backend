@@ -101,7 +101,7 @@ public class SecurityConfig {
 
                         .requestMatchers("/api/owner/device-tokens/**")
                         .hasAnyRole("OWNER", "ADMIN", "BARBER", "CASHIER")
-
+                        .requestMatchers("/api/public/**").permitAll()
                         .requestMatchers("/api/owner/home/**").hasAnyRole("OWNER", "ADMIN")
                         .requestMatchers("/api/owner/agenda/**").hasAnyRole("OWNER", "ADMIN")
                         .requestMatchers("/api/owner/reports/**").hasAnyRole("OWNER", "ADMIN")
