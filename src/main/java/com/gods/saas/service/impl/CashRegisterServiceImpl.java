@@ -402,6 +402,19 @@ public class CashRegisterServiceImpl implements CashRegisterService {
         cashRegisterRepository.save(openRegister);
     }
 
+    private LocalDateTime[] cashRegisterBusinessRange(CashRegister cashRegister) {
+        ZoneId zoneId = getZoneIdForTenant(cashRegister.getTenant().getId());
+
+        LocalDate businessDate = cashRegister.getOpenedAt()
+                .atZone(zoneId)
+                .toLocalDate();
+
+        LocalDateTime start = businessDate.atStartOfDay();
+        LocalDateTime end = businessDate.plusDays(1).atStartOfDay();
+
+        return new LocalDateTime[]{start, end};
+    }
+
     private CashRegisterResponse mapResponse(CashRegister cashRegister) {
         CashTotals totals = calculateCashTotals(cashRegister);
 
@@ -451,8 +464,26 @@ public class CashRegisterServiceImpl implements CashRegisterService {
     }
 
     private CashTotals calculateCashTotals(CashRegister cashRegister) {
-        BigDecimal salesTotal = safe(saleRepository.sumTotalByCashRegisterId(cashRegister.getId()));
-        BigDecimal cashSalesTotal = safe(saleRepository.sumCashTotalByCashRegisterId(cashRegister.getId()));
+        LocalDateTime[] range = cashRegisterBusinessRange(cashRegister);
+        LocalDateTime start = range[0];
+        LocalDateTime end = range[1];
+
+        BigDecimal salesTotal = safe(
+                saleRepository.sumTotalByCashRegisterIdAndBusinessDateRange(
+                        cashRegister.getId(),
+                        start,
+                        end
+                )
+        );
+
+        BigDecimal cashSalesTotal = safe(
+                saleRepository.sumCashTotalByCashRegisterIdAndBusinessDateRange(
+                        cashRegister.getId(),
+                        start,
+                        end
+                )
+        );
+
         List<CashMovement> movements = cashMovementRepository.findByCashRegister_IdOrderByMovementDateDesc(cashRegister.getId());
 
         BigDecimal movementsIncome = movements.stream()
@@ -664,7 +695,12 @@ public class CashRegisterServiceImpl implements CashRegisterService {
         Map<String, BigDecimal> salesTotals = new LinkedHashMap<>();
         Map<String, Long> counts = new LinkedHashMap<>();
 
-        List<Object[]> rows = saleRepository.getPaymentMethodsSummaryByCashRegisterId(cashRegister.getId());
+        LocalDateTime[] range = cashRegisterBusinessRange(cashRegister);
+        List<Object[]> rows = saleRepository.getPaymentMethodsSummaryByCashRegisterIdAndBusinessDateRange(
+                cashRegister.getId(),
+                range[0],
+                range[1]
+        );
         if (rows != null) {
             for (Object[] row : rows) {
                 String method = normalizePaymentMethodCode(row[0]);
@@ -763,7 +799,12 @@ public class CashRegisterServiceImpl implements CashRegisterService {
         // Saldo inicial de caja siempre pertenece a efectivo físico.
         addToPaymentSummary(totals, ignoredCounts, "CASH", safe(cashRegister.getOpeningAmount()), 0L);
 
-        List<Object[]> rows = saleRepository.getPaymentMethodsSummaryByCashRegisterId(cashRegister.getId());
+        LocalDateTime[] range = cashRegisterBusinessRange(cashRegister);
+        List<Object[]> rows = saleRepository.getPaymentMethodsSummaryByCashRegisterIdAndBusinessDateRange(
+                cashRegister.getId(),
+                range[0],
+                range[1]
+        );
         if (rows != null) {
             for (Object[] row : rows) {
                 String method = normalizePaymentMethodCode(row[0]);
@@ -813,7 +854,12 @@ public class CashRegisterServiceImpl implements CashRegisterService {
             return counts;
         }
 
-        List<Object[]> rows = saleRepository.getPaymentMethodsSummaryByCashRegisterId(cashRegister.getId());
+        LocalDateTime[] range = cashRegisterBusinessRange(cashRegister);
+        List<Object[]> rows = saleRepository.getPaymentMethodsSummaryByCashRegisterIdAndBusinessDateRange(
+                cashRegister.getId(),
+                range[0],
+                range[1]
+        );
         if (rows != null) {
             for (Object[] row : rows) {
                 String method = normalizePaymentMethodCode(row[0]);

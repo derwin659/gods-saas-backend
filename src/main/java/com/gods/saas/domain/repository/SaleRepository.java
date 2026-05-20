@@ -39,6 +39,7 @@ HAVING MAX(COALESCE(s.sale_date, s.fecha_creacion)) <= NOW() - CAST((:daysInacti
 ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
 """, nativeQuery = true)
     List<CustomerCampaignAudienceProjection> findInactiveCustomers(Long tenantId, Integer daysInactive);
+
     @Query(value = """
     select
         cast(COALESCE(s.sale_date, s.fecha_creacion) as date) as saleDate,
@@ -246,6 +247,43 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         """, nativeQuery = true)
     BigDecimal sumCashTotalByCashRegisterId(@Param("cashRegisterId") Long cashRegisterId);
 
+    @Query("""
+        select coalesce(sum(s.total), 0)
+        from Sale s
+        where s.cashRegister.id = :cashRegisterId
+          and coalesce(s.saleDate, s.fechaCreacion) >= :start
+          and coalesce(s.saleDate, s.fechaCreacion) < :end
+        """)
+    BigDecimal sumTotalByCashRegisterIdAndBusinessDateRange(
+            @Param("cashRegisterId") Long cashRegisterId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+
+    @Query(value = """
+        select coalesce(sum(
+            case
+                when exists (select 1 from sale_payment spx where spx.sale_id = s.sale_id)
+                    then coalesce(sp.amount, 0)
+                when upper(trim(coalesce(s.metodo_pago, ''))) in ('EFECTIVO', 'CASH')
+                    then s.total
+                else 0
+            end
+        ), 0)
+        from sale s
+        left join sale_payment sp
+          on sp.sale_id = s.sale_id
+         and upper(trim(sp.method)) in ('EFECTIVO', 'CASH')
+        where s.cash_register_id = :cashRegisterId
+          and COALESCE(s.sale_date, s.fecha_creacion) >= :start
+          and COALESCE(s.sale_date, s.fecha_creacion) < :end
+        """, nativeQuery = true)
+    BigDecimal sumCashTotalByCashRegisterIdAndBusinessDateRange(
+            @Param("cashRegisterId") Long cashRegisterId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+
     Optional<Sale> findByIdAndTenant_Id(Long saleId, Long tenantId);
 
     @Query("""
@@ -452,7 +490,6 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
             @Param("end") LocalDateTime end
     );
 
-
     @Query("""
         select s
         from Sale s
@@ -474,15 +511,15 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         from Sale s
         where s.tenant.id = :tenantId
           and s.branch.id = :branchId
-          and coalesce(s.saleDate, s.fechaCreacion) >= :from
-          and coalesce(s.saleDate, s.fechaCreacion) < :to
+          and coalesce(s.saleDate, s.fechaCreacion) >= :start
+          and coalesce(s.saleDate, s.fechaCreacion) < :end
         order by coalesce(s.saleDate, s.fechaCreacion) desc
         """)
     List<Sale> findByTenant_IdAndBranch_IdAndFechaCreacionGreaterThanEqualAndFechaCreacionLessThanOrderByFechaCreacionDesc(
             Long tenantId,
             Long branchId,
-            LocalDateTime from,
-            LocalDateTime to
+            LocalDateTime start,
+            LocalDateTime end
     );
 
     /**
@@ -606,7 +643,6 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
             @Param("end") LocalDateTime end
     );
 
-
     @Query("""
     select distinct s
     from Sale s
@@ -643,8 +679,6 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
             @Param("tenantId") Long tenantId,
             @Param("branchId") Long branchId
     );
-
-
 
     @Query(value = """
     with payment_rows as (
@@ -695,5 +729,62 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
     """, nativeQuery = true)
     List<Object[]> getPaymentMethodsSummaryByCashRegisterId(
             @Param("cashRegisterId") Long cashRegisterId
+    );
+
+    @Query(value = """
+    with payment_rows as (
+        select
+            s.sale_id as sale_id,
+            case
+                when upper(trim(sp.method)) in ('EFECTIVO', 'CASH') then 'CASH'
+                when upper(trim(sp.method)) in ('TARJETA', 'CARD') then 'CARD'
+                when upper(trim(sp.method)) in ('TRANSFERENCIA', 'TRANSFER') then 'TRANSFER'
+                when upper(trim(sp.method)) in ('GRATIS', 'FREE') then 'FREE'
+                else upper(trim(sp.method))
+            end as payment_method,
+            coalesce(sp.amount, 0) as amount
+        from sale s
+        join sale_payment sp on sp.sale_id = s.sale_id
+        where s.cash_register_id = :cashRegisterId
+          and COALESCE(s.sale_date, s.fecha_creacion) >= :start
+          and COALESCE(s.sale_date, s.fecha_creacion) < :end
+
+        union all
+
+        select
+            s.sale_id as sale_id,
+            case
+                when upper(trim(coalesce(s.metodo_pago, ''))) in ('EFECTIVO', 'CASH') then 'CASH'
+                when upper(trim(coalesce(s.metodo_pago, ''))) in ('TARJETA', 'CARD') then 'CARD'
+                when upper(trim(coalesce(s.metodo_pago, ''))) in ('TRANSFERENCIA', 'TRANSFER') then 'TRANSFER'
+                when upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE') then 'FREE'
+                else upper(trim(coalesce(s.metodo_pago, 'CASH')))
+            end as payment_method,
+            coalesce(s.total, 0) as amount
+        from sale s
+        where s.cash_register_id = :cashRegisterId
+          and COALESCE(s.sale_date, s.fecha_creacion) >= :start
+          and COALESCE(s.sale_date, s.fecha_creacion) < :end
+          and not exists (
+              select 1
+              from sale_payment spx
+              where spx.sale_id = s.sale_id
+          )
+    )
+    select
+        payment_method,
+        count(distinct sale_id),
+        coalesce(sum(amount), 0)
+    from payment_rows
+    where payment_method is not null
+      and payment_method <> ''
+      and payment_method <> 'MIXED'
+    group by payment_method
+    order by payment_method asc
+    """, nativeQuery = true)
+    List<Object[]> getPaymentMethodsSummaryByCashRegisterIdAndBusinessDateRange(
+            @Param("cashRegisterId") Long cashRegisterId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
     );
 }

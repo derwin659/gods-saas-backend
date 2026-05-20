@@ -4,6 +4,7 @@ import com.gods.saas.domain.dto.request.ChangePlancRequest;
 import com.gods.saas.domain.dto.request.SuperAdminCreateTenantRequest;
 import com.gods.saas.domain.dto.response.SuperAdminDashboardResponse;
 import com.gods.saas.domain.dto.response.SuperAdminTenantResponse;
+import com.gods.saas.domain.enums.BusinessType;
 import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.*;
 import com.gods.saas.service.impl.impl.SuperAdminTenantService;
@@ -77,6 +78,7 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
         tenant.setPlan(plan);
         tenant.setEstadoSuscripcion(estado);
         tenant.setCodigo(generateTenantCode(request.getBusinessName()));
+        tenant.setBusinessType(resolveBusinessType(request.getBusinessType()));
         tenant.setActive(true);
         tenant.setFechaCreacion(now);
         tenant.setFechaActualizacion(now);
@@ -155,6 +157,14 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
         tenantSettingsRepository.save(settings);
 
         return mapToResponse(tenant);
+    }
+
+    private String resolveBusinessType(BusinessType businessType) {
+        if (businessType == null) {
+            return BusinessType.BARBERSHOP.name();
+        }
+
+        return businessType.name();
     }
 
     @Override

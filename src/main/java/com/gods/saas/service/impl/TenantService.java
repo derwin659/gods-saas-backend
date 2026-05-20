@@ -39,7 +39,12 @@ public class TenantService {
 
         log.info("Entrada a crear {}", tenant.toString());
 
-        tenant.setActive(true); // activar por defecto
+        tenant.setActive(true);
+
+        if (tenant.getBusinessType() == null || tenant.getBusinessType().isBlank()) {
+            tenant.setBusinessType("BARBERSHOP");
+        }
+
         tenant.setFechaCreacion(LocalDateTime.now(ZoneOffset.UTC));
         tenant.setFechaActualizacion(LocalDateTime.now());
 
@@ -121,6 +126,11 @@ public class TenantService {
         tenant.setPais(data.getPais());
         tenant.setEstadoSuscripcion(data.getPlan());
         tenant.setPlan(data.getPlan());
+
+        if (data.getBusinessType() != null && !data.getBusinessType().isBlank()) {
+            tenant.setBusinessType(data.getBusinessType());
+        }
+
         tenant.setFechaActualizacion(LocalDateTime.now());
 
         return tenantRepo.save(tenant);
