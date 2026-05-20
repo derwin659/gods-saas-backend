@@ -486,7 +486,23 @@ public class CashRegisterServiceImpl implements CashRegisterService {
 
         List<CashMovement> movements = cashMovementRepository.findByCashRegister_IdOrderByMovementDateDesc(cashRegister.getId());
 
+        /*
+         * Importante:
+         * - Los totales del resumen deben incluir TODOS los métodos de pago
+         *   (CASH, YAPE, PLIN, CARD, TRANSFER, etc.).
+         * - El efectivo físico esperado debe calcularse SOLO con movimientos que afectan
+         *   el cajón físico de efectivo.
+         *
+         * Antes todo usaba affectsCashDrawer(), por eso gastos/ingresos en Yape, Plin
+         * o Tarjeta se veían en el detalle, pero no se reflejaban en el resumen.
+         */
         BigDecimal movementsIncome = movements.stream()
+                .filter(this::isIncomeMovement)
+                .map(CashMovement::getAmount)
+                .map(this::safe)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal cashMovementsIncome = movements.stream()
                 .filter(this::isIncomeMovement)
                 .filter(this::affectsCashDrawer)
                 .map(CashMovement::getAmount)
@@ -495,6 +511,12 @@ public class CashRegisterServiceImpl implements CashRegisterService {
 
         BigDecimal movementsExpenseGeneral = movements.stream()
                 .filter(m -> m.getType() == CashMovementType.EXPENSE)
+                .map(CashMovement::getAmount)
+                .map(this::safe)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal cashMovementsExpenseGeneral = movements.stream()
+                .filter(m -> m.getType() == CashMovementType.EXPENSE)
                 .filter(this::affectsCashDrawer)
                 .map(CashMovement::getAmount)
                 .map(this::safe)
@@ -502,12 +524,24 @@ public class CashRegisterServiceImpl implements CashRegisterService {
 
         BigDecimal movementsAdvanceBarber = movements.stream()
                 .filter(m -> m.getType() == CashMovementType.ADVANCE_BARBER)
+                .map(CashMovement::getAmount)
+                .map(this::safe)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal cashMovementsAdvanceBarber = movements.stream()
+                .filter(m -> m.getType() == CashMovementType.ADVANCE_BARBER)
                 .filter(this::affectsCashDrawer)
                 .map(CashMovement::getAmount)
                 .map(this::safe)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         BigDecimal movementsPaymentBarber = movements.stream()
+                .filter(m -> m.getType() == CashMovementType.PAYMENT_BARBER)
+                .map(CashMovement::getAmount)
+                .map(this::safe)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        BigDecimal cashMovementsPaymentBarber = movements.stream()
                 .filter(m -> m.getType() == CashMovementType.PAYMENT_BARBER)
                 .filter(this::affectsCashDrawer)
                 .map(CashMovement::getAmount)
@@ -532,12 +566,16 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 .add(movementsAdvanceBarber)
                 .add(movementsPaymentBarber);
 
+        BigDecimal cashMovementsExpense = cashMovementsExpenseGeneral
+                .add(cashMovementsAdvanceBarber)
+                .add(cashMovementsPaymentBarber);
+
         BigDecimal expectedCash = safe(cashRegister.getOpeningAmount())
                 .add(cashSalesTotal)
-                .add(movementsIncome)
+                .add(cashMovementsIncome)
                 .add(transfersToCash)
                 .subtract(transfersFromCash)
-                .subtract(movementsExpense);
+                .subtract(cashMovementsExpense);
 
         return new CashTotals(
                 salesTotal,
@@ -557,7 +595,9 @@ public class CashRegisterServiceImpl implements CashRegisterService {
     }
 
     private boolean affectsCashDrawer(CashMovement movement) {
-        return movement.getPaymentMethod() == null || movement.getPaymentMethod() == PaymentMethod.CASH;
+        return movement.getPaymentMethod() == null
+                || movement.getPaymentMethod() == PaymentMethod.CASH
+                || movement.getPaymentMethod() == PaymentMethod.EFECTIVO;
     }
 
     private CashMovementResponse mapMovementResponse(CashMovement movement) {
