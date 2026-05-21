@@ -11,6 +11,26 @@ import java.util.Optional;
 
 public interface CashMovementRepository extends JpaRepository<CashMovement, Long> {
 
+
+    @Query("""
+select cm
+from CashMovement cm
+where cm.tenant.id = :tenantId
+  and (:branchId is null or cm.branch.id = :branchId)
+  and cm.barberUser.id = :barberUserId
+  and cm.type = com.gods.saas.domain.enums.CashMovementType.ADVANCE_BARBER
+  and cm.movementDate >= :start
+  and cm.movementDate < :end
+order by cm.movementDate desc
+""")
+    List<CashMovement> findAdvancesByBarberAndRange(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("barberUserId") Long barberUserId,
+            @Param("start") java.time.LocalDateTime start,
+            @Param("end") java.time.LocalDateTime end
+    );
+
     List<CashMovement> findByCashRegister_IdOrderByMovementDateDesc(Long cashRegisterId);
 
 

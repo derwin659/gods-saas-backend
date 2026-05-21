@@ -6,6 +6,7 @@ import lombok.Data;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Data
 @Builder
@@ -26,6 +27,7 @@ public class BarberPaymentResponse {
     private BigDecimal tipsAmount;
     private BigDecimal grossAmount;
     private BigDecimal advancesApplied;
+    private List<BarberAdvanceDetailResponse> advances;
     private BigDecimal previousPaymentsApplied;
     private BigDecimal amountPaid;
     private BigDecimal remainingAmount;

@@ -1,6 +1,7 @@
 package com.gods.saas.service.impl;
 
 import com.gods.saas.domain.dto.request.CreateBarberPaymentRequest;
+import com.gods.saas.domain.dto.response.BarberAdvanceDetailResponse;
 import com.gods.saas.domain.dto.response.BarberPaymentPreviewResponse;
 import com.gods.saas.domain.dto.response.BarberPaymentResponse;
 import com.gods.saas.domain.enums.*;
@@ -95,6 +96,14 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 )
         );
 
+        List<BarberAdvanceDetailResponse> advanceDetails =
+                cashMovementRepository.findAdvancesByBarberAndRange(
+                                tenantId, branchId, barberUserId, start, end
+                        )
+                        .stream()
+                        .map(this::mapAdvanceDetail)
+                        .toList();
+
         BigDecimal previousPayments = safe(
                 barberPaymentRepository.sumPaidInPeriod(
                         tenantId, branchId, barberUserId, effectivePeriodFrom, periodTo
@@ -128,8 +137,24 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 .tipsAmount(tipsAmount)
                 .grossAmount(gross)
                 .advancesApplied(advances)
+                .advances(advanceDetails)
                 .previousPaymentsApplied(previousPayments)
                 .pendingAmount(pending)
+                .build();
+    }
+
+    private BarberAdvanceDetailResponse mapAdvanceDetail(CashMovement movement) {
+        return BarberAdvanceDetailResponse.builder()
+                .movementId(movement.getId())
+                .movementDate(movement.getMovementDate())
+                .amount(safe(movement.getAmount()))
+                .concept(movement.getConcept())
+                .note(movement.getNote())
+                .paymentMethod(
+                        movement.getPaymentMethod() != null
+                                ? movement.getPaymentMethod().name()
+                                : null
+                )
                 .build();
     }
 
@@ -331,6 +356,7 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 .tipsAmount(BigDecimal.ZERO)
                 .grossAmount(BigDecimal.ZERO)
                 .advancesApplied(BigDecimal.ZERO)
+                .advances(List.of())
                 .previousPaymentsApplied(BigDecimal.ZERO)
                 .pendingAmount(BigDecimal.ZERO)
                 .build();
@@ -457,6 +483,25 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
         }
 
         BigDecimal productCommissionsAmount = BigDecimal.ZERO;
+
+        List<BarberAdvanceDetailResponse> advanceDetails = List.of();
+        if (bp.getTenant() != null && bp.getBranch() != null && bp.getBarberUser() != null
+                && bp.getPeriodFrom() != null && bp.getPeriodTo() != null) {
+            LocalDateTime start = bp.getPeriodFrom().atStartOfDay();
+            LocalDateTime end = bp.getPeriodTo().plusDays(1).atStartOfDay();
+
+            advanceDetails = cashMovementRepository.findAdvancesByBarberAndRange(
+                            bp.getTenant().getId(),
+                            bp.getBranch().getId(),
+                            bp.getBarberUser().getId(),
+                            start,
+                            end
+                    )
+                    .stream()
+                    .map(this::mapAdvanceDetail)
+                    .toList();
+        }
+
         if (bp.getTenant() != null && bp.getBranch() != null && bp.getBarberUser() != null
                 && bp.getPeriodFrom() != null && bp.getPeriodTo() != null) {
             LocalDateTime start = bp.getPeriodFrom().atStartOfDay();
@@ -499,6 +544,7 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 .tipsAmount(tipsAmount)
                 .grossAmount(grossAmount)
                 .advancesApplied(safe(bp.getAdvancesApplied()))
+                .advances(advanceDetails)
                 .previousPaymentsApplied(safe(bp.getPreviousPaymentsApplied()))
                 .amountPaid(safe(bp.getAmountPaid()))
                 .remainingAmount(safe(bp.getRemainingAmount()))

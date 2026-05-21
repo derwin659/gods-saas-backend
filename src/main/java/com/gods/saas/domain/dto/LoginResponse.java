@@ -25,5 +25,6 @@ public class LoginResponse {
         private Long tenantId;
         private String tenantName;
         private String role;
+        private String businessType;
     }
 }

@@ -109,6 +109,7 @@ public class AuthController {
                             .role("SUPER_ADMIN")
                             .tenantId(null)
                             .tenantName(null)
+                            .businessType(null)
                             .branchId(null)
                             .branchName(null)
                             .build()
@@ -154,6 +155,11 @@ public class AuthController {
                         .email(user.getEmail())
                         .tenantId(tenant.getId())
                         .tenantName(tenant.getNombre())
+                        .businessType(
+                                tenant.getBusinessType() != null && !tenant.getBusinessType().isBlank()
+                                        ? tenant.getBusinessType().trim().toUpperCase()
+                                        : "BARBERSHOP"
+                        )
                         .role(utr.getRole().name())
                         .branchId(branch.getId())
                         .branchName(branch.getNombre())
@@ -187,14 +193,17 @@ public class AuthController {
             AppUser user = (AppUser) auth.getPrincipal();
 
             List<UserTenantRole> roles = userTenantRoleService.getTenantsOfUser(user.getId());
-
             List<LoginResponse.TenantAccess> tenants = roles.stream()
                     .map(r -> new LoginResponse.TenantAccess(
                             r.getTenant().getId(),
                             r.getTenant().getNombre(),
-                            r.getRole().name()
+                            r.getRole().name(),
+                            r.getTenant().getBusinessType() != null && !r.getTenant().getBusinessType().isBlank()
+                                    ? r.getTenant().getBusinessType().trim().toUpperCase()
+                                    : "BARBERSHOP"
                     ))
                     .toList();
+
 
             return ResponseEntity.ok(
                     LoginResponse.builder()
