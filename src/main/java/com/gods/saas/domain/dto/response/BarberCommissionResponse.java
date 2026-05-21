@@ -25,7 +25,7 @@ public class BarberCommissionResponse {
     private BigDecimal totalComision;
     private BigDecimal porcentajeComision;
 
-    // Nuevo resumen para liquidación del barbero
+    // Nuevo resumen para liquidación del profesional
     private BigDecimal baseSales;
     private BigDecimal serviceCommissionAmount;
     private BigDecimal productCommissionAmount;

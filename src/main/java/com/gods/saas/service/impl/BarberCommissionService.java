@@ -61,10 +61,11 @@ public class BarberCommissionService {
 
         BigDecimal porcentajeComision = resolveCommissionPercentage(barber);
 
-        // Día del tenant convertido a UTC para consultar ventas.
+        // Ventas por día del tenant convertidas a UTC para consultar BD.
         LocalDateTime saleStart = from.atStartOfDay(tenantZone)
                 .withZoneSameInstant(ZoneOffset.UTC)
                 .toLocalDateTime();
+
         LocalDateTime saleEnd = to.plusDays(1).atStartOfDay(tenantZone)
                 .withZoneSameInstant(ZoneOffset.UTC)
                 .toLocalDateTime();
@@ -144,14 +145,15 @@ public class BarberCommissionService {
                 .add(tipsAmount)
                 .setScale(2, RoundingMode.HALF_UP);
 
-        BigDecimal pendingAmount = grossAmount
-                .subtract(advancesApplied)
-                .subtract(previousPaymentsApplied)
+        // IMPORTANTE:
+        // pendingAmount se calcula como suma de pendientes diarios, no como
+        // gross total - pagos solapados totales. Esto evita que un pago de un
+        // periodo anterior (por ejemplo 17-19) deje en cero el día actual al
+        // consultar un rango amplio (por ejemplo 19-20).
+        BigDecimal pendingAmount = items.stream()
+                .map(BarberCommissionItem::getPendingAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
-
-        if (pendingAmount.compareTo(BigDecimal.ZERO) < 0) {
-            pendingAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
-        }
 
         return BarberCommissionResponse.builder()
                 .barberName(buildFullName(barber))
@@ -235,7 +237,7 @@ public class BarberCommissionService {
                 .filter(a -> a.getMovementDate() != null && fecha.equals(a.getMovementDate().toLocalDate()))
                 .toList();
 
-        BigDecimal previousPayments = nvl(
+        BigDecimal rawPreviousPayments = nvl(
                 barberPaymentRepository.sumPaidInPeriod(
                         tenantId,
                         branchId,
@@ -251,6 +253,18 @@ public class BarberCommissionService {
 
         BigDecimal gross = commission
                 .add(tips)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal maxPreviousPaymentForDay = gross
+                .subtract(advancesApplied)
+                .max(BigDecimal.ZERO)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        // Evita sobre-descontar pagos que corresponden a periodos solapados.
+        // Si un pago cubre varios días, el día consultado nunca debe descontar
+        // más de lo generado en ese día luego de adelantos.
+        BigDecimal previousPayments = rawPreviousPayments
+                .min(maxPreviousPaymentForDay)
                 .setScale(2, RoundingMode.HALF_UP);
 
         BigDecimal pending = gross
@@ -320,7 +334,7 @@ public class BarberCommissionService {
         String nombre = user.getNombre() == null ? "" : user.getNombre().trim();
         String apellido = user.getApellido() == null ? "" : user.getApellido().trim();
         String fullName = (nombre + " " + apellido).trim();
-        return fullName.isBlank() ? "Barbero" : fullName;
+        return fullName.isBlank() ? "Profesional" : fullName;
     }
 
     private BigDecimal resolveCommissionPercentage(AppUser barber) {
@@ -352,7 +366,7 @@ public class BarberCommissionService {
         }
 
         return appUserRepository.findById(userId)
-                .orElseThrow(() -> new RuntimeException("Barbero no encontrado"));
+                .orElseThrow(() -> new RuntimeException("Profesional no encontrado"));
     }
 
     private Long getCurrentTenantId() {
