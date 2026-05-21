@@ -20,11 +20,23 @@ public class BarberCommissionResponse {
     private LocalDate from;
     private LocalDate to;
 
+    // Compatibilidad con Flutter anterior
     private BigDecimal totalVentas;
     private BigDecimal totalComision;
-
     private BigDecimal porcentajeComision;
 
-    private List<BarberCommissionItem> items;
+    // Nuevo resumen para liquidación del barbero
+    private BigDecimal baseSales;
+    private BigDecimal serviceCommissionAmount;
+    private BigDecimal productCommissionAmount;
+    private BigDecimal tipsAmount;
+    private BigDecimal grossAmount;
+    private BigDecimal advancesApplied;
+    private BigDecimal previousPaymentsApplied;
+    private BigDecimal pendingAmount;
 
+    // Detalle de adelantos / descuentos aplicados en el rango filtrado
+    private List<BarberAdvanceDetailResponse> advances;
+
+    private List<BarberCommissionItem> items;
 }

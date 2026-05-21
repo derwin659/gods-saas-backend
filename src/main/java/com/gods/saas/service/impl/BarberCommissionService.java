@@ -1,10 +1,14 @@
 package com.gods.saas.service.impl;
 
+import com.gods.saas.domain.dto.response.BarberAdvanceDetailResponse;
 import com.gods.saas.domain.dto.response.BarberCommissionItem;
 import com.gods.saas.domain.dto.response.BarberCommissionResponse;
 import com.gods.saas.domain.model.AppUser;
+import com.gods.saas.domain.model.CashMovement;
 import com.gods.saas.domain.model.TenantSettings;
 import com.gods.saas.domain.repository.AppUserRepository;
+import com.gods.saas.domain.repository.BarberPaymentRepository;
+import com.gods.saas.domain.repository.CashMovementRepository;
 import com.gods.saas.domain.repository.SaleRepository;
 import com.gods.saas.domain.repository.TenantSettingsRepository;
 import com.gods.saas.domain.repository.projection.BarberCommissionDailyProjection;
@@ -31,6 +35,8 @@ public class BarberCommissionService {
     private final SaleRepository saleRepository;
     private final AppUserRepository appUserRepository;
     private final TenantSettingsRepository tenantSettingsRepository;
+    private final CashMovementRepository cashMovementRepository;
+    private final BarberPaymentRepository barberPaymentRepository;
 
     public BarberCommissionResponse getCommissions(LocalDate from, LocalDate to) {
         AppUser barber = getCurrentBarber();
@@ -55,33 +61,40 @@ public class BarberCommissionService {
 
         BigDecimal porcentajeComision = resolveCommissionPercentage(barber);
 
-        // Día del tenant -> convertido a UTC para consultar en BD
-        LocalDateTime start = from.atStartOfDay(tenantZone)
+        // Mantiene el comportamiento actual para ventas/comisiones por fecha.
+        // Día del tenant -> convertido a UTC para consultar ventas en BD.
+        LocalDateTime saleStart = from.atStartOfDay(tenantZone)
                 .withZoneSameInstant(ZoneOffset.UTC)
                 .toLocalDateTime();
 
-        LocalDateTime end = to.plusDays(1).atStartOfDay(tenantZone)
+        LocalDateTime saleEnd = to.plusDays(1).atStartOfDay(tenantZone)
                 .withZoneSameInstant(ZoneOffset.UTC)
                 .toLocalDateTime();
+
+        // Para movimientos de caja se usa el rango contable local del tenant,
+        // igual que el preview de pagos de barbero.
+        LocalDateTime movementStart = from.atStartOfDay();
+        LocalDateTime movementEnd = to.plusDays(1).atStartOfDay();
 
         List<BarberCommissionDailyProjection> rows =
                 saleRepository.findDailySalesByBarber(
                         tenantId,
                         branchId,
                         barber.getId(),
-                        start,
-                        end
+                        saleStart,
+                        saleEnd
                 );
 
         List<BarberCommissionItem> items = rows.stream()
                 .map(row -> {
-                    BigDecimal ventas = nvl(row.getVentas());
-                    BigDecimal comision = calculateCommission(ventas, porcentajeComision);
+                    BigDecimal ventas = nvl(row.getVentas()).setScale(2, RoundingMode.HALF_UP);
+                    BigDecimal comision = calculateCommission(ventas, porcentajeComision)
+                            .setScale(2, RoundingMode.HALF_UP);
 
                     return BarberCommissionItem.builder()
                             .fecha(row.getFecha())
-                            .ventas(ventas.setScale(2, RoundingMode.HALF_UP))
-                            .comision(comision.setScale(2, RoundingMode.HALF_UP))
+                            .ventas(ventas)
+                            .comision(comision)
                             .build();
                 })
                 .toList();
@@ -91,12 +104,80 @@ public class BarberCommissionService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
 
-        BigDecimal totalComision = items.stream()
+        BigDecimal serviceCommissionAmount = items.stream()
                 .map(BarberCommissionItem::getComision)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
-        System.out.println("COMM tenantId=" + tenantId + ", branchId=" + branchId + ", barberId=" + barber.getId());
-        System.out.println("COMM totalVentas=" + totalVentas);
+
+        BigDecimal productCommissionAmount = nvl(
+                saleRepository.sumBarberProductCommissionsByRange(
+                        tenantId,
+                        branchId,
+                        barber.getId(),
+                        saleStart,
+                        saleEnd
+                )
+        ).setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal tipsAmount = nvl(
+                saleRepository.sumBarberTipsByRange(
+                        tenantId,
+                        branchId,
+                        barber.getId(),
+                        saleStart,
+                        saleEnd
+                )
+        ).setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal advancesApplied = nvl(
+                cashMovementRepository.sumAdvancesByBarberAndRange(
+                        tenantId,
+                        branchId,
+                        barber.getId(),
+                        movementStart,
+                        movementEnd
+                )
+        ).setScale(2, RoundingMode.HALF_UP);
+
+        List<BarberAdvanceDetailResponse> advances =
+                cashMovementRepository.findAdvancesByBarberAndRange(
+                                tenantId,
+                                branchId,
+                                barber.getId(),
+                                movementStart,
+                                movementEnd
+                        )
+                        .stream()
+                        .map(this::mapAdvance)
+                        .toList();
+
+        BigDecimal previousPaymentsApplied = nvl(
+                barberPaymentRepository.sumPaidInPeriod(
+                        tenantId,
+                        branchId,
+                        barber.getId(),
+                        from,
+                        to
+                )
+        ).setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal totalComision = serviceCommissionAmount
+                .add(productCommissionAmount)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal grossAmount = totalComision
+                .add(tipsAmount)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal pendingAmount = grossAmount
+                .subtract(advancesApplied)
+                .subtract(previousPaymentsApplied)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        if (pendingAmount.compareTo(BigDecimal.ZERO) < 0) {
+            pendingAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
         return BarberCommissionResponse.builder()
                 .barberName(buildFullName(barber))
                 .from(from)
@@ -108,7 +189,27 @@ public class BarberCommissionService {
                                 ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
                                 : porcentajeComision.setScale(2, RoundingMode.HALF_UP)
                 )
+                .baseSales(totalVentas)
+                .serviceCommissionAmount(serviceCommissionAmount)
+                .productCommissionAmount(productCommissionAmount)
+                .tipsAmount(tipsAmount)
+                .grossAmount(grossAmount)
+                .advancesApplied(advancesApplied)
+                .previousPaymentsApplied(previousPaymentsApplied)
+                .pendingAmount(pendingAmount)
+                .advances(advances)
                 .items(items)
+                .build();
+    }
+
+    private BarberAdvanceDetailResponse mapAdvance(CashMovement cm) {
+        return BarberAdvanceDetailResponse.builder()
+                .movementId(cm.getId())
+                .movementDate(cm.getMovementDate())
+                .amount(nvl(cm.getAmount()).setScale(2, RoundingMode.HALF_UP))
+                .concept(cm.getConcept())
+                .note(cm.getNote())
+                .paymentMethod(cm.getPaymentMethod() != null ? cm.getPaymentMethod().name() : null)
                 .build();
     }
 
@@ -142,7 +243,8 @@ public class BarberCommissionService {
     private String buildFullName(AppUser user) {
         String nombre = user.getNombre() == null ? "" : user.getNombre().trim();
         String apellido = user.getApellido() == null ? "" : user.getApellido().trim();
-        return (nombre + " " + apellido).trim();
+        String fullName = (nombre + " " + apellido).trim();
+        return fullName.isBlank() ? "Barbero" : fullName;
     }
 
     private BigDecimal resolveCommissionPercentage(AppUser barber) {

@@ -12,6 +12,13 @@ import java.util.Optional;
 public interface CashMovementRepository extends JpaRepository<CashMovement, Long> {
 
 
+
+
+
+    List<CashMovement> findByCashRegister_IdOrderByMovementDateDesc(Long cashRegisterId);
+
+
+    Optional<CashMovement> findByIdAndTenant_Id(Long movementId, Long tenantId);
     @Query("""
 select cm
 from CashMovement cm
@@ -30,11 +37,6 @@ order by cm.movementDate desc
             @Param("start") java.time.LocalDateTime start,
             @Param("end") java.time.LocalDateTime end
     );
-
-    List<CashMovement> findByCashRegister_IdOrderByMovementDateDesc(Long cashRegisterId);
-
-
-    Optional<CashMovement> findByIdAndTenant_Id(Long movementId, Long tenantId);
 
     @Query("""
     select coalesce(sum(cm.amount), 0)

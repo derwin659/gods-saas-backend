@@ -11,14 +11,9 @@ import java.time.LocalDateTime;
 public class BarberAdvanceDetailResponse {
 
     private Long movementId;
-
     private LocalDateTime movementDate;
-
     private BigDecimal amount;
-
     private String concept;
-
     private String note;
-
     private String paymentMethod;
 }
