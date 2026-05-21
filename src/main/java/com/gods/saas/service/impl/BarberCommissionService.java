@@ -61,42 +61,49 @@ public class BarberCommissionService {
 
         BigDecimal porcentajeComision = resolveCommissionPercentage(barber);
 
-        // Mantiene el comportamiento actual para ventas/comisiones por fecha.
-        // Día del tenant -> convertido a UTC para consultar ventas en BD.
+        // Día del tenant convertido a UTC para consultar ventas.
         LocalDateTime saleStart = from.atStartOfDay(tenantZone)
                 .withZoneSameInstant(ZoneOffset.UTC)
                 .toLocalDateTime();
-
         LocalDateTime saleEnd = to.plusDays(1).atStartOfDay(tenantZone)
                 .withZoneSameInstant(ZoneOffset.UTC)
                 .toLocalDateTime();
 
-        // Para movimientos de caja se usa el rango contable local del tenant,
-        // igual que el preview de pagos de barbero.
+        // Movimientos de caja por fecha contable/local.
         LocalDateTime movementStart = from.atStartOfDay();
         LocalDateTime movementEnd = to.plusDays(1).atStartOfDay();
 
-        List<BarberCommissionDailyProjection> rows =
-                saleRepository.findDailySalesByBarber(
+        List<BarberAdvanceDetailResponse> advancesInRange = cashMovementRepository
+                .findAdvancesByBarberAndRange(
                         tenantId,
                         branchId,
                         barber.getId(),
-                        saleStart,
-                        saleEnd
-                );
+                        movementStart,
+                        movementEnd
+                )
+                .stream()
+                .map(this::mapAdvance)
+                .toList();
+
+        List<BarberCommissionDailyProjection> rows = saleRepository.findDailySalesByBarber(
+                tenantId,
+                branchId,
+                barber.getId(),
+                saleStart,
+                saleEnd
+        );
 
         List<BarberCommissionItem> items = rows.stream()
-                .map(row -> {
-                    BigDecimal ventas = nvl(row.getVentas()).setScale(2, RoundingMode.HALF_UP);
-                    BigDecimal comision = calculateCommission(ventas, porcentajeComision)
-                            .setScale(2, RoundingMode.HALF_UP);
-
-                    return BarberCommissionItem.builder()
-                            .fecha(row.getFecha())
-                            .ventas(ventas)
-                            .comision(comision)
-                            .build();
-                })
+                .map(row -> buildDailyItem(
+                        tenantId,
+                        branchId,
+                        barber.getId(),
+                        tenantZone,
+                        row.getFecha(),
+                        nvl(row.getVentas()),
+                        porcentajeComision,
+                        advancesInRange
+                ))
                 .toList();
 
         BigDecimal totalVentas = items.stream()
@@ -105,61 +112,29 @@ public class BarberCommissionService {
                 .setScale(2, RoundingMode.HALF_UP);
 
         BigDecimal serviceCommissionAmount = items.stream()
-                .map(BarberCommissionItem::getComision)
+                .map(BarberCommissionItem::getServiceCommissionAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
 
-        BigDecimal productCommissionAmount = nvl(
-                saleRepository.sumBarberProductCommissionsByRange(
-                        tenantId,
-                        branchId,
-                        barber.getId(),
-                        saleStart,
-                        saleEnd
-                )
-        ).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal productCommissionAmount = items.stream()
+                .map(BarberCommissionItem::getProductCommissionAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
 
-        BigDecimal tipsAmount = nvl(
-                saleRepository.sumBarberTipsByRange(
-                        tenantId,
-                        branchId,
-                        barber.getId(),
-                        saleStart,
-                        saleEnd
-                )
-        ).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal tipsAmount = items.stream()
+                .map(BarberCommissionItem::getTipsAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
 
-        BigDecimal advancesApplied = nvl(
-                cashMovementRepository.sumAdvancesByBarberAndRange(
-                        tenantId,
-                        branchId,
-                        barber.getId(),
-                        movementStart,
-                        movementEnd
-                )
-        ).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal advancesApplied = items.stream()
+                .map(BarberCommissionItem::getAdvancesApplied)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
 
-        List<BarberAdvanceDetailResponse> advances =
-                cashMovementRepository.findAdvancesByBarberAndRange(
-                                tenantId,
-                                branchId,
-                                barber.getId(),
-                                movementStart,
-                                movementEnd
-                        )
-                        .stream()
-                        .map(this::mapAdvance)
-                        .toList();
-
-        BigDecimal previousPaymentsApplied = nvl(
-                barberPaymentRepository.sumPaidInPeriod(
-                        tenantId,
-                        branchId,
-                        barber.getId(),
-                        from,
-                        to
-                )
-        ).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal previousPaymentsApplied = items.stream()
+                .map(BarberCommissionItem::getPreviousPaymentsApplied)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
 
         BigDecimal totalComision = serviceCommissionAmount
                 .add(productCommissionAmount)
@@ -197,8 +172,109 @@ public class BarberCommissionService {
                 .advancesApplied(advancesApplied)
                 .previousPaymentsApplied(previousPaymentsApplied)
                 .pendingAmount(pendingAmount)
-                .advances(advances)
+                .advances(advancesInRange)
                 .items(items)
+                .build();
+    }
+
+    private BarberCommissionItem buildDailyItem(
+            Long tenantId,
+            Long branchId,
+            Long barberUserId,
+            ZoneId tenantZone,
+            LocalDate fecha,
+            BigDecimal baseSales,
+            BigDecimal porcentajeComision,
+            List<BarberAdvanceDetailResponse> advancesInRange
+    ) {
+        BigDecimal dayBaseSales = nvl(baseSales).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal serviceCommission = calculateCommission(dayBaseSales, porcentajeComision)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        LocalDateTime saleStart = fecha.atStartOfDay(tenantZone)
+                .withZoneSameInstant(ZoneOffset.UTC)
+                .toLocalDateTime();
+        LocalDateTime saleEnd = fecha.plusDays(1).atStartOfDay(tenantZone)
+                .withZoneSameInstant(ZoneOffset.UTC)
+                .toLocalDateTime();
+
+        BigDecimal productCommission = nvl(
+                saleRepository.sumBarberProductCommissionsByRange(
+                        tenantId,
+                        branchId,
+                        barberUserId,
+                        saleStart,
+                        saleEnd
+                )
+        ).setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal tips = nvl(
+                saleRepository.sumBarberTipsByRange(
+                        tenantId,
+                        branchId,
+                        barberUserId,
+                        saleStart,
+                        saleEnd
+                )
+        ).setScale(2, RoundingMode.HALF_UP);
+
+        LocalDateTime movementStart = fecha.atStartOfDay();
+        LocalDateTime movementEnd = fecha.plusDays(1).atStartOfDay();
+
+        BigDecimal advancesApplied = nvl(
+                cashMovementRepository.sumAdvancesByBarberAndRange(
+                        tenantId,
+                        branchId,
+                        barberUserId,
+                        movementStart,
+                        movementEnd
+                )
+        ).setScale(2, RoundingMode.HALF_UP);
+
+        List<BarberAdvanceDetailResponse> dayAdvances = advancesInRange.stream()
+                .filter(a -> a.getMovementDate() != null && fecha.equals(a.getMovementDate().toLocalDate()))
+                .toList();
+
+        BigDecimal previousPayments = nvl(
+                barberPaymentRepository.sumPaidInPeriod(
+                        tenantId,
+                        branchId,
+                        barberUserId,
+                        fecha,
+                        fecha
+                )
+        ).setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal commission = serviceCommission
+                .add(productCommission)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal gross = commission
+                .add(tips)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal pending = gross
+                .subtract(advancesApplied)
+                .subtract(previousPayments)
+                .setScale(2, RoundingMode.HALF_UP);
+
+        if (pending.compareTo(BigDecimal.ZERO) < 0) {
+            pending = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        return BarberCommissionItem.builder()
+                .fecha(fecha)
+                .ventas(dayBaseSales)
+                .comision(commission)
+                .baseSales(dayBaseSales)
+                .serviceCommissionAmount(serviceCommission)
+                .productCommissionAmount(productCommission)
+                .tipsAmount(tips)
+                .grossAmount(gross)
+                .advancesApplied(advancesApplied)
+                .previousPaymentsApplied(previousPayments)
+                .pendingAmount(pending)
+                .advances(dayAdvances)
                 .build();
     }
 
