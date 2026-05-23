@@ -155,7 +155,17 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     join branch b on b.branch_id = a.branch_id
     where a.tenant_id = :tenantId
       and a.customer_id = :customerId
-      and a.estado in ('CREATED', 'PROGRAMADA', 'PENDIENTE', 'CONFIRMED', 'RESERVADO', 'PENDING_DEPOSIT_VALIDATION')
+      and upper(coalesce(a.estado, 'CREATED')) not in (
+          'CANCELADO',
+          'CANCELADA',
+          'CANCELLED',
+          'ATENDIDO',
+          'COMPLETADO',
+          'COMPLETADA',
+          'COMPLETED',
+          'FINALIZADO',
+          'FINALIZADA'
+      )
       and (
             a.fecha > :today
             or (a.fecha = :today and a.hora_inicio >= :nowTime)
