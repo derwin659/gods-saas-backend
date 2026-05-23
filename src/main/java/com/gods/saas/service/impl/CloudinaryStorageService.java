@@ -95,6 +95,32 @@ public class CloudinaryStorageService {
         }
     }
 
+    public UploadResult uploadTenantLogo(Long tenantId, MultipartFile file) {
+        validateImage(file);
+
+        try {
+            String folder = "super-gods/tenants/" + tenantId + "/branding";
+
+            Map<?, ?> result = cloudinary.uploader().upload(
+                    file.getBytes(),
+                    ObjectUtils.asMap(
+                            "folder", folder,
+                            "resource_type", "image",
+                            "public_id", "tenant_logo_" + tenantId + "_" + System.currentTimeMillis(),
+                            "overwrite", true
+                    )
+            );
+
+            String secureUrl = String.valueOf(result.get("secure_url"));
+            String publicId = String.valueOf(result.get("public_id"));
+
+            return new UploadResult(secureUrl, publicId);
+
+        } catch (IOException e) {
+            throw new IllegalStateException("No se pudo subir el logo del negocio a Cloudinary", e);
+        }
+    }
+
     public void deleteImage(String publicId) {
         if (publicId == null || publicId.isBlank()) {
             return;

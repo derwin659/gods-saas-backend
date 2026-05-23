@@ -16,5 +16,6 @@ public class TenantDto {
     private String plan;
     private String status;
     private String codigo;
+    private String logoUrl;
     private String createdAt;
 }
