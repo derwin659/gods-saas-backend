@@ -6,6 +6,9 @@ import java.time.LocalTime;
 
 public interface NextAppointmentProjection {
     Long getAppointmentId();
+    Long getBranchId();
+    Long getServiceId();
+    Long getBarberId();
     LocalDate getFecha();
     LocalTime getHoraInicio();
     LocalTime getHoraFin();

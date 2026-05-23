@@ -429,6 +429,126 @@ public class ClientBookingService {
                 .build();
     }
 
+    @Transactional
+    public CreateAppointmentResponse cancelAppointment(
+            Long tenantId,
+            Long customerId,
+            Long appointmentId
+    ) {
+        Appointment appointment = appointmentRepository
+                .findByIdAndTenant_IdAndCustomer_Id(appointmentId, tenantId, customerId)
+                .orElseThrow(() -> new RuntimeException("Reserva no encontrada"));
+
+        String currentStatus = appointment.getEstado() == null
+                ? ""
+                : appointment.getEstado().trim().toUpperCase();
+
+        if (List.of(
+                "CANCELADO",
+                "CANCELADA",
+                "CANCELLED",
+                "ATENDIDO",
+                "COMPLETADO",
+                "COMPLETADA",
+                "COMPLETED",
+                "FINALIZADO",
+                "FINALIZADA"
+        ).contains(currentStatus)) {
+            throw new RuntimeException("Esta reserva ya no se puede cancelar");
+        }
+
+        LocalDate today = LocalDate.now(BUSINESS_ZONE);
+        LocalTime now = LocalTime.now(BUSINESS_ZONE);
+        if (appointment.getFecha() != null
+                && appointment.getHoraInicio() != null
+                && (appointment.getFecha().isBefore(today)
+                || (appointment.getFecha().isEqual(today)
+                && appointment.getHoraInicio().isBefore(now)))) {
+            throw new RuntimeException("No puedes cancelar una reserva que ya paso");
+        }
+
+        appointment.setEstado("CANCELADO");
+        Appointment saved = appointmentRepository.save(appointment);
+
+        return CreateAppointmentResponse.builder()
+                .appointmentId(saved.getId())
+                .estado(saved.getEstado())
+                .build();
+    }
+
+    @Transactional
+    public CreateAppointmentResponse rescheduleAppointment(
+            Long tenantId,
+            Long customerId,
+            Long appointmentId,
+            CreateAppointmentRequest req
+    ) {
+        Appointment appointment = appointmentRepository
+                .findByIdAndTenant_IdAndCustomer_Id(appointmentId, tenantId, customerId)
+                .orElseThrow(() -> new RuntimeException("Reserva no encontrada"));
+
+        String currentStatus = appointment.getEstado() == null
+                ? ""
+                : appointment.getEstado().trim().toUpperCase();
+
+        if (List.of(
+                "CANCELADO",
+                "CANCELADA",
+                "CANCELLED",
+                "ATENDIDO",
+                "COMPLETADO",
+                "COMPLETADA",
+                "COMPLETED",
+                "FINALIZADO",
+                "FINALIZADA"
+        ).contains(currentStatus)) {
+            throw new RuntimeException("Esta reserva ya no se puede reprogramar");
+        }
+
+        if (req.getDate() == null || req.getHoraInicio() == null) {
+            throw new RuntimeException("Selecciona fecha y hora para reprogramar");
+        }
+
+        LocalDate fecha = LocalDate.parse(req.getDate());
+        LocalTime horaInicio = LocalTime.parse(req.getHoraInicio());
+        validateBookingDate(fecha);
+        validateTimeNotPast(fecha, horaInicio);
+
+        Branch branch = appointment.getBranch();
+        ServiceEntity service = appointment.getService();
+        AppUser barber = appointment.getUser();
+
+        if (branch == null || service == null || barber == null) {
+            throw new RuntimeException("La reserva no tiene datos suficientes para reprogramar");
+        }
+
+        int duracion = getServiceDuration(service);
+        LocalTime horaFin = horaInicio.plusMinutes(duracion);
+
+        if (!isBarberAvailableConsideringAllRulesExcludingAppointment(
+                tenantId,
+                branch.getId(),
+                barber.getId(),
+                fecha,
+                horaInicio,
+                horaFin,
+                appointmentId
+        )) {
+            throw new RuntimeException("Ese horario ya no esta disponible");
+        }
+
+        appointment.setFecha(fecha);
+        appointment.setHoraInicio(horaInicio);
+        appointment.setHoraFin(horaFin);
+
+        Appointment saved = appointmentRepository.save(appointment);
+
+        return CreateAppointmentResponse.builder()
+                .appointmentId(saved.getId())
+                .estado(saved.getEstado())
+                .build();
+    }
+
     private AppUser elegirBarberoDisponible(
             Long tenantId,
             Long branchId,
@@ -503,6 +623,45 @@ public class ClientBookingService {
                 barberId, fecha, horaInicio, horaFin, available);
 
         return available;
+    }
+
+    private boolean isBarberAvailableConsideringAllRulesExcludingAppointment(
+            Long tenantId,
+            Long branchId,
+            Long barberId,
+            LocalDate fecha,
+            LocalTime horaInicio,
+            LocalTime horaFin,
+            Long appointmentId
+    ) {
+        BarberAvailability availability = getWorkingAvailabilityOrNull(tenantId, branchId, barberId, fecha);
+        if (availability == null) return false;
+
+        if (horaInicio.isBefore(availability.getStartTime()) || horaFin.isAfter(availability.getEndTime())) {
+            return false;
+        }
+
+        if (isBlockedByManualBlock(tenantId, branchId, barberId, fecha, horaInicio, horaFin)) {
+            return false;
+        }
+
+        LocalDate today = LocalDate.now(BUSINESS_ZONE);
+        LocalTime now = LocalTime.now(BUSINESS_ZONE);
+        if (fecha.equals(today) && !horaInicio.isAfter(now)) {
+            return false;
+        }
+
+        long conflicts = appointmentRepository.countConflictingAppointmentsExcluding(
+                tenantId,
+                branchId,
+                barberId,
+                fecha,
+                horaInicio,
+                horaFin,
+                appointmentId
+        );
+
+        return conflicts == 0;
     }
 
     private BarberAvailability getWorkingAvailabilityOrNull(

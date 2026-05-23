@@ -87,4 +87,33 @@ public class ClientBookingController {
                 clientBookingService.createAppointment(tenantId, customerId, request)
         );
     }
+
+    @DeleteMapping("/appointments/{appointmentId}")
+    public ResponseEntity<CreateAppointmentResponse> cancelAppointment(
+            @RequestHeader("Authorization") String authHeader,
+            @PathVariable Long appointmentId
+    ) {
+        String token = authHeader.replace("Bearer ", "");
+        Long tenantId = jwtUtil.getTenantIdFromToken(token);
+        Long customerId = jwtUtil.getCustomerIdFromToken(token);
+
+        return ResponseEntity.ok(
+                clientBookingService.cancelAppointment(tenantId, customerId, appointmentId)
+        );
+    }
+
+    @PutMapping("/appointments/{appointmentId}/reschedule")
+    public ResponseEntity<CreateAppointmentResponse> rescheduleAppointment(
+            @RequestHeader("Authorization") String authHeader,
+            @PathVariable Long appointmentId,
+            @RequestBody CreateAppointmentRequest request
+    ) {
+        String token = authHeader.replace("Bearer ", "");
+        Long tenantId = jwtUtil.getTenantIdFromToken(token);
+        Long customerId = jwtUtil.getCustomerIdFromToken(token);
+
+        return ResponseEntity.ok(
+                clientBookingService.rescheduleAppointment(tenantId, customerId, appointmentId, request)
+        );
+    }
 }

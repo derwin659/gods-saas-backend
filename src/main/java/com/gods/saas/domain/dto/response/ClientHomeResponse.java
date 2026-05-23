@@ -46,6 +46,9 @@ public class ClientHomeResponse {
     @Builder
     public static class NextAppointmentResponse {
         private Long appointmentId;
+        private Long branchId;
+        private Long serviceId;
+        private Long barberId;
         private String fecha;     // ISO "2026-03-05"
         private String horaInicio;// "17:30"
         private String servicio;  // "Degradado"

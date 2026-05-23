@@ -36,6 +36,8 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
 
     Optional<Appointment> findByIdAndTenant_Id(Long id, Long tenantId);
 
+    Optional<Appointment> findByIdAndTenant_IdAndCustomer_Id(Long id, Long tenantId, Long customerId);
+
     List<Appointment> findByTenant_IdAndBranch_IdAndFechaOrderByHoraInicioAsc(
             Long tenantId,
             Long branchId,
@@ -95,6 +97,30 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     );
 
     @Query("""
+        select count(a)
+        from Appointment a
+        where a.tenant.id = :tenantId
+          and a.branch.id = :branchId
+          and a.user.id = :barberId
+          and a.fecha = :fecha
+          and a.id <> :appointmentId
+          and a.horaInicio is not null
+          and a.horaFin is not null
+          and upper(coalesce(a.estado, 'CREATED')) not in ('CANCELADO', 'CANCELADA', 'CANCELLED', 'ATENDIDO', 'COMPLETADO', 'COMPLETED', 'FINALIZADO')
+          and :horaInicio < a.horaFin
+          and :horaFin > a.horaInicio
+    """)
+    long countConflictingAppointmentsExcluding(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("barberId") Long barberId,
+            @Param("fecha") LocalDate fecha,
+            @Param("horaInicio") LocalTime horaInicio,
+            @Param("horaFin") LocalTime horaFin,
+            @Param("appointmentId") Long appointmentId
+    );
+
+    @Query("""
         select a
         from Appointment a
         where a.tenant.id = :tenantId
@@ -133,6 +159,9 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     @Query(value = """
     select
         a.appointment_id as appointmentId,
+        a.branch_id as branchId,
+        a.service_id as serviceId,
+        a.user_id as barberId,
         a.fecha as fecha,
         a.hora_inicio as horaInicio,
         a.hora_fin as horaFin,
