@@ -639,7 +639,20 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
      * - Incluye servicios antiguos/manuales aunque service_id esté null.
      */
     @Query(value = """
-    select coalesce(sum(si.subtotal), 0)
+    select coalesce(sum(
+        case
+            when coalesce(s.subtotal, 0) <= 0 then 0
+            else greatest(
+                coalesce(si.subtotal, 0)
+                - (
+                    least(coalesce(s.discount, 0), coalesce(s.subtotal, 0))
+                    * coalesce(si.subtotal, 0)
+                    / coalesce(nullif(s.subtotal, 0), 1)
+                ),
+                0
+            )
+        end
+    ), 0)
     from sale_item si
     join sale s on s.sale_id = si.sale_id
     where s.tenant_id = :tenantId
