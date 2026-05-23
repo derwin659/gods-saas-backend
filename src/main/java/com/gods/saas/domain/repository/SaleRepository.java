@@ -649,6 +649,8 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
             si.service_id is not null
             or upper(coalesce(si.tipo_item, '')) = 'SERVICE'
           )
+      and upper(trim(coalesce(s.metodo_pago, ''))) not in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
+      and coalesce(s.total, 0) > 0
       and COALESCE(s.sale_date, s.fecha_creacion) >= :start
       and COALESCE(s.sale_date, s.fecha_creacion) < :end
     """, nativeQuery = true)
@@ -679,6 +681,8 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
           and (:branchId is null or s.branch_id = :branchId)
           and si.barber_user_id = :barberUserId
           and si.product_id is not null
+          and upper(trim(coalesce(s.metodo_pago, ''))) not in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
+          and coalesce(s.total, 0) > 0
           and COALESCE(s.sale_date, s.fecha_creacion) >= :start
           and COALESCE(s.sale_date, s.fecha_creacion) < :end
         """, nativeQuery = true)
