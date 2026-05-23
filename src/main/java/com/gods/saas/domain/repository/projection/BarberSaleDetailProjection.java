@@ -10,4 +10,7 @@ public interface BarberSaleDetailProjection {
     BigDecimal getTotal();
     String getPaymentMethod();
     LocalDateTime getCreatedAt();
+    BigDecimal getSubtotal();
+    BigDecimal getDiscount();
+
 }

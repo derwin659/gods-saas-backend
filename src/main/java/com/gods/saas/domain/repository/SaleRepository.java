@@ -63,8 +63,18 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
     @Query(value = """
         select
             coalesce(se.nombre, p.nombre, 'Item') as serviceName,
-            count(si.sale_item_id) as timesSold,
-            coalesce(sum(si.subtotal), 0) as totalAmount
+            count(case
+                when upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
+                    then null
+                else si.sale_item_id
+            end) as timesSold,
+            coalesce(sum(
+                case
+                    when upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
+                        then 0
+                    else coalesce(si.subtotal, 0)
+                end
+            ), 0) as totalAmount
         from sale s
         join sale_item si on si.sale_id = s.sale_id
         left join service se on se.service_id = si.service_id
@@ -74,7 +84,22 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
           and COALESCE(s.sale_date, s.fecha_creacion) >= :start
           and COALESCE(s.sale_date, s.fecha_creacion) < :end
         group by coalesce(se.nombre, p.nombre, 'Item')
-        order by count(si.sale_item_id) desc, coalesce(sum(si.subtotal), 0) desc
+        having count(case
+            when upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
+                then null
+            else si.sale_item_id
+        end) > 0
+        order by count(case
+            when upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
+                then null
+            else si.sale_item_id
+        end) desc, coalesce(sum(
+            case
+                when upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
+                    then 0
+                else coalesce(si.subtotal, 0)
+            end
+        ), 0) desc
         """, nativeQuery = true)
     List<TopServiceReportProjection> getTopServicesReport(
             @Param("tenantId") Long tenantId,
@@ -306,8 +331,31 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         select
             u.user_id as barberId,
             u.nombre as barberName,
-            coalesce(sum(si.subtotal), 0) as totalSales,
-            count(distinct s.sale_id) as salesCount
+            coalesce(sum(
+                case
+                    when upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
+                        then 0
+                    else coalesce(si.subtotal, 0)
+                end
+            ), 0) as totalSales,
+            count(distinct s.sale_id) as salesCount,
+            count(distinct case
+                when upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
+                    then null
+                else s.sale_id
+            end) as paidSalesCount,
+            count(distinct case
+                when upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
+                    then s.sale_id
+                else null
+            end) as courtesySalesCount,
+            coalesce(sum(
+                case
+                    when upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
+                        then coalesce(si.subtotal, 0)
+                    else 0
+                end
+            ), 0) as courtesyReferenceAmount
         from sale s
         join sale_item si on si.sale_id = s.sale_id
         join app_user u on u.user_id = si.barber_user_id
@@ -316,7 +364,13 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
           and COALESCE(s.sale_date, s.fecha_creacion) >= :start
           and COALESCE(s.sale_date, s.fecha_creacion) < :end
         group by u.user_id, u.nombre
-        order by coalesce(sum(si.subtotal), 0) desc, u.nombre asc
+        order by coalesce(sum(
+            case
+                when upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
+                    then 0
+                else coalesce(si.subtotal, 0)
+            end
+        ), 0) desc, u.nombre asc
         """, nativeQuery = true)
     List<BarberSalesSummaryProjection> getBarberSalesSummary(
             @Param("tenantId") Long tenantId,
@@ -355,6 +409,56 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
             @Param("end") LocalDateTime end
     );
 
+
+    @Query(value = """
+        select count(distinct s.sale_id)
+        from sale s
+        where s.tenant_id = :tenantId
+          and (:branchId is null or s.branch_id = :branchId)
+          and COALESCE(s.sale_date, s.fecha_creacion) >= :start
+          and COALESCE(s.sale_date, s.fecha_creacion) < :end
+          and upper(trim(coalesce(s.metodo_pago, ''))) not in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
+        """, nativeQuery = true)
+    Long countPaidSalesByRange(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+
+    @Query(value = """
+        select count(distinct s.sale_id)
+        from sale s
+        where s.tenant_id = :tenantId
+          and (:branchId is null or s.branch_id = :branchId)
+          and COALESCE(s.sale_date, s.fecha_creacion) >= :start
+          and COALESCE(s.sale_date, s.fecha_creacion) < :end
+          and upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
+        """, nativeQuery = true)
+    Long countCourtesySalesByRange(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+
+    @Query(value = """
+        select coalesce(sum(coalesce(si.subtotal, 0)), 0)
+        from sale s
+        join sale_item si on si.sale_id = s.sale_id
+        where s.tenant_id = :tenantId
+          and (:branchId is null or s.branch_id = :branchId)
+          and COALESCE(s.sale_date, s.fecha_creacion) >= :start
+          and COALESCE(s.sale_date, s.fecha_creacion) < :end
+          and upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
+        """, nativeQuery = true)
+    BigDecimal sumCourtesyReferenceAmountByRange(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+
     @Query(value = """
         select count(distinct si.barber_user_id)
         from sale s
@@ -386,7 +490,9 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
                 ),
                 ''
             ) as serviceNames,
-            s.total as total,
+            coalesce(s.total, 0) as total,
+            coalesce(sum(si.subtotal), 0) as subtotal,
+            coalesce(s.discount, 0) as discount,
             coalesce(s.metodo_pago, '') as paymentMethod,
             COALESCE(s.sale_date, s.fecha_creacion) as createdAt
         from sale s
@@ -399,7 +505,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
           and si.barber_user_id = :barberId
           and COALESCE(s.sale_date, s.fecha_creacion) >= :start
           and COALESCE(s.sale_date, s.fecha_creacion) < :end
-        group by s.sale_id, c.nombres, c.apellidos, s.total, s.metodo_pago, s.sale_date, s.fecha_creacion
+        group by s.sale_id, c.nombres, c.apellidos, s.total, s.subtotal, s.discount, s.metodo_pago, s.sale_date, s.fecha_creacion
         order by COALESCE(s.sale_date, s.fecha_creacion) desc
         """, nativeQuery = true)
     List<BarberSaleDetailProjection> getBarberSaleDetails(

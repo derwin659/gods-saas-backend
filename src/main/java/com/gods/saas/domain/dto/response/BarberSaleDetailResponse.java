@@ -16,6 +16,8 @@ public class BarberSaleDetailResponse {
     private String customerName;
     private String serviceNames;
     private BigDecimal total;
+    private BigDecimal subtotal;
+    private BigDecimal discount;
     private String paymentMethod;
     private String createdAt;
 }

@@ -7,4 +7,8 @@ public interface BarberSalesSummaryProjection {
     String getBarberName();
     BigDecimal getTotalSales();
     Long getSalesCount();
+
+    Long getPaidSalesCount();
+    Long getCourtesySalesCount();
+    BigDecimal getCourtesyReferenceAmount();
 }

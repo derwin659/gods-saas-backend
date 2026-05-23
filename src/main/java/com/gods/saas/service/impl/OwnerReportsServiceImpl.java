@@ -118,9 +118,12 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
 
         BigDecimal totalSales = nvl(saleRepository.getTotalSalesByRange(tenantId, branchId, start, end));
         Long totalSalesCount = nvl(saleRepository.countSalesByRange(tenantId, branchId, start, end));
+        Long paidSalesCount = nvl(saleRepository.countPaidSalesByRange(tenantId, branchId, start, end));
+        Long courtesySalesCount = nvl(saleRepository.countCourtesySalesByRange(tenantId, branchId, start, end));
+        BigDecimal courtesyReferenceAmount = nvl(saleRepository.sumCourtesyReferenceAmountByRange(tenantId, branchId, start, end));
         Long activeBarbers = nvl(saleRepository.countActiveBarbersByRange(tenantId, branchId, start, end));
 
-        BigDecimal averageTicket = calculateAverage(totalSales, totalSalesCount);
+        BigDecimal averageTicket = calculateAverage(totalSales, paidSalesCount);
 
         List<BarberSalesSummaryResponse> barberSummaries = saleRepository
                 .getBarberSalesSummary(tenantId, branchId, start, end)
@@ -131,6 +134,9 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
         return OwnerSalesReportResponse.builder()
                 .totalSales(totalSales)
                 .totalSalesCount(totalSalesCount)
+                .paidSalesCount(paidSalesCount)
+                .courtesySalesCount(courtesySalesCount)
+                .courtesyReferenceAmount(courtesyReferenceAmount)
                 .averageTicket(averageTicket)
                 .activeBarbers(activeBarbers)
                 .barberSummaries(barberSummaries)
@@ -168,12 +174,13 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
 
         BigDecimal totalSales = nvl(saleRepository.getTotalSalesByRange(tenantId, null, start, end));
         Long totalSalesCount = nvl(saleRepository.countSalesByRange(tenantId, null, start, end));
+        Long paidSalesCount = nvl(saleRepository.countPaidSalesByRange(tenantId, null, start, end));
         Long activeBarbers = nvl(saleRepository.countActiveBarbersByRange(tenantId, null, start, end));
 
         return BranchSummaryResponse.builder()
                 .totalSales(totalSales)
                 .totalSalesCount(totalSalesCount)
-                .averageTicket(calculateAverage(totalSales, totalSalesCount))
+                .averageTicket(calculateAverage(totalSales, paidSalesCount))
                 .activeBarbers(activeBarbers)
                 .build();
     }
@@ -191,6 +198,7 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
 
         BigDecimal totalSales = nvl(saleRepository.getTotalSalesByRange(tenantId, branchId, start, end));
         Long totalSalesCount = nvl(saleRepository.countSalesByRange(tenantId, branchId, start, end));
+        Long paidSalesCount = nvl(saleRepository.countPaidSalesByRange(tenantId, branchId, start, end));
         Long activeBarbers = nvl(saleRepository.countActiveBarbersByRange(tenantId, branchId, start, end));
 
         List<BarberSalesSummaryResponse> barbers = getBranchBarbersReport(tenantId, branchId, from, to);
@@ -202,7 +210,7 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
                 .branchId(branchId)
                 .totalSales(totalSales)
                 .totalSalesCount(totalSalesCount)
-                .averageTicket(calculateAverage(totalSales, totalSalesCount))
+                .averageTicket(calculateAverage(totalSales, paidSalesCount))
                 .activeBarbers(activeBarbers)
                 .barbers(barbers)
                 .topServices(topServices)
@@ -315,6 +323,8 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
         BigDecimal transfer = nvl(saleRepository.getTotalByPaymentMethod(tenantId, branchId, "TRANSFER", start, end));
         BigDecimal plin = nvl(saleRepository.getTotalByPaymentMethod(tenantId, branchId, "PLIN", start, end));
         BigDecimal gratis = nvl(saleRepository.getTotalByPaymentMethod(tenantId, branchId, "GRATIS", start, end));
+        Long freeCount = nvl(saleRepository.countCourtesySalesByRange(tenantId, branchId, start, end));
+        BigDecimal freeReferenceAmount = nvl(saleRepository.sumCourtesyReferenceAmountByRange(tenantId, branchId, start, end));
 
         BigDecimal total = cash.add(yape).add(card).add(transfer).add(plin);
 
@@ -323,6 +333,8 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
                 .yape(yape)
                 .card(card)
                 .free(gratis)
+                .freeCount(freeCount)
+                .freeReferenceAmount(freeReferenceAmount)
                 .transfer(transfer)
                 .plin(plin)
                 .total(total)
@@ -333,13 +345,19 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
 
         BigDecimal total = nvl(p.getTotalSales());
         Long count = nvl(p.getSalesCount());
+        Long paidSalesCount = nvl(p.getPaidSalesCount());
+        Long courtesySalesCount = nvl(p.getCourtesySalesCount());
+        BigDecimal courtesyReferenceAmount = nvl(p.getCourtesyReferenceAmount());
 
         return BarberSalesSummaryResponse.builder()
                 .barberId(p.getBarberId())
                 .barberName(p.getBarberName())
                 .totalSales(total)
                 .salesCount(count)
-                .averageTicket(calculateAverage(total, count))
+                .paidSalesCount(paidSalesCount)
+                .courtesySalesCount(courtesySalesCount)
+                .courtesyReferenceAmount(courtesyReferenceAmount)
+                .averageTicket(calculateAverage(total, paidSalesCount))
                 .build();
     }
 
@@ -350,6 +368,8 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
                 .customerName(p.getCustomerName())
                 .serviceNames(p.getServiceNames())
                 .total(nvl(p.getTotal()))
+                .subtotal(nvl(p.getSubtotal()))
+                .discount(nvl(p.getDiscount()))
                 .paymentMethod(p.getPaymentMethod())
                 .createdAt(p.getCreatedAt() != null ? p.getCreatedAt().toString() : "")
                 .build();

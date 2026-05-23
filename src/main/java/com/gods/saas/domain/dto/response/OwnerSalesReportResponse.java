@@ -17,5 +17,15 @@ public class OwnerSalesReportResponse {
     private Long totalSalesCount;
     private BigDecimal averageTicket;
     private Long activeBarbers;
+
+    /** Ventas realmente cobradas. No incluye FREE / GRATIS / CORTESIA. */
+    private Long paidSalesCount;
+
+    /** Cantidad de ventas de cortesía en el rango. */
+    private Long courtesySalesCount;
+
+    /** Valor referencial de los items regalados. No suma a ingresos. */
+    private BigDecimal courtesyReferenceAmount;
+
     private List<BarberSalesSummaryResponse> barberSummaries;
 }
