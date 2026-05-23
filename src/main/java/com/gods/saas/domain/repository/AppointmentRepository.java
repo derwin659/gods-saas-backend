@@ -139,14 +139,23 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
         s.nombre as servicio,
         trim(coalesce(u.nombre, '') || ' ' || coalesce(u.apellido, '')) as barbero,
         b.nombre as branch,
-        a.estado as estado
+        a.estado as estado,
+        a.deposit_required as depositRequired,
+        a.deposit_amount as depositAmount,
+        a.remaining_amount as remainingAmount,
+        a.deposit_status as depositStatus,
+        a.deposit_method_code as depositMethodCode,
+        a.deposit_method_name as depositMethodName,
+        a.deposit_operation_code as depositOperationCode,
+        a.deposit_evidence_url as depositEvidenceUrl,
+        a.deposit_note as depositNote
     from appointment a
     join service s on s.service_id = a.service_id
     left join app_user u on u.user_id = a.user_id
     join branch b on b.branch_id = a.branch_id
     where a.tenant_id = :tenantId
       and a.customer_id = :customerId
-      and a.estado in ('CREATED', 'PROGRAMADA', 'PENDIENTE', 'CONFIRMED')
+      and a.estado in ('CREATED', 'PROGRAMADA', 'PENDIENTE', 'CONFIRMED', 'RESERVADO', 'PENDING_DEPOSIT_VALIDATION')
       and (
             a.fecha > :today
             or (a.fecha = :today and a.hora_inicio >= :nowTime)

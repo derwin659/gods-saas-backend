@@ -498,7 +498,16 @@ public class CustomerService {
                         .servicio(p.getServicio())
                         .barbero(p.getBarbero())
                         .branch(p.getBranch())
-                        .estado("PENDIENTE")
+                        .estado(p.getEstado())
+                        .depositRequired(p.getDepositRequired())
+                        .depositAmount(p.getDepositAmount())
+                        .remainingAmount(p.getRemainingAmount())
+                        .depositStatus(p.getDepositStatus())
+                        .depositMethodCode(p.getDepositMethodCode())
+                        .depositMethodName(p.getDepositMethodName())
+                        .depositOperationCode(p.getDepositOperationCode())
+                        .depositEvidenceUrl(p.getDepositEvidenceUrl())
+                        .depositNote(p.getDepositNote())
                         .build())
                 .orElse(null);
     }

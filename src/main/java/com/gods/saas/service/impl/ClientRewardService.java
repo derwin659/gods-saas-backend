@@ -1,5 +1,6 @@
 package com.gods.saas.service.impl;
 
+import com.gods.saas.domain.dto.response.ClientRewardRedemptionResponse;
 import com.gods.saas.domain.dto.response.RedeemRewardResponse;
 import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.*;
@@ -10,6 +11,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 @Service
@@ -23,13 +25,21 @@ public class ClientRewardService {
     private final LoyaltyMovementRepository loyaltyMovementRepository;
     private final NotificationService notificationService;
 
+    public List<ClientRewardRedemptionResponse> listRedemptions(Authentication authentication) {
+        Customer customer = getAuthenticatedCustomer(authentication);
+        Long tenantId = customer.getTenant().getId();
+
+        return rewardRedemptionRepository
+                .findByTenantIdAndCustomerIdOrderByFechaCreacionDesc(tenantId, customer.getId())
+                .stream()
+                .map(this::mapRedemption)
+                .toList();
+    }
+
     @Transactional
     public RedeemRewardResponse redeemReward(Authentication authentication, Long rewardId) {
 
-        String idCustomer = authentication.getName();
-
-        Customer customer = customerRepository.findById(Long.parseLong(idCustomer))
-                .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
+        Customer customer = getAuthenticatedCustomer(authentication);
 
         Long tenantId = customer.getTenant().getId();
 
@@ -103,5 +113,34 @@ public class ClientRewardService {
                 codigo,
                 redemption.getId()
         );
+    }
+
+    private Customer getAuthenticatedCustomer(Authentication authentication) {
+        String idCustomer = authentication.getName();
+
+        return customerRepository.findById(Long.parseLong(idCustomer))
+                .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
+    }
+
+    private ClientRewardRedemptionResponse mapRedemption(RewardRedemption redemption) {
+        RewardItem reward = rewardItemRepository.findById(redemption.getRewardId()).orElse(null);
+        String estado = redemption.getEstado();
+        boolean used = "USED".equalsIgnoreCase(estado);
+        boolean available = "GENERATED".equalsIgnoreCase(estado);
+
+        return ClientRewardRedemptionResponse.builder()
+                .redemptionId(redemption.getId())
+                .codigo(redemption.getCodigo())
+                .estado(estado)
+                .usado(used)
+                .disponibleParaUsar(available)
+                .puntosUsados(redemption.getPuntosUsados())
+                .fechaCreacion(redemption.getFechaCreacion())
+                .fechaUso(redemption.getFechaUso())
+                .rewardId(reward != null ? reward.getId() : redemption.getRewardId())
+                .rewardNombre(reward != null ? reward.getNombre() : null)
+                .rewardDescripcion(reward != null ? reward.getDescripcion() : null)
+                .rewardImagenUrl(reward != null ? reward.getImagenUrl() : null)
+                .build();
     }
 }

@@ -3,6 +3,7 @@ package com.gods.saas.domain.dto.response;
 import com.gods.saas.domain.dto.ClienteResponse;
 import lombok.*;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 @Getter @Setter
@@ -52,6 +53,15 @@ public class ClientHomeResponse {
         private String estado;    // "PENDIENTE"
         private String horaFin;
         private String branch;
+        private Boolean depositRequired;
+        private BigDecimal depositAmount;
+        private BigDecimal remainingAmount;
+        private String depositStatus;
+        private String depositMethodCode;
+        private String depositMethodName;
+        private String depositOperationCode;
+        private String depositEvidenceUrl;
+        private String depositNote;
     }
 
     @Getter @Setter
