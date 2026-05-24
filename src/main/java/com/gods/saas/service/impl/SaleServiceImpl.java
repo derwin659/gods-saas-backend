@@ -27,8 +27,6 @@ import java.util.Objects;
 @Transactional
 public class SaleServiceImpl implements SaleService {
 
-    private static final int POINTS_PER_SOL = 5;
-
     private final LoyaltyService loyaltyService;
     private final SaleRepository saleRepository;
     private final ServiceRepository serviceRepository;
@@ -356,9 +354,7 @@ public class SaleServiceImpl implements SaleService {
         BigDecimal servicePointsBase = calculateServicePointsBase(savedSale);
 
         if (customer != null && servicePointsBase.compareTo(BigDecimal.ZERO) > 0) {
-            puntosGanados = calcularPuntos(servicePointsBase.doubleValue());
-
-            loyaltyService.grantSalePoints(
+            puntosGanados = loyaltyService.grantSalePoints(
                     tenant,
                     customer,
                     user,
@@ -374,7 +370,9 @@ public class SaleServiceImpl implements SaleService {
                     ? updated.getPuntosDisponibles()
                     : 0;
 
-            notificationService.notifyPointsEarned(customer, puntosGanados, savedSale.getId());
+            if (puntosGanados > 0) {
+                notificationService.notifyPointsEarned(customer, puntosGanados, savedSale.getId());
+            }
         } else if (customer != null) {
             LoyaltyAccount current = loyaltyAccountRepository
                     .findByTenant_IdAndCustomer_Id(tenant.getId(), customer.getId())
@@ -757,13 +755,6 @@ public class SaleServiceImpl implements SaleService {
 
     private BigDecimal safe(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
-    }
-
-    private int calcularPuntos(double total) {
-        if (total <= 0) {
-            return 0;
-        }
-        return (int) Math.floor(total * POINTS_PER_SOL);
     }
 
     private boolean hasText(String value) {

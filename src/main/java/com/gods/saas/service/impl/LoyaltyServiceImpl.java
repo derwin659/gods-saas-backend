@@ -5,14 +5,18 @@ import com.gods.saas.domain.repository.CustomerRepository;
 import com.gods.saas.domain.repository.LoyaltyAccountRepository;
 import com.gods.saas.domain.repository.LoyaltyMovementRepository;
 import com.gods.saas.domain.repository.LoyaltyPointLotRepository;
+import com.gods.saas.domain.repository.TenantSettingsRepository;
 import com.gods.saas.service.impl.impl.LoyaltyService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 
 @Service
@@ -20,7 +24,8 @@ import java.util.Optional;
 @Transactional
 public class LoyaltyServiceImpl implements LoyaltyService {
 
-    private static final int POINTS_PER_SOL = 5;
+    private static final int DEFAULT_POINTS_PER_CURRENCY_UNIT = 5;
+    private static final String POINTS_PER_CURRENCY_UNIT_KEY = "loyaltyPointsPerCurrencyUnit";
     private static final int BONUS_NEW_CUSTOMER = 100;
     private static final int BONUS_MIGRATED_APP_ACTIVATION = 50;
     private static final int POINTS_EXPIRATION_DAYS = 180;
@@ -29,18 +34,19 @@ public class LoyaltyServiceImpl implements LoyaltyService {
     private final LoyaltyMovementRepository loyaltyMovementRepository;
     private final LoyaltyPointLotRepository loyaltyPointLotRepository;
     private final CustomerRepository customerRepository;
+    private final TenantSettingsRepository tenantSettingsRepository;
 
     @Override
-    public void grantSalePoints(Tenant tenant, Customer customer, AppUser user, Sale sale, double total) {
+    public int grantSalePoints(Tenant tenant, Customer customer, AppUser user, Sale sale, double total) {
         if (customer == null || total <= 0) {
-            return;
+            return 0;
         }
 
         LoyaltyAccount loyalty = getOrCreateAccount(tenant, customer);
 
-        int puntosGanados = calcularPuntos(total);
+        int puntosGanados = calcularPuntos(tenant, total);
         if (puntosGanados <= 0) {
-            return;
+            return 0;
         }
 
         int acumulados = safeInt(loyalty.getPuntosAcumulados()) + puntosGanados;
@@ -80,6 +86,7 @@ public class LoyaltyServiceImpl implements LoyaltyService {
                 .build();
 
         loyaltyPointLotRepository.save(lot);
+        return puntosGanados;
     }
 
     @Override
@@ -220,9 +227,40 @@ public class LoyaltyServiceImpl implements LoyaltyService {
         return processed;
     }
 
-    private int calcularPuntos(double total) {
+    private int calcularPuntos(Tenant tenant, double total) {
         if (total <= 0) return 0;
-        return (int) Math.floor(total * POINTS_PER_SOL);
+        BigDecimal pointsPerUnit = resolvePointsPerCurrencyUnit(tenant);
+        return BigDecimal.valueOf(total)
+                .multiply(pointsPerUnit)
+                .setScale(0, RoundingMode.FLOOR)
+                .intValue();
+    }
+
+    private BigDecimal resolvePointsPerCurrencyUnit(Tenant tenant) {
+        if (tenant == null || tenant.getId() == null) {
+            return BigDecimal.valueOf(DEFAULT_POINTS_PER_CURRENCY_UNIT);
+        }
+
+        return tenantSettingsRepository.findByTenant_Id(tenant.getId())
+                .map(settings -> {
+                    Map<String, Object> config = settings.getScheduleConfig();
+                    if (config == null) {
+                        return BigDecimal.valueOf(DEFAULT_POINTS_PER_CURRENCY_UNIT);
+                    }
+                    Object raw = config.get(POINTS_PER_CURRENCY_UNIT_KEY);
+                    if (raw == null) {
+                        return BigDecimal.valueOf(DEFAULT_POINTS_PER_CURRENCY_UNIT);
+                    }
+                    try {
+                        BigDecimal value = new BigDecimal(raw.toString());
+                        return value.compareTo(BigDecimal.ZERO) < 0
+                                ? BigDecimal.ZERO
+                                : value;
+                    } catch (Exception ignored) {
+                        return BigDecimal.valueOf(DEFAULT_POINTS_PER_CURRENCY_UNIT);
+                    }
+                })
+                .orElse(BigDecimal.valueOf(DEFAULT_POINTS_PER_CURRENCY_UNIT));
     }
 
     private int safeInt(Integer value) {
