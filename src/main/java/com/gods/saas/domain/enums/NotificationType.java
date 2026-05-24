@@ -2,6 +2,8 @@ package com.gods.saas.domain.enums;
 
 public enum NotificationType {
     BOOKING_CREATED,
+    BOOKING_CANCELLED_BY_CLIENT,
+    BOOKING_RESCHEDULED_BY_CLIENT,
     BOOKING_REMINDER_60,
     BOOKING_REMINDER_30,
     POINTS_EARNED,

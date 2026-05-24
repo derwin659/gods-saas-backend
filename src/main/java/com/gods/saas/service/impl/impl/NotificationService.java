@@ -3,9 +3,22 @@ package com.gods.saas.service.impl.impl;
 import com.gods.saas.domain.enums.NotificationType;
 import com.gods.saas.domain.model.*;
 
+import java.time.LocalDate;
+import java.time.LocalTime;
+
 public interface NotificationService {
 
     void notifyBookingCreated(Appointment appointment);
+
+    void notifyBookingCancelledByClient(Appointment appointment);
+
+    void notifyBookingRescheduledByClient(
+            Appointment appointment,
+            LocalDate oldFecha,
+            LocalTime oldHoraInicio,
+            LocalTime oldHoraFin
+    );
+
 
     void notifyBookingReminder(Appointment appointment, NotificationType reminderType);
 

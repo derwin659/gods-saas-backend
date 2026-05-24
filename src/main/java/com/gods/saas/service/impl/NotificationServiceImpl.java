@@ -4,6 +4,7 @@ import com.gods.saas.domain.enums.NotificationChannel;
 import com.gods.saas.domain.enums.NotificationDeliveryStatus;
 import com.gods.saas.domain.enums.NotificationType;
 import com.gods.saas.domain.model.*;
+import com.gods.saas.domain.repository.CustomerRepository;
 import com.gods.saas.domain.repository.NotificationDeliveryRepository;
 import com.gods.saas.domain.repository.NotificationRepository;
 import com.gods.saas.domain.repository.UserTenantRoleRepository;
@@ -25,6 +26,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final NotificationRepository notificationRepository;
     private final NotificationDeliveryRepository notificationDeliveryRepository;
     private final UserTenantRoleRepository userTenantRoleRepository;
+    private final CustomerRepository customerRepository;
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
@@ -68,6 +70,87 @@ public class NotificationServiceImpl implements NotificationService {
         }
 
         notifyOwnersAndAdminsBookingCreated(appointment, serviceName, date, time);
+    }
+
+
+    @Override
+    public void notifyBookingCancelledByClient(Appointment appointment) {
+        if (appointment == null || appointment.getTenant() == null) return;
+
+        String serviceName = appointment.getService() != null ? appointment.getService().getNombre() : "Servicio";
+        String date = appointment.getFecha() != null ? appointment.getFecha().format(DATE_FMT) : "";
+        String time = appointment.getHoraInicio() != null ? appointment.getHoraInicio().format(TIME_FMT) : "";
+
+        String customerName = appointment.getCustomer() != null
+                ? safeFullName(appointment.getCustomer().getNombres(), appointment.getCustomer().getApellidos())
+                : "Cliente";
+
+        if (appointment.getUser() != null) {
+            Notification n = saveUserNotification(
+                    appointment.getTenant(),
+                    appointment.getBranch(),
+                    appointment.getUser(),
+                    NotificationType.BOOKING_CANCELLED_BY_CLIENT,
+                    "Reserva cancelada",
+                    customerName + " canceló su reserva de " + serviceName + " del " + date + " a las " + time + ".",
+                    "APPOINTMENT",
+                    appointment.getId()
+            );
+            registerDefaultChannels(n, false);
+        }
+
+        notifyOwnersAndAdminsAppointmentEvent(
+                appointment,
+                NotificationType.BOOKING_CANCELLED_BY_CLIENT,
+                "Reserva cancelada por cliente",
+                customerName + " canceló su reserva de " + serviceName + " del " + date + " a las " + time + "."
+        );
+    }
+
+    @Override
+    public void notifyBookingRescheduledByClient(
+            Appointment appointment,
+            java.time.LocalDate oldFecha,
+            java.time.LocalTime oldHoraInicio,
+            java.time.LocalTime oldHoraFin
+    ) {
+        if (appointment == null || appointment.getTenant() == null) return;
+
+        String serviceName = appointment.getService() != null ? appointment.getService().getNombre() : "Servicio";
+
+        String customerName = appointment.getCustomer() != null
+                ? safeFullName(appointment.getCustomer().getNombres(), appointment.getCustomer().getApellidos())
+                : "Cliente";
+
+        String oldDate = oldFecha != null ? oldFecha.format(DATE_FMT) : "";
+        String oldTime = oldHoraInicio != null ? oldHoraInicio.format(TIME_FMT) : "";
+        String newDate = appointment.getFecha() != null ? appointment.getFecha().format(DATE_FMT) : "";
+        String newTime = appointment.getHoraInicio() != null ? appointment.getHoraInicio().format(TIME_FMT) : "";
+
+        String message = customerName + " reprogramó su reserva de " + serviceName
+                + " del " + oldDate + " a las " + oldTime
+                + " para el " + newDate + " a las " + newTime + ".";
+
+        if (appointment.getUser() != null) {
+            Notification n = saveUserNotification(
+                    appointment.getTenant(),
+                    appointment.getBranch(),
+                    appointment.getUser(),
+                    NotificationType.BOOKING_RESCHEDULED_BY_CLIENT,
+                    "Reserva reprogramada",
+                    message,
+                    "APPOINTMENT",
+                    appointment.getId()
+            );
+            registerDefaultChannels(n, false);
+        }
+
+        notifyOwnersAndAdminsAppointmentEvent(
+                appointment,
+                NotificationType.BOOKING_RESCHEDULED_BY_CLIENT,
+                "Reserva reprogramada por cliente",
+                message
+        );
     }
 
     @Override
@@ -125,15 +208,47 @@ public class NotificationServiceImpl implements NotificationService {
 
     @Override
     public void notifyPromotionCreated(Promotion promotion, boolean sendNotification) {
-        if (!sendNotification) return;
-        // Aquí luego haces broadcast a clientes del tenant
-        // Por ahora dejamos el método preparado para integrar con CustomerRepository.
+        if (!sendNotification || promotion == null || promotion.getTenant() == null) return;
+        if (!promotion.isActivo()) return;
+
+        Long tenantId = promotion.getTenant().getId();
+        String title = safeText(promotion.getTitulo(), "Nueva promoción");
+        String priceText = safeText(promotion.getPriceText(), null);
+
+        String message = priceText == null
+                ? "Nueva promoción disponible: " + title + "."
+                : "Nueva promoción disponible: " + title + " - " + priceText + ".";
+
+        broadcastToTenantCustomers(
+                promotion.getTenant(),
+                promotion.getBranch(),
+                NotificationType.PROMOTION_CREATED,
+                "Nueva promoción",
+                message,
+                "PROMOTION",
+                promotion.getId()
+        );
     }
 
     @Override
     public void notifyRewardCreated(RewardItem reward, boolean sendNotification) {
-        if (!sendNotification) return;
-        // Igual que promociones: broadcast masivo en la siguiente capa.
+        if (!sendNotification || reward == null || reward.getTenant() == null) return;
+        if (Boolean.FALSE.equals(reward.getActivo())) return;
+
+        String rewardName = safeText(reward.getNombre(), "Premio");
+        String pointsText = reward.getPuntosRequeridos() != null && reward.getPuntosRequeridos() > 0
+                ? " por " + reward.getPuntosRequeridos() + " puntos"
+                : "";
+
+        broadcastToTenantCustomers(
+                reward.getTenant(),
+                null,
+                NotificationType.REWARD_CREATED,
+                "Nuevo premio disponible",
+                "Nuevo premio: " + rewardName + pointsText + ".",
+                "REWARD",
+                reward.getId()
+        );
     }
 
     @Override
@@ -235,6 +350,93 @@ public class NotificationServiceImpl implements NotificationService {
         }
     }
 
+
+    private void notifyOwnersAndAdminsAppointmentEvent(
+            Appointment appointment,
+            NotificationType type,
+            String title,
+            String message
+    ) {
+        if (appointment == null || appointment.getTenant() == null) return;
+
+        Long tenantId = appointment.getTenant().getId();
+        Long branchId = appointment.getBranch() != null ? appointment.getBranch().getId() : null;
+
+        Map<Long, AppUser> recipients = new LinkedHashMap<>();
+
+        List<AppUser> owners = userTenantRoleRepository.findActiveUsersByTenantBranchAndRole(
+                tenantId,
+                null,
+                RoleType.OWNER
+        );
+
+        for (AppUser owner : owners) {
+            if (owner != null && owner.getId() != null) {
+                recipients.put(owner.getId(), owner);
+            }
+        }
+
+        List<AppUser> admins = userTenantRoleRepository.findActiveUsersByTenantBranchAndRole(
+                tenantId,
+                branchId,
+                RoleType.ADMIN
+        );
+
+        for (AppUser admin : admins) {
+            if (admin != null && admin.getId() != null) {
+                recipients.put(admin.getId(), admin);
+            }
+        }
+
+        for (AppUser recipient : recipients.values()) {
+            Notification n = saveUserNotification(
+                    appointment.getTenant(),
+                    appointment.getBranch(),
+                    recipient,
+                    type,
+                    title,
+                    message,
+                    "APPOINTMENT",
+                    appointment.getId()
+            );
+
+            registerDefaultChannels(n, false);
+        }
+    }
+
+    private void broadcastToTenantCustomers(
+            Tenant tenant,
+            Branch branch,
+            NotificationType type,
+            String title,
+            String message,
+            String referenceType,
+            Long referenceId
+    ) {
+        if (tenant == null || tenant.getId() == null) return;
+
+        List<Customer> customers = customerRepository.findActiveNotificationTargetsByTenant(tenant.getId());
+
+        for (Customer customer : customers) {
+            if (customer == null || customer.getId() == null) continue;
+
+            Notification n = saveCustomerNotification(
+                    tenant,
+                    branch,
+                    customer,
+                    type,
+                    title,
+                    message,
+                    referenceType,
+                    referenceId
+            );
+
+            // Para campañas masivas usamos IN_APP + PUSH.
+            // No activamos WHATSAPP automáticamente para evitar costos/envíos masivos no deseados.
+            registerDefaultChannels(n, false);
+        }
+    }
+
     private Notification saveCustomerNotification(
             Tenant tenant,
             Branch branch,
@@ -307,6 +509,11 @@ public class NotificationServiceImpl implements NotificationService {
                 .build();
 
         notificationDeliveryRepository.save(delivery);
+    }
+
+    private String safeText(String value, String fallback) {
+        if (value == null || value.trim().isBlank()) return fallback;
+        return value.trim();
     }
 
     private String safeFullName(String nombres, String apellidos) {

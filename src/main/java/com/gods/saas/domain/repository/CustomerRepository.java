@@ -68,6 +68,9 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
 
     Optional<Customer> findByTenant_IdAndTelefono(Long tenantId, String telefono);
 
+
+
+
     @Query("""
         SELECT c
         FROM Customer c
@@ -90,4 +93,14 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
       and coalesce(c.activo, true) = true
 """)
     Integer countCustomers(@Param("tenantId") Long tenantId);
+
+    @Query("""
+    select c
+    from Customer c
+    join fetch c.tenant t
+    where t.id = :tenantId
+      and coalesce(c.activo, true) = true
+    order by c.fechaRegistro desc
+""")
+    List<Customer> findActiveNotificationTargetsByTenant(@Param("tenantId") Long tenantId);
 }

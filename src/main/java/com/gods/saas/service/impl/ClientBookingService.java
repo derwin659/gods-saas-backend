@@ -470,6 +470,8 @@ public class ClientBookingService {
         appointment.setEstado("CANCELADO");
         Appointment saved = appointmentRepository.save(appointment);
 
+        notificationService.notifyBookingCancelledByClient(saved);
+
         return CreateAppointmentResponse.builder()
                 .appointmentId(saved.getId())
                 .estado(saved.getEstado())
@@ -525,6 +527,10 @@ public class ClientBookingService {
         int duracion = getServiceDuration(service);
         LocalTime horaFin = horaInicio.plusMinutes(duracion);
 
+        LocalDate oldFecha = appointment.getFecha();
+        LocalTime oldHoraInicio = appointment.getHoraInicio();
+        LocalTime oldHoraFin = appointment.getHoraFin();
+
         if (!isBarberAvailableConsideringAllRulesExcludingAppointment(
                 tenantId,
                 branch.getId(),
@@ -542,6 +548,13 @@ public class ClientBookingService {
         appointment.setHoraFin(horaFin);
 
         Appointment saved = appointmentRepository.save(appointment);
+
+        notificationService.notifyBookingRescheduledByClient(
+                saved,
+                oldFecha,
+                oldHoraInicio,
+                oldHoraFin
+        );
 
         return CreateAppointmentResponse.builder()
                 .appointmentId(saved.getId())
