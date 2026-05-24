@@ -59,7 +59,34 @@ public class BarberCommissionService {
             throw new IllegalArgumentException("La fecha inicial no puede ser mayor que la fecha final");
         }
 
+        from = resolveEffectiveFrom(tenantId, branchId, barber.getId(), from, to);
+
         BigDecimal porcentajeComision = resolveCommissionPercentage(barber);
+
+        if (from.isAfter(to)) {
+            return BarberCommissionResponse.builder()
+                    .barberName(buildFullName(barber))
+                    .from(from)
+                    .to(to)
+                    .totalVentas(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                    .totalComision(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                    .porcentajeComision(
+                            porcentajeComision == null
+                                    ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+                                    : porcentajeComision.setScale(2, RoundingMode.HALF_UP)
+                    )
+                    .baseSales(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                    .serviceCommissionAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                    .productCommissionAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                    .tipsAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                    .grossAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                    .advancesApplied(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                    .previousPaymentsApplied(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                    .pendingAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                    .advances(List.of())
+                    .items(List.of())
+                    .build();
+        }
 
         // Ventas por día del tenant convertidas a UTC para consultar BD.
         LocalDateTime saleStart = from.atStartOfDay(tenantZone)
@@ -290,6 +317,22 @@ public class BarberCommissionService {
                 .pendingAmount(pending)
                 .advances(dayAdvances)
                 .build();
+    }
+
+    private LocalDate resolveEffectiveFrom(
+            Long tenantId,
+            Long branchId,
+            Long barberUserId,
+            LocalDate from,
+            LocalDate to
+    ) {
+        return barberPaymentRepository
+                .findLatestPaidPeriodToOverlapping(tenantId, branchId, barberUserId, from, to)
+                .map(latestPaidPeriodTo -> {
+                    LocalDate nextUnpaidDay = latestPaidPeriodTo.plusDays(1);
+                    return nextUnpaidDay.isAfter(from) ? nextUnpaidDay : from;
+                })
+                .orElse(from);
     }
 
     private BarberAdvanceDetailResponse mapAdvance(CashMovement cm) {
