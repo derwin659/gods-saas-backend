@@ -439,6 +439,9 @@ public class SaleServiceImpl implements SaleService {
                 BigDecimal amount = safe(paymentRequest.getAmount()).setScale(2, RoundingMode.HALF_UP);
 
                 if (amount.compareTo(BigDecimal.ZERO) <= 0) continue;
+                if ("FREE".equals(method) && total.compareTo(BigDecimal.ZERO) > 0) {
+                    throw new RuntimeException("Una venta con total mayor a cero no puede pagarse como gratis.");
+                }
 
                 result.add(SalePayment.builder()
                         .method(method)
@@ -449,6 +452,10 @@ public class SaleServiceImpl implements SaleService {
 
         if ((rawPayments == null || rawPayments.isEmpty()) && saldo.compareTo(BigDecimal.ZERO) > 0) {
             String method = normalizarMetodoPago(request.getMetodoPago());
+
+            if ("FREE".equals(method)) {
+                throw new RuntimeException("Una venta con total mayor a cero no puede pagarse como gratis.");
+            }
 
             if (!"FREE".equals(method)) {
                 result.add(SalePayment.builder()
@@ -466,7 +473,7 @@ public class SaleServiceImpl implements SaleService {
             String method = normalizarMetodoPago(request.getMetodoPago());
 
             if ("FREE".equals(method)) {
-                return result;
+                throw new RuntimeException("Una venta con total mayor a cero no puede pagarse como gratis.");
             }
 
             result.add(SalePayment.builder()

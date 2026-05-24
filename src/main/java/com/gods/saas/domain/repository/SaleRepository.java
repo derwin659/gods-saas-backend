@@ -335,7 +335,17 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
                 case
                     when upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
                         then 0
-                    else coalesce(si.subtotal, 0)
+                    when coalesce(s.subtotal, 0) <= 0
+                        then 0
+                    else greatest(
+                        coalesce(si.subtotal, 0)
+                        - (
+                            least(coalesce(s.discount, 0), coalesce(s.subtotal, 0))
+                            * coalesce(si.subtotal, 0)
+                            / coalesce(nullif(s.subtotal, 0), 1)
+                        ),
+                        0
+                    )
                 end
             ), 0) as totalSales,
             count(distinct s.sale_id) as salesCount,
@@ -368,7 +378,17 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
             case
                 when upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
                     then 0
-                else coalesce(si.subtotal, 0)
+                when coalesce(s.subtotal, 0) <= 0
+                    then 0
+                else greatest(
+                    coalesce(si.subtotal, 0)
+                    - (
+                        least(coalesce(s.discount, 0), coalesce(s.subtotal, 0))
+                        * coalesce(si.subtotal, 0)
+                        / coalesce(nullif(s.subtotal, 0), 1)
+                    ),
+                    0
+                )
             end
         ), 0) desc, u.nombre asc
         """, nativeQuery = true)
