@@ -35,6 +35,7 @@ public class CashSaleServiceImpl implements CashSaleService {
     private final CustomerRepository customerRepository;
     private final SaleItemRepository saleItemRepository;
     private final ProductRepository productRepository;
+    private final ProductBranchStockRepository productBranchStockRepository;
     private final StockMovementRepository stockMovementRepository;
     private final SalePaymentRepository salePaymentRepository;
     private final TenantTimeService tenantTimeService;
@@ -546,11 +547,18 @@ public class CashSaleServiceImpl implements CashSaleService {
                     )
                     .orElseThrow(() -> new RuntimeException("Producto no encontrado al restaurar stock"));
 
-            int stockAnterior = product.getStockActual() == null ? 0 : product.getStockActual();
+            ProductBranchStock branchStock = getOrCreateBranchStock(sale.getTenant(), branch, product);
+
+            int stockAnterior = branchStock.getStockActual() == null ? 0 : branchStock.getStockActual();
             int cantidad = item.getCantidad() == null ? 0 : item.getCantidad();
             int stockNuevo = stockAnterior + cantidad;
 
+            branchStock.setStockActual(stockNuevo);
+            productBranchStockRepository.save(branchStock);
+
+            // Campo legacy para compatibilidad con pantallas antiguas. El stock real viene de product_branch_stock.
             product.setStockActual(stockNuevo);
+            product.setStockMinimo(branchStock.getStockMinimo());
             productRepository.save(product);
 
             StockMovement movement = StockMovement.builder()
@@ -573,5 +581,22 @@ public class CashSaleServiceImpl implements CashSaleService {
 
             stockMovementRepository.save(movement);
         }
+    }
+
+    private ProductBranchStock getOrCreateBranchStock(Tenant tenant, Branch branch, Product product) {
+        return productBranchStockRepository
+                .findByTenant_IdAndBranch_IdAndProduct_Id(tenant.getId(), branch.getId(), product.getId())
+                .orElseGet(() -> productBranchStockRepository.save(
+                        ProductBranchStock.builder()
+                                .tenant(tenant)
+                                .branch(branch)
+                                .product(product)
+                                .stockActual(product.getStockActual() == null ? 0 : product.getStockActual())
+                                .stockMinimo(product.getStockMinimo() == null ? 0 : product.getStockMinimo())
+                                .activo(Boolean.TRUE.equals(product.getActivo()))
+                                .fechaCreacion(tenantTimeService.now(tenant.getId()))
+                                .fechaActualizacion(tenantTimeService.now(tenant.getId()))
+                                .build()
+                ));
     }
 }

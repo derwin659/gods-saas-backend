@@ -23,6 +23,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
 
@@ -121,11 +122,14 @@ public class BarberCommissionService {
                 saleEnd
         );
 
+        boolean salaryMode = Boolean.TRUE.equals(barber.getSalaryMode());
+
         List<BarberCommissionItem> items = rows.stream()
                 .map(row -> buildDailyItem(
                         tenantId,
                         branchId,
                         barber.getId(),
+                        barber,
                         tenantZone,
                         row.getFecha(),
                         nvl(row.getVentas()),
@@ -133,6 +137,19 @@ public class BarberCommissionService {
                         advancesInRange
                 ))
                 .toList();
+
+        if (salaryMode) {
+            items = buildSalaryItems(
+                    tenantId,
+                    branchId,
+                    barber,
+                    tenantZone,
+                    from,
+                    to,
+                    rows,
+                    advancesInRange
+            );
+        }
 
         BigDecimal totalVentas = items.stream()
                 .map(BarberCommissionItem::getVentas)
@@ -210,14 +227,18 @@ public class BarberCommissionService {
             Long tenantId,
             Long branchId,
             Long barberUserId,
+            AppUser barber,
             ZoneId tenantZone,
             LocalDate fecha,
             BigDecimal baseSales,
             BigDecimal porcentajeComision,
             List<BarberAdvanceDetailResponse> advancesInRange
     ) {
+        boolean salaryMode = Boolean.TRUE.equals(barber.getSalaryMode());
         BigDecimal dayBaseSales = nvl(baseSales).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal serviceCommission = calculateCommission(dayBaseSales, porcentajeComision)
+        BigDecimal serviceCommission = salaryMode
+                ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+                : calculateCommission(dayBaseSales, porcentajeComision)
                 .setScale(2, RoundingMode.HALF_UP);
 
         LocalDateTime saleStart = fecha.atStartOfDay(tenantZone)
@@ -278,7 +299,11 @@ public class BarberCommissionService {
                 .add(productCommission)
                 .setScale(2, RoundingMode.HALF_UP);
 
-        BigDecimal gross = commission
+        BigDecimal salaryAmount = salaryMode
+                ? resolveSalaryAmountForPeriod(barber, fecha, fecha)
+                : BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+
+        BigDecimal gross = (salaryMode ? salaryAmount.add(productCommission) : commission)
                 .add(tips)
                 .setScale(2, RoundingMode.HALF_UP);
 
@@ -317,6 +342,38 @@ public class BarberCommissionService {
                 .pendingAmount(pending)
                 .advances(dayAdvances)
                 .build();
+    }
+
+    private List<BarberCommissionItem> buildSalaryItems(
+            Long tenantId,
+            Long branchId,
+            AppUser barber,
+            ZoneId tenantZone,
+            LocalDate from,
+            LocalDate to,
+            List<BarberCommissionDailyProjection> rows,
+            List<BarberAdvanceDetailResponse> advancesInRange
+    ) {
+        Map<LocalDate, BigDecimal> salesByDate = rows.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        BarberCommissionDailyProjection::getFecha,
+                        row -> nvl(row.getVentas()),
+                        BigDecimal::add
+                ));
+
+        return from.datesUntil(to.plusDays(1))
+                .map(date -> buildDailyItem(
+                        tenantId,
+                        branchId,
+                        barber.getId(),
+                        barber,
+                        tenantZone,
+                        date,
+                        salesByDate.getOrDefault(date, BigDecimal.ZERO),
+                        BigDecimal.ZERO,
+                        advancesInRange
+                ))
+                .toList();
     }
 
     private LocalDate resolveEffectiveFrom(
@@ -367,6 +424,41 @@ public class BarberCommissionService {
         return ventas
                 .multiply(porcentajeComision)
                 .divide(BigDecimal.valueOf(100), 2, RoundingMode.HALF_UP);
+    }
+
+    private BigDecimal resolveSalaryAmountForPeriod(AppUser barber, LocalDate periodFrom, LocalDate periodTo) {
+        BigDecimal fixedSalaryAmount = nvl(barber.getFixedSalaryAmount());
+        if (fixedSalaryAmount.compareTo(BigDecimal.ZERO) <= 0 || barber.getSalaryFrequency() == null) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        return switch (barber.getSalaryFrequency()) {
+            case WEEKLY -> fixedSalaryAmount
+                    .divide(BigDecimal.valueOf(7), 2, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(ChronoUnit.DAYS.between(periodFrom, periodTo) + 1))
+                    .setScale(2, RoundingMode.HALF_UP);
+            case BIWEEKLY -> fixedSalaryAmount
+                    .divide(BigDecimal.valueOf(15), 2, RoundingMode.HALF_UP)
+                    .multiply(BigDecimal.valueOf(ChronoUnit.DAYS.between(periodFrom, periodTo) + 1))
+                    .setScale(2, RoundingMode.HALF_UP);
+            case MONTHLY -> prorateMonthlySalary(fixedSalaryAmount, periodFrom, periodTo);
+        };
+    }
+
+    private BigDecimal prorateMonthlySalary(BigDecimal monthlyAmount, LocalDate periodFrom, LocalDate periodTo) {
+        LocalDate monthStart = periodFrom.withDayOfMonth(1);
+        LocalDate monthEnd = periodFrom.withDayOfMonth(periodFrom.lengthOfMonth());
+
+        if (periodFrom.equals(monthStart) && periodTo.equals(monthEnd)) {
+            return monthlyAmount.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        long daysInRange = ChronoUnit.DAYS.between(periodFrom, periodTo) + 1;
+        long daysInMonth = periodFrom.lengthOfMonth();
+
+        return monthlyAmount
+                .multiply(BigDecimal.valueOf(daysInRange))
+                .divide(BigDecimal.valueOf(daysInMonth), 2, RoundingMode.HALF_UP);
     }
 
     private BigDecimal nvl(BigDecimal value) {
