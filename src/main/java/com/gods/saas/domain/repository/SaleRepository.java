@@ -655,7 +655,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
      * Importante:
      * - No incluye productos.
      * - No incluye propinas.
-     * - No descuenta promociones/descuentos.
+     * - Descuenta promociones/descuentos proporcionalmente.
      * - Incluye servicios antiguos/manuales aunque service_id esté null.
      */
     @Query(value = """
@@ -681,6 +681,10 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
       and (
             si.service_id is not null
             or upper(coalesce(si.tipo_item, '')) = 'SERVICE'
+            or (
+                si.product_id is null
+                and upper(coalesce(si.tipo_item, '')) <> 'PRODUCT'
+            )
           )
       and upper(trim(coalesce(s.metodo_pago, ''))) not in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
       and coalesce(s.total, 0) > 0
