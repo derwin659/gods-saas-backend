@@ -7,4 +7,5 @@ import java.math.BigDecimal;
 @Data
 public class UpdateLoyaltySettingsRequest {
     private BigDecimal pointsPerCurrencyUnit;
+    private String currency;
 }

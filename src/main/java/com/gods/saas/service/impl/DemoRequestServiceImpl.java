@@ -14,6 +14,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.HashMap;
@@ -224,7 +225,7 @@ public class DemoRequestServiceImpl implements DemoRequestService {
         subscription.setPromotionsEnabled(true);
         subscription.setCustomRewardsEnabled(true);
         subscription.setBillingCycle("MONTHLY");
-        subscription.setCurrency("PEN");
+        subscription.setCurrency(resolveCurrencyForCountry(tenant.getPais()));
         subscription.setObservaciones("Trial inicial creado desde solicitud pública de demo");
         subscription.setCreatedAt(now);
         subscription.setUpdatedAt(now);
@@ -237,7 +238,7 @@ public class DemoRequestServiceImpl implements DemoRequestService {
         settings.setTenant(tenant);
         settings.setLanguage("es");
         settings.setTimezone(DEFAULT_TIMEZONE);
-        settings.setCurrency("PEN");
+        settings.setCurrency(resolveCurrencyForCountry(tenant.getPais()));
         settings.setScheduleConfig(new HashMap<>());
         settings.setCreatedAt(now);
         settings.setUpdatedAt(now);
@@ -334,6 +335,39 @@ public class DemoRequestServiceImpl implements DemoRequestService {
         if (value == null) return null;
         String trimmed = value.trim();
         return trimmed.isEmpty() ? null : trimmed;
+    }
+
+    private String resolveCurrencyForCountry(String country) {
+        String normalizedCountry = normalizeCountry(country);
+        return switch (normalizedCountry) {
+            case "PERU", "PE" -> "PEN";
+            case "ESTADOSUNIDOS", "UNITEDSTATES", "USA", "US" -> "USD";
+            case "COLOMBIA", "CO" -> "COP";
+            case "MEXICO", "MX" -> "MXN";
+            case "CHILE", "CL" -> "CLP";
+            case "ARGENTINA", "AR" -> "ARS";
+            case "BOLIVIA", "BO" -> "BOB";
+            case "BRASIL", "BRAZIL", "BR" -> "BRL";
+            case "VENEZUELA", "VE" -> "VES";
+            case "URUGUAY", "UY" -> "UYU";
+            case "PARAGUAY", "PY" -> "PYG";
+            case "COSTARICA", "CR" -> "CRC";
+            case "REPUBLICADOMINICANA", "DOMINICANREPUBLIC", "DO" -> "DOP";
+            case "GUATEMALA", "GT" -> "GTQ";
+            case "ESPANA", "SPAIN", "EUROPA", "EUROPE", "EU" -> "EUR";
+            default -> "PEN";
+        };
+    }
+
+    private String normalizeCountry(String value) {
+        if (value == null) {
+            return "";
+        }
+
+        return Normalizer.normalize(value, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .replaceAll("[^A-Za-z]", "")
+                .toUpperCase();
     }
 
     private boolean isBlank(String value) {

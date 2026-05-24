@@ -67,7 +67,8 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
 
         String plan = safeUpper(request.getPlan(), "STARTER");
         String billingCycle = safeUpper(request.getBillingCycle(), "MONTHLY");
-        String currency = safeUpper(request.getCurrency(), "USD");
+        String country = safeTrim(request.getCountry(), "Peru");
+        String currency = resolveCurrencyForCountry(country, request.getCurrency());
         int trialDays = request.getTrialDays() != null ? request.getTrialDays() : 7;
 
         String estado = trialDays > 0 ? "TRIAL" : "ACTIVE";
@@ -79,6 +80,7 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
         tenant.setEstadoSuscripcion(estado);
         tenant.setCodigo(generateTenantCode(request.getBusinessName()));
         tenant.setBusinessType(resolveBusinessType(request.getBusinessType()));
+        tenant.setPais(country);
         tenant.setActive(true);
         tenant.setFechaCreacion(now);
         tenant.setFechaActualizacion(now);
@@ -331,6 +333,47 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
 
     private String safeUpper(String value, String fallback) {
         return (value == null || value.isBlank()) ? fallback : value.trim().toUpperCase();
+    }
+
+    private String safeTrim(String value, String fallback) {
+        return (value == null || value.isBlank()) ? fallback : value.trim();
+    }
+
+    private String resolveCurrencyForCountry(String country, String requestedCurrency) {
+        if (requestedCurrency != null && !requestedCurrency.isBlank()) {
+            return safeUpper(requestedCurrency, "PEN");
+        }
+
+        String normalizedCountry = normalizeCountry(country);
+        return switch (normalizedCountry) {
+            case "PERU", "PE" -> "PEN";
+            case "ESTADOSUNIDOS", "UNITEDSTATES", "USA", "US" -> "USD";
+            case "COLOMBIA", "CO" -> "COP";
+            case "MEXICO", "MX" -> "MXN";
+            case "CHILE", "CL" -> "CLP";
+            case "ARGENTINA", "AR" -> "ARS";
+            case "BOLIVIA", "BO" -> "BOB";
+            case "BRASIL", "BRAZIL", "BR" -> "BRL";
+            case "VENEZUELA", "VE" -> "VES";
+            case "URUGUAY", "UY" -> "UYU";
+            case "PARAGUAY", "PY" -> "PYG";
+            case "COSTARICA", "CR" -> "CRC";
+            case "REPUBLICADOMINICANA", "DOMINICANREPUBLIC", "DO" -> "DOP";
+            case "GUATEMALA", "GT" -> "GTQ";
+            case "ESPANA", "SPAIN", "EUROPA", "EUROPE", "EU" -> "EUR";
+            default -> "PEN";
+        };
+    }
+
+    private String normalizeCountry(String value) {
+        if (value == null) {
+            return "";
+        }
+
+        return java.text.Normalizer.normalize(value, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .replaceAll("[^A-Za-z]", "")
+                .toUpperCase();
     }
 
     private LocalDateTime calculateEndDate(LocalDateTime start, String billingCycle, int trialDays) {

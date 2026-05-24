@@ -11,6 +11,7 @@ public class SuperAdminCreateTenantRequest {
     private String ownerName;
     private String ownerEmail;
     private String ownerPhone;
+    private String country;
 
     private String plan;          // STARTER, PRO, GODS_AI
     private String billingCycle;  // MONTHLY, SEMIANNUAL, YEARLY

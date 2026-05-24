@@ -10,4 +10,5 @@ import java.math.BigDecimal;
 public class LoyaltySettingsResponse {
     private BigDecimal pointsPerCurrencyUnit;
     private String currency;
+    private String currencySymbol;
 }
