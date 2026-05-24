@@ -55,7 +55,12 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
         );
 
         if (effectivePeriodFrom.isAfter(periodTo)) {
-            return emptyPreview(barber, periodFrom, periodTo);
+            BigDecimal previousPayments = safe(
+                    barberPaymentRepository.sumPaidInPeriod(
+                            tenantId, branchId, barberUserId, periodFrom, periodTo
+                    )
+            );
+            return emptyPreview(barber, periodFrom, periodTo, previousPayments);
         }
 
         LocalDateTime start = effectivePeriodFrom.atStartOfDay();
@@ -338,6 +343,15 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
             LocalDate periodFrom,
             LocalDate periodTo
     ) {
+        return emptyPreview(barber, periodFrom, periodTo, BigDecimal.ZERO);
+    }
+
+    private BarberPaymentPreviewResponse emptyPreview(
+            AppUser barber,
+            LocalDate periodFrom,
+            LocalDate periodTo,
+            BigDecimal previousPayments
+    ) {
         boolean salaryMode = Boolean.TRUE.equals(barber.getSalaryMode());
         BigDecimal commissionPercentage = salaryMode ? null : safe(barber.getCommissionPercentage());
 
@@ -357,7 +371,7 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 .grossAmount(BigDecimal.ZERO)
                 .advancesApplied(BigDecimal.ZERO)
                 .advances(List.of())
-                .previousPaymentsApplied(BigDecimal.ZERO)
+                .previousPaymentsApplied(safe(previousPayments))
                 .pendingAmount(BigDecimal.ZERO)
                 .build();
     }
