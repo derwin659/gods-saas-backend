@@ -31,3 +31,16 @@ ON CONFLICT (plan_code, country_code, billing_cycle) DO UPDATE SET
     amount = EXCLUDED.amount,
     active = TRUE,
     updated_at = NOW();
+
+
+    price id starter 
+
+    pri_01ksge6ezebjjhq4gt887fnqt1
+
+    price id PRO
+
+    pri_01ksgeahph8s0j59vm4ba2g1t2
+
+    price_id GODS GODS_AI
+
+    pri_01ksgdxcatyps3scp8eqpnhv7n

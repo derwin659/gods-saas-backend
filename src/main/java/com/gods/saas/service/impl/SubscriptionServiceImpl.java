@@ -1,6 +1,8 @@
 package com.gods.saas.service.impl;
 
 import com.gods.saas.domain.dto.request.ReportPaymentRequest;
+import com.gods.saas.domain.dto.request.SubscriptionCheckoutRequest;
+import com.gods.saas.domain.dto.response.SubscriptionCheckoutResponse;
 import com.gods.saas.domain.dto.response.SubscriptionCurrentResponse;
 import com.gods.saas.domain.dto.response.SubscriptionPlanPriceResponse;
 import com.gods.saas.domain.model.Subscription;
@@ -11,6 +13,7 @@ import com.gods.saas.domain.repository.*;
 import com.gods.saas.exception.BusinessException;
 import com.gods.saas.service.impl.impl.SubscriptionService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -37,6 +40,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     private final SubscriptionPaymentRepository paymentRepository;
     private final BranchRepository branchRepository;
     private final AppUserRepository appUserRepository;
+    private final Environment environment;
 
     @Override
     public Subscription getCurrentSubscriptionOrThrow(Long tenantId) {
@@ -228,6 +232,59 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         return pricingService.listMonthlyPricesForTenant(tenantId);
     }
 
+    @Override
+    public SubscriptionCheckoutResponse createInternationalCheckout(Long tenantId, SubscriptionCheckoutRequest request) {
+        Subscription sub = getCurrentSubscriptionOrThrow(tenantId);
+
+        String requestedPlan = normalizePlan(request != null ? request.getPlan() : sub.getPlan());
+        String billingCycle = normalizeBillingCycle(request != null ? request.getBillingCycle() : sub.getBillingCycle());
+        String currency = resolveCurrencyForTenant(tenantId, sub.getCurrency());
+        double amount = calculateExpectedAmount(requestedPlan, billingCycle, tenantId, currency);
+
+        if ("PEN".equalsIgnoreCase(currency)) {
+            throw new BusinessException(
+                    "MANUAL_PAYMENT_REQUIRED",
+                    "Para Peru se mantiene el pago manual por Yape o transferencia."
+            );
+        }
+
+        String priceId = resolvePaddlePriceId(requestedPlan, billingCycle);
+        if (priceId.isBlank()) {
+            throw new BusinessException(
+                    "PADDLE_NOT_CONFIGURED",
+                    "El precio internacional de Paddle todavia no esta configurado para este plan."
+            );
+        }
+
+        return SubscriptionCheckoutResponse.builder()
+                .provider("PADDLE")
+                .checkoutUrl(null)
+                .priceId(priceId)
+                .currency(currency)
+                .amount(amount)
+                .build();
+    }
+
+    private String resolvePaddlePriceId(String plan, String billingCycle) {
+        String planKey = normalizePlan(plan).toLowerCase(Locale.ROOT).replace("_", "");
+        String cycleKey = normalizeBillingCycle(billingCycle).toLowerCase(Locale.ROOT);
+
+        String specificKey = "billing.paddle.price." + planKey + "." + cycleKey;
+        String planKeyOnly = "billing.paddle.price." + planKey;
+
+        String specific = environment.getProperty(specificKey, "").trim();
+        if (!specific.isBlank()) return specific;
+
+        String planPrice = environment.getProperty(planKeyOnly, "").trim();
+        if (!planPrice.isBlank()) return planPrice;
+
+        return switch (planKey + "." + cycleKey) {
+            case "starter.monthly" -> "pri_01ksge6ezebjjhq4gt887fnqt1";
+            case "pro.monthly" -> "pri_01ksgeahph8s0j59vm4ba2g1t2";
+            case "godsai.monthly" -> "pri_01ksgdxcatyps3scp8eqpnhv7n";
+            default -> "";
+        };
+    }
     @Override
     public SubscriptionPayment reportManualPayment(Long tenantId, ReportPaymentRequest request) {
         Subscription sub = getCurrentSubscriptionOrThrow(tenantId);

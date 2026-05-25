@@ -1,6 +1,8 @@
 package com.gods.saas.service.impl.impl;
 
 import com.gods.saas.domain.dto.request.ReportPaymentRequest;
+import com.gods.saas.domain.dto.request.SubscriptionCheckoutRequest;
+import com.gods.saas.domain.dto.response.SubscriptionCheckoutResponse;
 import com.gods.saas.domain.dto.response.SubscriptionCurrentResponse;
 import com.gods.saas.domain.dto.response.SubscriptionPlanPriceResponse;
 import com.gods.saas.domain.model.Subscription;
@@ -27,6 +29,8 @@ public interface SubscriptionService {
     SubscriptionCurrentResponse getCurrentSubscriptionResponse(Long tenantId);
 
     List<SubscriptionPlanPriceResponse> getPlanPrices(Long tenantId);
+
+    SubscriptionCheckoutResponse createInternationalCheckout(Long tenantId, SubscriptionCheckoutRequest request);
 
     SubscriptionPayment reportManualPayment(Long tenantId, ReportPaymentRequest request);
 
