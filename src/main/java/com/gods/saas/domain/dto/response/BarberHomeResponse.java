@@ -14,6 +14,8 @@ public class BarberHomeResponse {
     private String tenantName;
     private String barberName;
     private String barberPhotoUrl;
+    private String currency;
+    private String currencySymbol;
     private int citasHoy;
     private int atendidosHoy;
     private BigDecimal ventasHoy;

@@ -118,11 +118,17 @@ public class BarberHomeServiceImpl implements BarberHomeService {
         );
 
         CommissionSummaryResponse commissions = buildCommissionSummary(barber, ventasHoy);
+        String currency = tenantSettingsRepository.findByTenantId(tenantId)
+                .map(TenantSettings::getCurrency)
+                .map(this::normalizeCurrency)
+                .orElse("PEN");
 
         return BarberHomeResponse.builder()
                 .tenantName(barber.getTenant() != null ? barber.getTenant().getNombre() : "Barbería")
                 .barberName(buildBarberName(barber))
                 .barberPhotoUrl(barber.getPhotoUrl())
+                .currency(currency)
+                .currencySymbol(resolveCurrencySymbol(currency))
                 .citasHoy((int) citasHoy)
                 .atendidosHoy((int) atendidosHoy)
                 .ventasHoy(ventasHoy.setScale(2, RoundingMode.HALF_UP))
@@ -331,4 +337,24 @@ public class BarberHomeServiceImpl implements BarberHomeService {
             throw new RuntimeException("branchId inválido en el token");
         }
     }
+
+    private String normalizeCurrency(String currency) {
+        if (currency == null || currency.isBlank()) return "PEN";
+        return currency.trim().toUpperCase();
+    }
+
+    private String resolveCurrencySymbol(String currency) {
+        return switch (normalizeCurrency(currency)) {
+            case "USD", "COP", "MXN", "CLP", "ARS", "UYU" -> "$";
+            case "BOB", "VES" -> "Bs";
+            case "BRL" -> "R$";
+            case "EUR" -> "EUR";
+            case "PYG" -> "Gs";
+            case "DOP" -> "RD$";
+            case "GTQ" -> "Q";
+            case "PEN" -> "S/";
+            default -> normalizeCurrency(currency);
+        };
+    }
+
 }
