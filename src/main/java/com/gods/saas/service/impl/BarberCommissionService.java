@@ -215,6 +215,106 @@ public class BarberCommissionService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
 
+        LocalDate effectiveFrom = resolveEffectiveFrom(tenantId, branchId, barber.getId(), from, to);
+        if (effectiveFrom.isAfter(to)) {
+            previousPaymentsApplied = nvl(
+                    barberPaymentRepository.sumPaidInPeriod(
+                            tenantId,
+                            branchId,
+                            barber.getId(),
+                            from,
+                            to
+                    )
+            ).setScale(2, RoundingMode.HALF_UP);
+            totalVentas = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+            serviceCommissionAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+            productCommissionAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+            tipsAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+            advancesApplied = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+            totalComision = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+            grossAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+            pendingAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        } else {
+            LocalDateTime summaryStart = effectiveFrom.atStartOfDay();
+            LocalDateTime summaryEnd = to.plusDays(1).atStartOfDay();
+
+            totalVentas = nvl(
+                    saleRepository.sumBarberItemSalesByRange(
+                            tenantId,
+                            branchId,
+                            barber.getId(),
+                            summaryStart,
+                            summaryEnd
+                    )
+            ).setScale(2, RoundingMode.HALF_UP);
+
+            productCommissionAmount = nvl(
+                    saleRepository.sumBarberProductCommissionsByRange(
+                            tenantId,
+                            branchId,
+                            barber.getId(),
+                            summaryStart,
+                            summaryEnd
+                    )
+            ).setScale(2, RoundingMode.HALF_UP);
+
+            tipsAmount = nvl(
+                    saleRepository.sumBarberTipsByRange(
+                            tenantId,
+                            branchId,
+                            barber.getId(),
+                            summaryStart,
+                            summaryEnd
+                    )
+            ).setScale(2, RoundingMode.HALF_UP);
+
+            advancesApplied = nvl(
+                    cashMovementRepository.sumAdvancesByBarberAndRange(
+                            tenantId,
+                            branchId,
+                            barber.getId(),
+                            summaryStart,
+                            summaryEnd
+                    )
+            ).setScale(2, RoundingMode.HALF_UP);
+
+            previousPaymentsApplied = nvl(
+                    barberPaymentRepository.sumPaidInPeriod(
+                            tenantId,
+                            branchId,
+                            barber.getId(),
+                            effectiveFrom,
+                            to
+                    )
+            ).setScale(2, RoundingMode.HALF_UP);
+
+            BigDecimal salaryAmount = salaryMode
+                    ? resolveSalaryAmountForPeriod(barber, effectiveFrom, to)
+                    : BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+
+            serviceCommissionAmount = salaryMode
+                    ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+                    : calculateCommission(totalVentas, porcentajeComision)
+                    .setScale(2, RoundingMode.HALF_UP);
+
+            totalComision = serviceCommissionAmount
+                    .add(productCommissionAmount)
+                    .setScale(2, RoundingMode.HALF_UP);
+
+            grossAmount = (salaryMode ? salaryAmount.add(productCommissionAmount) : totalComision)
+                    .add(tipsAmount)
+                    .setScale(2, RoundingMode.HALF_UP);
+
+            pendingAmount = grossAmount
+                    .subtract(advancesApplied)
+                    .subtract(previousPaymentsApplied)
+                    .setScale(2, RoundingMode.HALF_UP);
+
+            if (pendingAmount.compareTo(BigDecimal.ZERO) < 0) {
+                pendingAmount = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+            }
+        }
+
         return BarberCommissionResponse.builder()
                 .barberName(buildFullName(barber))
                 .from(from)
