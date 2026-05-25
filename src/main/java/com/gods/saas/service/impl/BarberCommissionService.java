@@ -26,6 +26,7 @@ import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeSet;
 
 @Service
 @RequiredArgsConstructor
@@ -59,8 +60,6 @@ public class BarberCommissionService {
         if (from.isAfter(to)) {
             throw new IllegalArgumentException("La fecha inicial no puede ser mayor que la fecha final");
         }
-
-        from = resolveEffectiveFrom(tenantId, branchId, barber.getId(), from, to);
 
         BigDecimal porcentajeComision = resolveCommissionPercentage(barber);
 
@@ -124,15 +123,32 @@ public class BarberCommissionService {
 
         boolean salaryMode = Boolean.TRUE.equals(barber.getSalaryMode());
 
-        List<BarberCommissionItem> items = rows.stream()
-                .map(row -> buildDailyItem(
+        Map<LocalDate, BigDecimal> salesByDate = rows.stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        BarberCommissionDailyProjection::getFecha,
+                        row -> nvl(row.getVentas()),
+                        BigDecimal::add
+                ));
+
+        TreeSet<LocalDate> datesToShow = new TreeSet<>(salesByDate.keySet());
+        LocalDate periodFrom = from;
+        LocalDate periodTo = to;
+        advancesInRange.stream()
+                .map(BarberAdvanceDetailResponse::getMovementDate)
+                .filter(date -> date != null)
+                .map(LocalDateTime::toLocalDate)
+                .filter(date -> !date.isBefore(periodFrom) && !date.isAfter(periodTo))
+                .forEach(datesToShow::add);
+
+        List<BarberCommissionItem> items = datesToShow.stream()
+                .map(date -> buildDailyItem(
                         tenantId,
                         branchId,
                         barber.getId(),
                         barber,
                         tenantZone,
-                        row.getFecha(),
-                        nvl(row.getVentas()),
+                        date,
+                        salesByDate.getOrDefault(date, BigDecimal.ZERO),
                         porcentajeComision,
                         advancesInRange
                 ))

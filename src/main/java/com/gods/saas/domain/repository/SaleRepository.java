@@ -226,19 +226,47 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
             LocalDateTime end
     );
 
-    @Query("""
+    @Query(value = """
         select
-            cast(coalesce(s.saleDate, s.fechaCreacion) as date) as fecha,
-            coalesce(sum(s.total), 0) as ventas
-        from Sale s
-        where s.tenant.id = :tenantId
-          and s.branch.id = :branchId
-          and s.user.id = :barberId
-          and coalesce(s.saleDate, s.fechaCreacion) >= :start
-          and coalesce(s.saleDate, s.fechaCreacion) < :end
-        group by cast(coalesce(s.saleDate, s.fechaCreacion) as date)
-        order by cast(coalesce(s.saleDate, s.fechaCreacion) as date) asc
-        """)
+            cast(coalesce(s.sale_date, s.fecha_creacion) as date) as fecha,
+            coalesce(sum(
+                case
+                    when (
+                        si.service_id is not null
+                        or upper(coalesce(si.tipo_item, '')) = 'SERVICE'
+                        or (
+                            si.product_id is null
+                            and upper(coalesce(si.tipo_item, '')) <> 'PRODUCT'
+                        )
+                    )
+                    then
+                        case
+                            when coalesce(s.subtotal, 0) <= 0 then 0
+                            else greatest(
+                                coalesce(si.subtotal, 0)
+                                - (
+                                    least(coalesce(s.discount, 0), coalesce(s.subtotal, 0))
+                                    * coalesce(si.subtotal, 0)
+                                    / coalesce(nullif(s.subtotal, 0), 1)
+                                ),
+                                0
+                            )
+                        end
+                    else 0
+                end
+            ), 0) as ventas
+        from sale_item si
+        join sale s on s.sale_id = si.sale_id
+        where s.tenant_id = :tenantId
+          and s.branch_id = :branchId
+          and si.barber_user_id = :barberId
+          and upper(trim(coalesce(s.metodo_pago, ''))) not in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
+          and coalesce(s.total, 0) > 0
+          and coalesce(s.sale_date, s.fecha_creacion) >= :start
+          and coalesce(s.sale_date, s.fecha_creacion) < :end
+        group by cast(coalesce(s.sale_date, s.fecha_creacion) as date)
+        order by cast(coalesce(s.sale_date, s.fecha_creacion) as date) asc
+        """, nativeQuery = true)
     List<BarberCommissionDailyProjection> findDailySalesByBarber(
             @Param("tenantId") Long tenantId,
             @Param("branchId") Long branchId,
