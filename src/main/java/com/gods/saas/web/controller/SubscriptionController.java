@@ -49,6 +49,21 @@ public class SubscriptionController {
         return ResponseEntity.ok("Pago reportado correctamente");
     }
 
+    @GetMapping("/plan-prices")
+    public List<SubscriptionPlanPriceResponse> getPlanPrices(HttpServletRequest request) {
+        Long tenantId = extractTenantId(request);
+        return subscriptionService.getPlanPrices(tenantId);
+    }
+
+    @PostMapping("/checkout")
+    public SubscriptionCheckoutResponse createCheckout(
+            @RequestBody SubscriptionCheckoutRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        Long tenantId = extractTenantId(httpRequest);
+        return subscriptionService.createInternationalCheckout(tenantId, request);
+    }
+
     private Long extractTenantId(HttpServletRequest request) {
         String token = extractToken(request);
         return jwtUtil.getTenantIdFromToken(token);

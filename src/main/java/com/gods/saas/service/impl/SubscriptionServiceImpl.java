@@ -248,6 +248,13 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             );
         }
 
+        if (!"MONTHLY".equalsIgnoreCase(billingCycle)) {
+            throw new BusinessException(
+                    "PADDLE_BILLING_CYCLE_NOT_CONFIGURED",
+                    "Por ahora el pago automatico internacional esta disponible solo en ciclo mensual."
+            );
+        }
+
         String priceId = resolvePaddlePriceId(requestedPlan, billingCycle);
         if (priceId.isBlank()) {
             throw new BusinessException(
