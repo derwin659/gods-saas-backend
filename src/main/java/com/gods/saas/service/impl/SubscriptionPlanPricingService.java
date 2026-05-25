@@ -142,59 +142,59 @@ public class SubscriptionPlanPricingService {
                 default -> BigDecimal.valueOf(17);
             };
             case "COP" -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(99000);
-                case "GODS_AI" -> BigDecimal.valueOf(189000);
-                default -> BigDecimal.valueOf(49000);
-            };
-            case "MXN" -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(499);
-                case "GODS_AI" -> BigDecimal.valueOf(949);
-                default -> BigDecimal.valueOf(249);
-            };
-            case "CLP" -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(24900);
-                case "GODS_AI" -> BigDecimal.valueOf(44900);
-                default -> BigDecimal.valueOf(11900);
-            };
-            case "ARS" -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(25000);
-                case "GODS_AI" -> BigDecimal.valueOf(49000);
-                default -> BigDecimal.valueOf(12000);
-            };
-            case "BOB" -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(119);
-                case "GODS_AI" -> BigDecimal.valueOf(229);
-                default -> BigDecimal.valueOf(59);
-            };
-            case "BRL" -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(119);
-                case "GODS_AI" -> BigDecimal.valueOf(229);
-                default -> BigDecimal.valueOf(59);
-            };
-            case "UYU" -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(1190);
-                case "GODS_AI" -> BigDecimal.valueOf(2290);
-                default -> BigDecimal.valueOf(590);
-            };
-            case "PYG" -> switch (planCode) {
                 case "PRO" -> BigDecimal.valueOf(159000);
-                case "GODS_AI" -> BigDecimal.valueOf(299000);
+                case "GODS_AI" -> BigDecimal.valueOf(319000);
                 default -> BigDecimal.valueOf(79000);
             };
+            case "MXN" -> switch (planCode) {
+                case "PRO" -> BigDecimal.valueOf(759);
+                case "GODS_AI" -> BigDecimal.valueOf(1529);
+                default -> BigDecimal.valueOf(369);
+            };
+            case "CLP" -> switch (planCode) {
+                case "PRO" -> BigDecimal.valueOf(38900);
+                case "GODS_AI" -> BigDecimal.valueOf(78900);
+                default -> BigDecimal.valueOf(18900);
+            };
+            case "ARS" -> switch (planCode) {
+                case "PRO" -> BigDecimal.valueOf(44900);
+                case "GODS_AI" -> BigDecimal.valueOf(89900);
+                default -> BigDecimal.valueOf(22000);
+            };
+            case "BOB" -> switch (planCode) {
+                case "PRO" -> BigDecimal.valueOf(269);
+                case "GODS_AI" -> BigDecimal.valueOf(549);
+                default -> BigDecimal.valueOf(129);
+            };
+            case "BRL" -> switch (planCode) {
+                case "PRO" -> BigDecimal.valueOf(199);
+                case "GODS_AI" -> BigDecimal.valueOf(399);
+                default -> BigDecimal.valueOf(99);
+            };
+            case "UYU" -> switch (planCode) {
+                case "PRO" -> BigDecimal.valueOf(1559);
+                case "GODS_AI" -> BigDecimal.valueOf(3159);
+                default -> BigDecimal.valueOf(759);
+            };
+            case "PYG" -> switch (planCode) {
+                case "PRO" -> BigDecimal.valueOf(299000);
+                case "GODS_AI" -> BigDecimal.valueOf(599000);
+                default -> BigDecimal.valueOf(145000);
+            };
             case "CRC" -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(15900);
-                case "GODS_AI" -> BigDecimal.valueOf(29900);
-                default -> BigDecimal.valueOf(7900);
+                case "PRO" -> BigDecimal.valueOf(19900);
+                case "GODS_AI" -> BigDecimal.valueOf(39900);
+                default -> BigDecimal.valueOf(9900);
             };
             case "DOP" -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(1399);
-                case "GODS_AI" -> BigDecimal.valueOf(2699);
-                default -> BigDecimal.valueOf(699);
+                case "PRO" -> BigDecimal.valueOf(2299);
+                case "GODS_AI" -> BigDecimal.valueOf(4599);
+                default -> BigDecimal.valueOf(1099);
             };
             case "GTQ" -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(119);
-                case "GODS_AI" -> BigDecimal.valueOf(229);
-                default -> BigDecimal.valueOf(59);
+                case "PRO" -> BigDecimal.valueOf(299);
+                case "GODS_AI" -> BigDecimal.valueOf(609);
+                default -> BigDecimal.valueOf(149);
             };
             default -> switch (planCode) {
                 case "PRO" -> BigDecimal.valueOf(79);
@@ -236,14 +236,10 @@ public class SubscriptionPlanPricingService {
             case "MX" -> "MXN";
             case "CL" -> "CLP";
             case "AR" -> "ARS";
-            case "BO" -> "BOB";
+            case "BO" -> "USD";
             case "BR" -> "BRL";
             case "VE" -> "VES";
-            case "UY" -> "UYU";
-            case "PY" -> "PYG";
-            case "CR" -> "CRC";
-            case "DO" -> "DOP";
-            case "GT" -> "GTQ";
+            case "UY", "PY", "CR", "DO", "GT" -> "USD";
             case "EU" -> "EUR";
             default -> "PEN";
         };
