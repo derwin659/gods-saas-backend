@@ -216,6 +216,10 @@ public class BarberCommissionService {
                 .setScale(2, RoundingMode.HALF_UP);
 
         LocalDate effectiveFrom = resolveEffectiveFrom(tenantId, branchId, barber.getId(), from, to);
+        items = items.stream()
+                .map(item -> markHistoricalPaidItem(item, effectiveFrom))
+                .toList();
+
         if (effectiveFrom.isAfter(to)) {
             previousPaymentsApplied = nvl(
                     barberPaymentRepository.sumPaidInPeriod(
@@ -336,6 +340,35 @@ public class BarberCommissionService {
                 .pendingAmount(pendingAmount)
                 .advances(advancesInRange)
                 .items(items)
+                .build();
+    }
+
+    private BarberCommissionItem markHistoricalPaidItem(
+            BarberCommissionItem item,
+            LocalDate effectiveFrom
+    ) {
+        if (item == null || item.getFecha() == null || !item.getFecha().isBefore(effectiveFrom)) {
+            return item;
+        }
+
+        BigDecimal gross = nvl(item.getGrossAmount()).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal advances = nvl(item.getAdvancesApplied()).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal paidForDay = gross.subtract(advances).max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+        BigDecimal previousPayments = nvl(item.getPreviousPaymentsApplied()).max(paidForDay).setScale(2, RoundingMode.HALF_UP);
+
+        return BarberCommissionItem.builder()
+                .fecha(item.getFecha())
+                .ventas(item.getVentas())
+                .comision(item.getComision())
+                .baseSales(item.getBaseSales())
+                .serviceCommissionAmount(item.getServiceCommissionAmount())
+                .productCommissionAmount(item.getProductCommissionAmount())
+                .tipsAmount(item.getTipsAmount())
+                .grossAmount(item.getGrossAmount())
+                .advancesApplied(item.getAdvancesApplied())
+                .previousPaymentsApplied(previousPayments)
+                .pendingAmount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
+                .advances(item.getAdvances())
                 .build();
     }
 
