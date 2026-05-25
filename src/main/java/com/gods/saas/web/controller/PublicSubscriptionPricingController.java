@@ -18,7 +18,7 @@ public class PublicSubscriptionPricingController {
 
     private final SubscriptionPlanPricingService pricingService;
 
-    @GetMapping
+    @GetMapping(produces = MediaType.APPLICATION_JSON_VALUE)
     public List<SubscriptionPlanPriceResponse> getPrices(
             @RequestParam(value = "country", required = false, defaultValue = "PE") String country
     ) {
