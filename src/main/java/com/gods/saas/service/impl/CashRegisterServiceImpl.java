@@ -485,6 +485,9 @@ public class CashRegisterServiceImpl implements CashRegisterService {
         );
 
         List<CashMovement> movements = cashMovementRepository.findByCashRegister_IdOrderByMovementDateDesc(cashRegister.getId());
+        List<CashMovement> movementsInBusinessRange = movements.stream()
+                .filter(movement -> isMovementInRange(movement, start, end))
+                .toList();
 
         /*
          * Importante:
@@ -496,66 +499,66 @@ public class CashRegisterServiceImpl implements CashRegisterService {
          * Antes todo usaba affectsCashDrawer(), por eso gastos/ingresos en Yape, Plin
          * o Tarjeta se veían en el detalle, pero no se reflejaban en el resumen.
          */
-        BigDecimal movementsIncome = movements.stream()
+        BigDecimal movementsIncome = movementsInBusinessRange.stream()
                 .filter(this::isIncomeMovement)
                 .map(CashMovement::getAmount)
                 .map(this::safe)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal cashMovementsIncome = movements.stream()
+        BigDecimal cashMovementsIncome = movementsInBusinessRange.stream()
                 .filter(this::isIncomeMovement)
                 .filter(this::affectsCashDrawer)
                 .map(CashMovement::getAmount)
                 .map(this::safe)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal movementsExpenseGeneral = movements.stream()
+        BigDecimal movementsExpenseGeneral = movementsInBusinessRange.stream()
                 .filter(m -> m.getType() == CashMovementType.EXPENSE)
                 .map(CashMovement::getAmount)
                 .map(this::safe)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal cashMovementsExpenseGeneral = movements.stream()
+        BigDecimal cashMovementsExpenseGeneral = movementsInBusinessRange.stream()
                 .filter(m -> m.getType() == CashMovementType.EXPENSE)
                 .filter(this::affectsCashDrawer)
                 .map(CashMovement::getAmount)
                 .map(this::safe)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal movementsAdvanceBarber = movements.stream()
+        BigDecimal movementsAdvanceBarber = movementsInBusinessRange.stream()
                 .filter(m -> m.getType() == CashMovementType.ADVANCE_BARBER)
                 .map(CashMovement::getAmount)
                 .map(this::safe)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal cashMovementsAdvanceBarber = movements.stream()
+        BigDecimal cashMovementsAdvanceBarber = movementsInBusinessRange.stream()
                 .filter(m -> m.getType() == CashMovementType.ADVANCE_BARBER)
                 .filter(this::affectsCashDrawer)
                 .map(CashMovement::getAmount)
                 .map(this::safe)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal movementsPaymentBarber = movements.stream()
+        BigDecimal movementsPaymentBarber = movementsInBusinessRange.stream()
                 .filter(m -> m.getType() == CashMovementType.PAYMENT_BARBER)
                 .map(CashMovement::getAmount)
                 .map(this::safe)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal cashMovementsPaymentBarber = movements.stream()
+        BigDecimal cashMovementsPaymentBarber = movementsInBusinessRange.stream()
                 .filter(m -> m.getType() == CashMovementType.PAYMENT_BARBER)
                 .filter(this::affectsCashDrawer)
                 .map(CashMovement::getAmount)
                 .map(this::safe)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal transfersToCash = movements.stream()
+        BigDecimal transfersToCash = movementsInBusinessRange.stream()
                 .filter(m -> m.getType() == CashMovementType.PAYMENT_METHOD_TRANSFER)
                 .filter(m -> m.getToPaymentMethod() == PaymentMethod.CASH || m.getToPaymentMethod() == PaymentMethod.EFECTIVO)
                 .map(CashMovement::getAmount)
                 .map(this::safe)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        BigDecimal transfersFromCash = movements.stream()
+        BigDecimal transfersFromCash = movementsInBusinessRange.stream()
                 .filter(m -> m.getType() == CashMovementType.PAYMENT_METHOD_TRANSFER)
                 .filter(m -> m.getFromPaymentMethod() == PaymentMethod.CASH || m.getFromPaymentMethod() == PaymentMethod.EFECTIVO)
                 .map(CashMovement::getAmount)
@@ -592,6 +595,15 @@ public class CashRegisterServiceImpl implements CashRegisterService {
 
     private boolean isIncomeMovement(CashMovement movement) {
         return movement.getType() == CashMovementType.INCOME || movement.getType() == CashMovementType.ADJUSTMENT;
+    }
+
+    private boolean isMovementInRange(CashMovement movement, LocalDateTime start, LocalDateTime end) {
+        if (movement == null || movement.getMovementDate() == null) {
+            return false;
+        }
+
+        LocalDateTime movementDate = movement.getMovementDate();
+        return !movementDate.isBefore(start) && movementDate.isBefore(end);
     }
 
     private boolean affectsCashDrawer(CashMovement movement) {
