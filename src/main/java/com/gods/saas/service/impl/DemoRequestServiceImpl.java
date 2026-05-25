@@ -37,6 +37,7 @@ public class DemoRequestServiceImpl implements DemoRequestService {
     private final TenantSettingsRepository tenantSettingsRepository;
     private final UserTenantRoleRepository userTenantRoleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final SubscriptionPlanPricingService pricingService;
 
     @Override
     public DemoRequestResponse createPublicRequest(CreateDemoRequest request) {
@@ -210,7 +211,7 @@ public class DemoRequestServiceImpl implements DemoRequestService {
         Subscription subscription = new Subscription();
         subscription.setTenantId(tenant.getId());
         subscription.setPlan("STARTER");
-        subscription.setPrecioMensual(39.0);
+        subscription.setPrecioMensual(pricingService.resolveMonthlyPrice("STARTER", tenant.getPais(), resolveCurrencyForCountry(tenant.getPais())).doubleValue());
         subscription.setEstado("TRIAL");
         subscription.setFechaInicio(now);
         subscription.setFechaRenovacion(now.plusDays(7));
@@ -226,7 +227,7 @@ public class DemoRequestServiceImpl implements DemoRequestService {
         subscription.setCustomRewardsEnabled(true);
         subscription.setBillingCycle("MONTHLY");
         subscription.setCurrency(resolveCurrencyForCountry(tenant.getPais()));
-        subscription.setObservaciones("Trial inicial creado desde solicitud pública de demo");
+        subscription.setObservaciones("Trial inicial creado desde solicitud pÃºblica de demo");
         subscription.setCreatedAt(now);
         subscription.setUpdatedAt(now);
 
@@ -259,13 +260,13 @@ public class DemoRequestServiceImpl implements DemoRequestService {
             throw new IllegalArgumentException("El nombre del negocio es obligatorio.");
         }
         if (isBlank(request.getOwnerName())) {
-            throw new IllegalArgumentException("El nombre del dueño es obligatorio.");
+            throw new IllegalArgumentException("El nombre del dueÃ±o es obligatorio.");
         }
         if (isBlank(request.getOwnerEmail())) {
-            throw new IllegalArgumentException("El correo del dueño es obligatorio.");
+            throw new IllegalArgumentException("El correo del dueÃ±o es obligatorio.");
         }
         if (isBlank(request.getOwnerPhone())) {
-            throw new IllegalArgumentException("El WhatsApp del dueño es obligatorio.");
+            throw new IllegalArgumentException("El WhatsApp del dueÃ±o es obligatorio.");
         }
     }
 
@@ -374,3 +375,4 @@ public class DemoRequestServiceImpl implements DemoRequestService {
         return value == null || value.trim().isEmpty();
     }
 }
+

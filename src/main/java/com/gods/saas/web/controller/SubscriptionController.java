@@ -3,12 +3,15 @@ package com.gods.saas.web.controller;
 import com.gods.saas.domain.dto.request.ChangePlanRequest;
 import com.gods.saas.domain.dto.request.ReportPaymentRequest;
 import com.gods.saas.domain.dto.response.SubscriptionCurrentResponse;
+import com.gods.saas.domain.dto.response.SubscriptionPlanPriceResponse;
 import com.gods.saas.service.impl.impl.SubscriptionService;
 import com.gods.saas.utils.JwtUtil;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/subscription")
@@ -52,7 +55,7 @@ public class SubscriptionController {
     private String extractToken(HttpServletRequest request) {
         String authHeader = request.getHeader("Authorization");
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            throw new IllegalArgumentException("Token JWT no enviado o inválido");
+            throw new IllegalArgumentException("Token JWT no enviado o invÃ¡lido");
         }
         return authHeader.substring(7);
     }

@@ -3,6 +3,7 @@ package com.gods.saas.domain.dto.response;
 import lombok.*;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Getter
 @Setter
@@ -21,6 +22,7 @@ public class SubscriptionCurrentResponse {
     private Double precioMensual;
     private String billingCycle;
     private String currency;
+    private List<SubscriptionPlanPriceResponse> planPrices;
 
     private LocalDateTime fechaInicio;
     private LocalDateTime fechaRenovacion;
@@ -49,3 +51,4 @@ public class SubscriptionCurrentResponse {
     private Boolean canOperate;
     private Boolean expired;
 }
+

@@ -14,7 +14,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.HashMap;
@@ -36,6 +35,7 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
     private final PasswordEncoder passwordEncoder;
     private final UserTenantRoleRepository userTenantRoleRepository;
     private final BranchRepository branchRepository;
+    private final SubscriptionPlanPricingService pricingService;
 
     @Override
     @Transactional(readOnly = true)
@@ -130,14 +130,14 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
         subscription.setCurrency(currency);
         subscription.setTrial(trialDays > 0);
         subscription.setEstado(estado);
-        subscription.setPrecioMensual(resolveBaseMonthlyPrice(plan));
+        subscription.setPrecioMensual(pricingService.resolveMonthlyPrice(plan, country, currency).doubleValue());
         subscription.setFechaInicio(now);
         subscription.setFechaRenovacion(calculateEndDate(now, billingCycle, trialDays));
         subscription.setFechaFin(calculateEndDate(now, billingCycle, trialDays));
         subscription.setObservaciones(
                 trialDays > 0
                         ? "Trial inicial creado por Super Admin"
-                        : "Suscripción creada por Super Admin"
+                        : "SuscripciÃ³n creada por Super Admin"
         );
 
         applyPlanLimits(subscription, plan);
@@ -237,11 +237,14 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
     @Override
     public void changePlan(Long tenantId, ChangePlancRequest request) {
         Subscription subscription = subscriptionRepository.findById(tenantId)
-                .orElseThrow(() -> new EntityNotFoundException("Suscripción no encontrada para tenant: " + tenantId));
+                .orElseThrow(() -> new EntityNotFoundException("SuscripciÃ³n no encontrada para tenant: " + tenantId));
 
         String newPlan = safeUpper(request.getPlan(), subscription.getPlan());
         String newBillingCycle = safeUpper(request.getBillingCycle(), subscription.getBillingCycle());
         String newCurrency = safeUpper(request.getCurrency(), subscription.getCurrency());
+
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new EntityNotFoundException("Marca no encontrada: " + tenantId));
 
         subscription.setPlan(newPlan);
         subscription.setBillingCycle(newBillingCycle);
@@ -252,7 +255,7 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
         if (request.getPrice() != null) {
             subscription.setPrecioMensual(request.getPrice().doubleValue());
         } else {
-            subscription.setPrecioMensual(resolveBaseMonthlyPrice(newPlan));
+            subscription.setPrecioMensual(pricingService.resolveMonthlyPrice(newPlan, tenant.getPais(), newCurrency).doubleValue());
         }
 
         String observations = request.getObservations();
@@ -270,9 +273,6 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
         applyPlanLimits(subscription, newPlan);
 
         subscriptionRepository.save(subscription);
-
-        Tenant tenant = tenantRepository.findById(tenantId)
-                .orElseThrow(() -> new EntityNotFoundException("Marca no encontrada: " + tenantId));
 
         tenant.setActive(true);
         tenant.setFechaActualizacion(now);
@@ -324,10 +324,10 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
             throw new IllegalArgumentException("El nombre del negocio es obligatorio");
         }
         if (request.getOwnerName() == null || request.getOwnerName().isBlank()) {
-            throw new IllegalArgumentException("El nombre del dueño es obligatorio");
+            throw new IllegalArgumentException("El nombre del dueÃ±o es obligatorio");
         }
         if (request.getOwnerEmail() == null || request.getOwnerEmail().isBlank()) {
-            throw new IllegalArgumentException("El email del dueño es obligatorio");
+            throw new IllegalArgumentException("El email del dueÃ±o es obligatorio");
         }
     }
 
@@ -388,14 +388,6 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
         };
     }
 
-    private Double resolveBaseMonthlyPrice(String plan) {
-        return switch (safeUpper(plan, "STARTER")) {
-            case "PRO" -> BigDecimal.valueOf(19).doubleValue();
-            case "GODS_AI" -> BigDecimal.valueOf(39).doubleValue();
-            default -> BigDecimal.valueOf(9).doubleValue();
-        };
-    }
-
     private void applyPlanLimits(Subscription subscription, String plan) {
         switch (safeUpper(plan, "STARTER")) {
             case "PRO" -> {
@@ -432,3 +424,5 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
         return LocalDateTime.now(ZoneId.of(DEFAULT_TIMEZONE));
     }
 }
+
+

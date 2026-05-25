@@ -30,10 +30,11 @@ public class TenantService {
     private final TenantRepository tenantRepo;
     private final TenantSettingsRepository settingsRepo;
     private final SuscriptionRepository subscriptionRepository;
+    private final SubscriptionPlanPricingService pricingService;
 
 
     // ------------------------------------------------------
-    // 1️⃣ Crear Tenant
+    // 1ï¸âƒ£ Crear Tenant
     // ------------------------------------------------------
     public Tenant createTenant(Tenant tenant) {
 
@@ -54,14 +55,15 @@ public class TenantService {
         TenantSettings settings = new TenantSettings();
         settings.setTenant(savedTenant);
         settings.setLanguage("es");
-        settings.setCurrency("PEN");
+        String currency = pricingService.currencyForCountry(pricingService.countryCodeFor(savedTenant.getPais()), null);
+        settings.setCurrency(currency);
         settings.setTimezone("America/Lima");
         settings.setCreatedAt(LocalDateTime.now());
 
         Subscription subscription = Subscription.builder()
                 .tenantId(savedTenant.getId())
                 .plan("STARTER")
-                .precioMensual(9.0)
+                .precioMensual(pricingService.resolveMonthlyPrice("STARTER", savedTenant.getPais(), currency).doubleValue())
                 .estado("TRIAL")
                 .fechaInicio(LocalDateTime.now())
                 .fechaRenovacion(LocalDateTime.now().plusDays(7))
@@ -75,13 +77,11 @@ public class TenantService {
                 .loyaltyEnabled(true)
                 .promotionsEnabled(true)
                 .billingCycle("MONTHLY")
-                .currency("USD")
+                .currency(currency)
                 .observaciones("Trial inicial al crear tenant")
                 .createdAt(LocalDateTime.now())
                 .updatedAt(LocalDateTime.now())
                 .build();
-
-        subscriptionRepository.save(subscription);
 
         subscriptionRepository.save(subscription);
 
@@ -91,7 +91,7 @@ public class TenantService {
     }
 
     // ------------------------------------------------------
-    // 2️⃣ Obtener TODOS los tenants
+    // 2ï¸âƒ£ Obtener TODOS los tenants
     // ------------------------------------------------------
     public List<TenantDto> getAllTenants() {
         return tenantRepo.findAll()
@@ -101,14 +101,14 @@ public class TenantService {
     }
 
     // ------------------------------------------------------
-    // 3️⃣ Obtener SOLO activos
+    // 3ï¸âƒ£ Obtener SOLO activos
     // ------------------------------------------------------
     public List<Tenant> getActiveTenants() {
         return tenantRepo.findByActiveTrue();
     }
 
     // ------------------------------------------------------
-    // 4️⃣ Obtener por ID
+    // 4ï¸âƒ£ Obtener por ID
     // ------------------------------------------------------
     public Tenant getById(Long id) {
         return tenantRepo.findById(id)
@@ -116,7 +116,7 @@ public class TenantService {
     }
 
     // ------------------------------------------------------
-    // 5️⃣ Actualizar datos del tenant
+    // 5ï¸âƒ£ Actualizar datos del tenant
     // ------------------------------------------------------
     public Tenant update(Long id, Tenant data) {
         Tenant tenant = getById(id);
@@ -137,7 +137,7 @@ public class TenantService {
     }
 
     // ------------------------------------------------------
-    // 6️⃣ Actualizar Settings
+    // 6ï¸âƒ£ Actualizar Settings
     // ------------------------------------------------------
     public TenantSettings updateSettings(Long tenantId, TenantSettings newSettings) {
         TenantSettings settings = settingsRepo.findByTenantId(tenantId)
@@ -153,7 +153,7 @@ public class TenantService {
     }
 
     // ------------------------------------------------------
-    // 7️⃣ Cambiar estado (Activar / Suspender)
+    // 7ï¸âƒ£ Cambiar estado (Activar / Suspender)
     // ------------------------------------------------------
 
     public void toggleStatus(Long id) {
@@ -176,7 +176,7 @@ public class TenantService {
         Tenant tenant = tenantRepo.findByCodigoIgnoreCaseAndActiveTrue(code.trim().toUpperCase())
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.NOT_FOUND,
-                        "No se encontró un local con ese código"
+                        "No se encontrÃ³ un local con ese cÃ³digo"
                 ));
         return TenantMapper.toDto(tenant);
     }
@@ -185,7 +185,7 @@ public class TenantService {
 
 
     // ------------------------------------------------------
-    // 8️⃣ Métricas del Dashboard del Super Admin
+    // 8ï¸âƒ£ MÃ©tricas del Dashboard del Super Admin
     // ------------------------------------------------------
     public AdminDashboardDTO getDashboardMetrics() {
 
@@ -193,7 +193,7 @@ public class TenantService {
         long active = tenantRepo.countByActiveTrue();
         long inactive = total - active;
 
-        // ⚡ En futuro agregamos ingresos reales → Stripe o tu módulo de pagos
+        // âš¡ En futuro agregamos ingresos reales â†’ Stripe o tu mÃ³dulo de pagos
         double income = active * 49.90; // SUPUESTO PLAN PREMIUM
 
         AdminDashboardDTO dto = new AdminDashboardDTO();
@@ -209,3 +209,4 @@ public class TenantService {
         return dto;
     }
 }
+

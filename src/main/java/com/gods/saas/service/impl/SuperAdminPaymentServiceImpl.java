@@ -31,6 +31,7 @@ public class SuperAdminPaymentServiceImpl implements SuperAdminPaymentService {
     private final SubscriptionPaymentRepository paymentRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final TenantRepository tenantRepository;
+    private final SubscriptionPlanPricingService pricingService;
 
     @Override
     @Transactional(readOnly = true)
@@ -64,7 +65,7 @@ public class SuperAdminPaymentServiceImpl implements SuperAdminPaymentService {
 
         Subscription subscription = subscriptionRepository.findByTenantId(tenant.getId())
                 .orElseThrow(() -> new EntityNotFoundException(
-                        "Suscripción no encontrada para tenant: " + tenant.getId()
+                        "SuscripciÃ³n no encontrada para tenant: " + tenant.getId()
                 ));
 
         String requestedPlan = upperOrFallback(payment.getRequestedPlan(), subscription.getPlan());
@@ -96,7 +97,7 @@ public class SuperAdminPaymentServiceImpl implements SuperAdminPaymentService {
         subscription.setFechaInicio(now);
         subscription.setFechaRenovacion(calculateEndDate(now, requestedBillingCycle));
         subscription.setFechaFin(calculateEndDate(now, requestedBillingCycle));
-        subscription.setObservaciones("Suscripción activada por aprobación de pago");
+        subscription.setObservaciones("SuscripciÃ³n activada por aprobaciÃ³n de pago");
 
         if (payment.getAmount() != null) {
             subscription.setPrecioMensual(
@@ -104,6 +105,7 @@ public class SuperAdminPaymentServiceImpl implements SuperAdminPaymentService {
             );
         }
 
+        subscription.setCurrency(pricingService.resolveTenantCurrency(tenant.getId(), tenant, subscription.getCurrency()));
         applyPlanLimits(subscription, requestedPlan);
         subscriptionRepository.save(subscription);
 
@@ -141,6 +143,10 @@ public class SuperAdminPaymentServiceImpl implements SuperAdminPaymentService {
             tenant = tenantRepository.findById(payment.getTenantId()).orElse(null);
         }
 
+        Subscription subscription = payment.getTenantId() == null
+                ? null
+                : subscriptionRepository.findByTenantId(payment.getTenantId()).orElse(null);
+
         return SuperAdminPaymentResponse.builder()
                 .paymentId(payment.getId())
                 .tenantId(payment.getTenantId())
@@ -148,7 +154,7 @@ public class SuperAdminPaymentServiceImpl implements SuperAdminPaymentService {
                 .plan(payment.getRequestedPlan())
                 .billingCycle(payment.getRequestedBillingCycle())
                 .amount(payment.getAmount())
-                .currency(null)
+                .currency(subscription != null ? subscription.getCurrency() : null)
                 .operationNumber(payment.getOperationNumber())
                 .payerName(payment.getPayerName())
                 .status(payment.getStatus())

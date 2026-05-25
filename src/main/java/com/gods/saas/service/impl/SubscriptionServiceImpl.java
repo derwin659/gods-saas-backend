@@ -2,8 +2,10 @@ package com.gods.saas.service.impl;
 
 import com.gods.saas.domain.dto.request.ReportPaymentRequest;
 import com.gods.saas.domain.dto.response.SubscriptionCurrentResponse;
+import com.gods.saas.domain.dto.response.SubscriptionPlanPriceResponse;
 import com.gods.saas.domain.model.Subscription;
 import com.gods.saas.domain.model.SubscriptionPayment;
+import com.gods.saas.domain.model.Tenant;
 import com.gods.saas.domain.model.TenantSettings;
 import com.gods.saas.domain.repository.*;
 import com.gods.saas.exception.BusinessException;
@@ -29,6 +31,8 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     private static final String STATUS_REJECTED = "REJECTED";
 
     private final TenantSettingsRepository tenantSettingsRepository;
+    private final TenantRepository tenantRepository;
+    private final SubscriptionPlanPricingService pricingService;
     private final SuscriptionRepository subscriptionRepository;
     private final SubscriptionPaymentRepository paymentRepository;
     private final BranchRepository branchRepository;
@@ -39,7 +43,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         return subscriptionRepository.findTopByTenantIdOrderBySubIdDesc(tenantId)
                 .orElseThrow(() -> new BusinessException(
                         "SUBSCRIPTION_NOT_FOUND",
-                        "No existe suscripción para este tenant"
+                        "No existe suscripciÃ³n para este tenant"
                 ));
     }
 
@@ -60,7 +64,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         if (maxBranches != null && currentBranches >= maxBranches) {
             throw new BusinessException(
                     "PLAN_LIMIT_BRANCHES",
-                    "Tu plan actual no permite crear más sedes"
+                    "Tu plan actual no permite crear mÃ¡s sedes"
             );
         }
     }
@@ -78,7 +82,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         if (maxBarbers != null && currentBarbers >= maxBarbers) {
             throw new BusinessException(
                     "PLAN_LIMIT_BARBERS",
-                    "Tu plan actual no permite crear más barberos"
+                    "Tu plan actual no permite crear mÃ¡s barberos"
             );
         }
     }
@@ -97,7 +101,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         if (maxAdmins != null && currentAdmins >= maxAdmins) {
             throw new BusinessException(
                     "PLAN_LIMIT_ADMINS",
-                    "Tu plan actual no permite crear más administradores"
+                    "Tu plan actual no permite crear mÃ¡s administradores"
             );
         }
     }
@@ -109,7 +113,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         Subscription subscription = Subscription.builder()
                 .tenantId(tenantId)
                 .plan("STARTER")
-                .precioMensual(39.0)
+                .precioMensual(pricingService.resolveMonthlyPriceForTenant(tenantId, "STARTER", null).doubleValue())
                 .estado(STATUS_TRIAL)
                 .fechaInicio(now)
                 .fechaRenovacion(now.plusDays(7))
@@ -123,13 +127,18 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 .loyaltyEnabled(true)
                 .promotionsEnabled(true)
                 .billingCycle("MONTHLY")
-                .currency("PEN")
-                .observaciones("Trial inicial automático")
+                .currency(resolveCurrencyForTenant(tenantId, "PEN"))
+                .observaciones("Trial inicial automÃ¡tico")
                 .createdAt(now)
                 .updatedAt(now)
                 .build();
 
         return subscriptionRepository.save(subscription);
+    }
+
+    private String resolveCurrencyForTenant(Long tenantId, String fallback) {
+        Tenant tenant = tenantId == null ? null : tenantRepository.findById(tenantId).orElse(null);
+        return pricingService.resolveTenantCurrency(tenantId, tenant, fallback);
     }
 
     private ZoneId getZoneIdForTenant(Long tenantId) {
@@ -156,12 +165,12 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         String normalizedPlan = normalizePlan(plan);
         LocalDateTime now = nowForTenant(tenantId);
 
-        applyPlanConfig(sub, normalizedPlan);
+        applyPlanConfig(sub, normalizedPlan, pricingService.resolveMonthlyPriceForTenant(tenantId, normalizedPlan, sub.getCurrency()).doubleValue());
 
         sub.setEstado(STATUS_ACTIVE);
         sub.setTrial(false);
         sub.setBillingCycle("MONTHLY");
-        sub.setCurrency("PEN");
+        sub.setCurrency(resolveCurrencyForTenant(tenantId, sub.getCurrency()));
         sub.setFechaInicio(now);
         sub.setFechaRenovacion(now.plusDays(30));
         sub.setFechaFin(now.plusDays(30));
@@ -194,6 +203,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 .precioMensual(sub.getPrecioMensual())
                 .billingCycle(sub.getBillingCycle())
                 .currency(sub.getCurrency())
+                .planPrices(pricingService.listMonthlyPricesForTenant(tenantId))
                 .fechaInicio(sub.getFechaInicio())
                 .fechaRenovacion(sub.getFechaRenovacion())
                 .fechaFin(sub.getFechaFin())
@@ -214,6 +224,11 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     }
 
     @Override
+    public List<SubscriptionPlanPriceResponse> getPlanPrices(Long tenantId) {
+        return pricingService.listMonthlyPricesForTenant(tenantId);
+    }
+
+    @Override
     public SubscriptionPayment reportManualPayment(Long tenantId, ReportPaymentRequest request) {
         Subscription sub = getCurrentSubscriptionOrThrow(tenantId);
 
@@ -221,7 +236,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 .ifPresent(p -> {
                     throw new BusinessException(
                             "PAYMENT_ALREADY_PENDING",
-                            "Ya existe un pago pendiente de revisión para este tenant"
+                            "Ya existe un pago pendiente de revisiÃ³n para este tenant"
                     );
                 });
 
@@ -230,7 +245,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
         validateAmount(request.getAmount());
 
-        double expectedAmount = calculateExpectedAmount(requestedPlan, billingCycle);
+        double expectedAmount = calculateExpectedAmount(requestedPlan, billingCycle, tenantId, sub.getCurrency());
         validateReportedAmount(request.getAmount(), expectedAmount);
 
         LocalDateTime now = nowForTenant(tenantId);
@@ -241,7 +256,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 .requestedPlan(requestedPlan)
                 .requestedBillingCycle(billingCycle)
                 .paymentMethod(normalizePaymentMethod(request.getPaymentMethod()))
-                .operationNumber(requiredText(request.getOperationNumber(), "Número de operación obligatorio"))
+                .operationNumber(requiredText(request.getOperationNumber(), "NÃºmero de operaciÃ³n obligatorio"))
                 .amount(BigDecimal.valueOf(request.getAmount()))
                 .payerName(trimToNull(request.getPayerName()))
                 .payerPhone(trimToNull(request.getPayerPhone()))
@@ -251,7 +266,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 .build();
 
         sub.setUpdatedAt(now);
-        sub.setObservaciones("Pago reportado manualmente pendiente de revisión. Operación: " + request.getOperationNumber());
+        sub.setObservaciones("Pago reportado manualmente pendiente de revisiÃ³n. OperaciÃ³n: " + request.getOperationNumber());
         subscriptionRepository.save(sub);
 
         return paymentRepository.save(payment);
@@ -262,7 +277,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         SubscriptionPayment payment = paymentRepository.findById(paymentId)
                 .orElseThrow(() -> new BusinessException(
                         "PAYMENT_NOT_FOUND",
-                        "No se encontró el pago"
+                        "No se encontrÃ³ el pago"
                 ));
 
         if (!STATUS_PENDING_REVIEW.equalsIgnoreCase(payment.getStatus())) {
@@ -275,14 +290,14 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         Subscription sub = getCurrentSubscriptionOrThrow(payment.getTenantId());
         LocalDateTime now = nowForTenant(payment.getTenantId());
 
-        applyPlanConfig(sub, payment.getRequestedPlan());
+        applyPlanConfig(sub, payment.getRequestedPlan(), pricingService.resolveMonthlyPriceForTenant(payment.getTenantId(), payment.getRequestedPlan(), sub.getCurrency()).doubleValue());
 
         int days = billingCycleToDays(payment.getRequestedBillingCycle());
 
         sub.setEstado(STATUS_ACTIVE);
         sub.setTrial(false);
         sub.setBillingCycle(normalizeBillingCycle(payment.getRequestedBillingCycle()));
-        sub.setCurrency("PEN");
+        sub.setCurrency(resolveCurrencyForTenant(payment.getTenantId(), sub.getCurrency()));
         sub.setFechaInicio(now);
         sub.setFechaRenovacion(now.plusDays(days));
         sub.setFechaFin(now.plusDays(days));
@@ -302,7 +317,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         SubscriptionPayment payment = paymentRepository.findById(paymentId)
                 .orElseThrow(() -> new BusinessException(
                         "PAYMENT_NOT_FOUND",
-                        "No se encontró el pago"
+                        "No se encontrÃ³ el pago"
                 ));
 
         if (!STATUS_PENDING_REVIEW.equalsIgnoreCase(payment.getStatus())) {
@@ -330,7 +345,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
         sub.setEstado(isExpired(sub) ? "EXPIRED" : STATUS_ACTIVE);
         sub.setUpdatedAt(now);
-        sub.setObservaciones("Pago rechazado manualmente. Operación: " + payment.getOperationNumber());
+        sub.setObservaciones("Pago rechazado manualmente. OperaciÃ³n: " + payment.getOperationNumber());
 
         subscriptionRepository.save(sub);
         return paymentRepository.save(payment);
@@ -342,14 +357,14 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         if (!STATUS_ACTIVE.equals(estado) && !STATUS_TRIAL.equals(estado)) {
             throw new BusinessException(
                     "SUBSCRIPTION_INACTIVE",
-                    "Tu suscripción no está activa"
+                    "Tu suscripciÃ³n no estÃ¡ activa"
             );
         }
 
         if (isExpired(sub)) {
             throw new BusinessException(
                     "SUBSCRIPTION_EXPIRED",
-                    "Tu licencia está vencida o inactiva"
+                    "Tu licencia estÃ¡ vencida o inactiva"
             );
         }
     }
@@ -385,7 +400,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             case "STARTER", "PRO", "GODS_AI" -> normalizedPlan;
             default -> throw new BusinessException(
                     "PLAN_INVALID",
-                    "Plan no válido. Usa STARTER, PRO o GODS_AI"
+                    "Plan no vÃ¡lido. Usa STARTER, PRO o GODS_AI"
             );
         };
     }
@@ -409,7 +424,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         if (amount == null || amount <= 0) {
             throw new BusinessException(
                     "INVALID_AMOUNT",
-                    "El monto es inválido"
+                    "El monto es invÃ¡lido"
             );
         }
     }
@@ -424,31 +439,8 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         }
     }
 
-    private double calculateExpectedAmount(String plan, String billingCycle) {
-        double monthly = monthlyPrice(plan);
-        double base = switch (billingCycle) {
-            case "MONTHLY" -> monthly;
-            case "SEMIANNUAL" -> monthly * 6;
-            case "ANNUAL" -> monthly * 12;
-            default -> monthly;
-        };
-
-        double discount = switch (billingCycle) {
-            case "SEMIANNUAL" -> 0.10;
-            case "ANNUAL" -> 0.20;
-            default -> 0.0;
-        };
-
-        return round2(base * (1 - discount));
-    }
-
-    private double monthlyPrice(String plan) {
-        return switch (plan) {
-            case "STARTER" -> 39.0;
-            case "PRO" -> 79.0;
-            case "GODS_AI" -> 149.0;
-            default -> throw new BusinessException("PLAN_INVALID", "Plan no válido");
-        };
+    private double calculateExpectedAmount(String plan, String billingCycle, Long tenantId, String preferredCurrency) {
+        return pricingService.expectedAmount(plan, billingCycle, tenantId, preferredCurrency);
     }
 
     private int billingCycleToDays(String billingCycle) {
@@ -460,11 +452,11 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         };
     }
 
-    private void applyPlanConfig(Subscription sub, String normalizedPlan) {
+    private void applyPlanConfig(Subscription sub, String normalizedPlan, double monthlyPrice) {
         switch (normalizedPlan) {
             case "STARTER" -> {
                 sub.setPlan("STARTER");
-                sub.setPrecioMensual(39.0);
+                sub.setPrecioMensual(monthlyPrice);
                 sub.setMaxBranches(1);
                 sub.setMaxBarbers(5);
                 sub.setMaxAdmins(1);
@@ -474,7 +466,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             }
             case "PRO" -> {
                 sub.setPlan("PRO");
-                sub.setPrecioMensual(79.0);
+                sub.setPrecioMensual(monthlyPrice);
                 sub.setMaxBranches(3);
                 sub.setMaxBarbers(15);
                 sub.setMaxAdmins(3);
@@ -484,7 +476,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             }
             case "GODS_AI" -> {
                 sub.setPlan("GODS_AI");
-                sub.setPrecioMensual(149.0);
+                sub.setPrecioMensual(monthlyPrice);
                 sub.setMaxBranches(10);
                 sub.setMaxBarbers(50);
                 sub.setMaxAdmins(10);
@@ -494,7 +486,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             }
             default -> throw new BusinessException(
                     "PLAN_INVALID",
-                    "Plan no válido. Usa STARTER, PRO o GODS_AI"
+                    "Plan no vÃ¡lido. Usa STARTER, PRO o GODS_AI"
             );
         }
     }
@@ -521,3 +513,5 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         return Math.round(value * 100.0) / 100.0;
     }
 }
+
+
