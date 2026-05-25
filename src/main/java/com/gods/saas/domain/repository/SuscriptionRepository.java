@@ -12,6 +12,7 @@ import java.util.Optional;
 public interface SuscriptionRepository extends JpaRepository<Subscription, Long> {
 
     Optional<Subscription> findTopByTenantIdOrderBySubIdDesc(Long tenantId);
+    Optional<Subscription> findTopByPaddleSubscriptionIdOrderBySubIdDesc(String paddleSubscriptionId);
     // Buscar suscripción por tenant
     Optional<Subscription> findByTenantId(Long tenantId);
 

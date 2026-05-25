@@ -16,6 +16,8 @@ public interface SubscriptionPaymentRepository extends JpaRepository<Subscriptio
 
     Optional<SubscriptionPayment> findTopByTenantIdAndStatusOrderByCreatedAtDesc(Long tenantId, String status);
 
+    Optional<SubscriptionPayment> findTopByProviderAndProviderPaymentId(String provider, String providerPaymentId);
+
 
     // Pagos pendientes
     List<SubscriptionPayment> findByStatusOrderByCreatedAtDesc(String status);

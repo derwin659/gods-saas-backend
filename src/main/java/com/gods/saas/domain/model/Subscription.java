@@ -76,6 +76,18 @@ public class Subscription {
     @Column(name = "observaciones")
     private String observaciones;
 
+    @Column(name = "paddle_customer_id")
+    private String paddleCustomerId;
+
+    @Column(name = "paddle_subscription_id")
+    private String paddleSubscriptionId;
+
+    @Column(name = "paddle_status")
+    private String paddleStatus;
+
+    @Column(name = "paddle_last_transaction_id")
+    private String paddleLastTransactionId;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 
