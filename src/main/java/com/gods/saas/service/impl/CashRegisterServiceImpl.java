@@ -589,7 +589,7 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 movementsAdvanceBarber,
                 movementsPaymentBarber,
                 expectedCash,
-                movements
+                movementsInBusinessRange
         );
     }
 
