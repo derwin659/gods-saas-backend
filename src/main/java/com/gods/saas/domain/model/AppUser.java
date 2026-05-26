@@ -60,6 +60,15 @@ public class AppUser implements UserDetails {
     @Column(length = 20)
     private String phone;
 
+    @Column(name = "google_subject", length = 120)
+    private String googleSubject;
+
+    @Column(name = "google_email", length = 150)
+    private String googleEmail;
+
+    @Column(name = "google_linked_at")
+    private LocalDateTime googleLinkedAt;
+
     @Column(name = "password_hash", length = 255)
     private String passwordHash;
 
