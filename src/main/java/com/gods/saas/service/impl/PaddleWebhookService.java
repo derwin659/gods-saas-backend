@@ -17,12 +17,14 @@ import org.springframework.transaction.annotation.Transactional;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.util.HexFormat;
 import java.util.Locale;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -33,6 +35,10 @@ public class PaddleWebhookService {
     private static final String STATUS_APPROVED = "APPROVED";
     private static final String STATUS_FAILED = "FAILED";
     private static final String STATUS_PROCESSED = "PROCESSED";
+    private static final Set<String> ZERO_DECIMAL_CURRENCIES = Set.of(
+            "BIF", "CLP", "COP", "DJF", "GNF", "JPY", "KMF", "KRW",
+            "PYG", "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF"
+    );
 
     private final ObjectMapper objectMapper;
     private final Environment environment;
@@ -189,7 +195,11 @@ public class PaddleWebhookService {
             return;
         }
 
-        BigDecimal amount = BigDecimal.valueOf(pricingService.expectedAmount(requestedPlan, billingCycle, subscription.getTenantId(), currency));
+        String paymentCurrency = transactionCurrency(data, currency);
+        BigDecimal amount = transactionAmount(data, paymentCurrency)
+                .orElseGet(() -> BigDecimal.valueOf(
+                        pricingService.expectedAmount(requestedPlan, billingCycle, subscription.getTenantId(), currency)
+                ));
 
         SubscriptionPayment payment = SubscriptionPayment.builder()
                 .tenantId(subscription.getTenantId())
@@ -202,14 +212,73 @@ public class PaddleWebhookService {
                 .providerPaymentId(transactionId)
                 .providerSubscriptionId(subscription.getPaddleSubscriptionId())
                 .providerCustomerId(subscription.getPaddleCustomerId())
+                .providerCurrency(paymentCurrency)
                 .amount(amount)
-                .notes("Pago automatico confirmado por Paddle.")
+                .notes("Pago automatico confirmado por Paddle en " + paymentCurrency + ".")
                 .status(STATUS_APPROVED)
                 .createdAt(now)
                 .reviewedAt(now)
                 .build();
 
         paymentRepository.save(payment);
+    }
+
+    private java.util.Optional<BigDecimal> transactionAmount(JsonNode data, String currency) {
+        JsonNode totals = data.path("details").path("totals");
+        String raw = firstText(
+                totals.path("grand_total"),
+                totals.path("total"),
+                data.path("payments").isArray() && !data.path("payments").isEmpty()
+                        ? data.path("payments").get(0).path("amount")
+                        : null
+        );
+
+        if (raw.isBlank()) return java.util.Optional.empty();
+
+        try {
+            BigDecimal value = new BigDecimal(raw.trim());
+            if (raw.contains(".") || raw.contains(",")) {
+                return java.util.Optional.of(value.setScale(2, RoundingMode.HALF_UP));
+            }
+
+            int scale = currencyScale(currency);
+            if (scale <= 0) {
+                return java.util.Optional.of(value.setScale(2, RoundingMode.HALF_UP));
+            }
+
+            return java.util.Optional.of(value
+                    .movePointLeft(scale)
+                    .setScale(2, RoundingMode.HALF_UP));
+        } catch (NumberFormatException ignored) {
+            return java.util.Optional.empty();
+        }
+    }
+
+    private String transactionCurrency(JsonNode data, String fallback) {
+        String value = cleanUpper(firstText(
+                data.path("currency_code"),
+                data.path("details").path("totals").path("currency_code"),
+                data.path("payments").isArray() && !data.path("payments").isEmpty()
+                        ? data.path("payments").get(0).path("currency_code")
+                        : null
+        ));
+        return value.isBlank() ? cleanUpper(fallback) : value;
+    }
+
+    private String firstText(JsonNode... nodes) {
+        if (nodes == null) return "";
+        for (JsonNode node : nodes) {
+            if (node == null || node.isMissingNode() || node.isNull()) continue;
+            String value = node.asText("");
+            if (value != null && !value.isBlank()) return value.trim().replace(",", ".");
+        }
+        return "";
+    }
+
+    private int currencyScale(String currency) {
+        String value = cleanUpper(currency);
+        if (ZERO_DECIMAL_CURRENCIES.contains(value)) return 0;
+        return 2;
     }
 
     private Subscription resolveSubscription(JsonNode data, Long tenantId) {

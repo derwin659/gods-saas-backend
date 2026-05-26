@@ -8,7 +8,8 @@ ALTER TABLE subscription_payments
     ADD COLUMN IF NOT EXISTS provider VARCHAR(40),
     ADD COLUMN IF NOT EXISTS provider_payment_id VARCHAR(100),
     ADD COLUMN IF NOT EXISTS provider_subscription_id VARCHAR(100),
-    ADD COLUMN IF NOT EXISTS provider_customer_id VARCHAR(100);
+    ADD COLUMN IF NOT EXISTS provider_customer_id VARCHAR(100),
+    ADD COLUMN IF NOT EXISTS provider_currency VARCHAR(3);
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_subscription_payments_provider_payment
     ON subscription_payments (provider, provider_payment_id)

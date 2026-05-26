@@ -49,6 +49,9 @@ public class SubscriptionPayment {
     @Column(name = "provider_customer_id")
     private String providerCustomerId;
 
+    @Column(name = "provider_currency")
+    private String providerCurrency;
+
     private BigDecimal amount;
 
     @Column(name = "payer_name")
