@@ -71,6 +71,8 @@ public class SecurityConfig {
                                 "/api/tenants/**",
                                 "/api/internal/login",
                                 "/api/internal/register",
+                                "/api/webhooks/paddle",
+                                "/api/webhooks/paddle/**",
                                 "/api/ia/tv/*",
                                 "/api/ia/tv/*/tomarsesion",
                                 "/api/ia/tv/*/estado",
