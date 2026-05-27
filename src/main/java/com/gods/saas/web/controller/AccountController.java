@@ -3,7 +3,9 @@ package com.gods.saas.web.controller;
 import com.gods.saas.domain.dto.request.ChangePasswordRequest;
 import com.gods.saas.domain.dto.request.DeleteMyAccountRequest;
 import com.gods.saas.domain.dto.response.DeleteAccountResponse;
+import com.gods.saas.domain.dto.response.GoogleAccountStatusResponse;
 import com.gods.saas.domain.model.AppUser;
+import com.gods.saas.domain.repository.AppUserRepository;
 import com.gods.saas.service.impl.CustomerService;
 import com.gods.saas.service.impl.UserService;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +22,25 @@ public class AccountController {
 
     private final UserService userService;
     private final CustomerService customerService;
+    private final AppUserRepository appUserRepository;
+
+    @GetMapping("/google-link/status")
+    public ResponseEntity<GoogleAccountStatusResponse> googleLinkStatus(Authentication authentication) {
+        Long userId = extractUserId(authentication);
+        AppUser user = appUserRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        boolean linked = user.getGoogleSubject() != null && !user.getGoogleSubject().isBlank();
+        return ResponseEntity.ok(
+                GoogleAccountStatusResponse.builder()
+                        .linked(linked)
+                        .email(user.getGoogleEmail())
+                        .name(user.getGoogleName())
+                        .pictureUrl(user.getGooglePictureUrl())
+                        .linkedAt(user.getGoogleLinkedAt() != null ? user.getGoogleLinkedAt().toString() : null)
+                        .build()
+        );
+    }
 
     @PostMapping("/change-password")
     public ResponseEntity<?> changePassword(
