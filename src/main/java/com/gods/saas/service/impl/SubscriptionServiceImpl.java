@@ -253,7 +253,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             );
         }
 
-        String priceId = resolvePaddlePriceId(requestedPlan, billingCycle);
+        String priceId = resolvePaddlePriceId(requestedPlan, billingCycle, currency);
         if (priceId.isBlank()) {
             throw new BusinessException(
                     "PADDLE_NOT_CONFIGURED",
@@ -270,12 +270,17 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 .build();
     }
 
-    private String resolvePaddlePriceId(String plan, String billingCycle) {
+    private String resolvePaddlePriceId(String plan, String billingCycle, String currency) {
         String planKey = normalizePlan(plan).toLowerCase(Locale.ROOT).replace("_", "");
         String cycleKey = normalizeBillingCycle(billingCycle).toLowerCase(Locale.ROOT);
+        String currencyKey = normalizeText(currency).toLowerCase(Locale.ROOT);
 
+        String specificCurrencyKey = "billing.paddle.price." + planKey + "." + cycleKey + "." + currencyKey;
         String specificKey = "billing.paddle.price." + planKey + "." + cycleKey;
         String planKeyOnly = "billing.paddle.price." + planKey;
+
+        String currencySpecific = environment.getProperty(specificCurrencyKey, "").trim();
+        if (!currencySpecific.isBlank()) return currencySpecific;
 
         String specific = environment.getProperty(specificKey, "").trim();
         if (!specific.isBlank()) return specific;
@@ -283,10 +288,10 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         String planPrice = environment.getProperty(planKeyOnly, "").trim();
         if (!planPrice.isBlank()) return planPrice;
 
-        return switch (planKey + "." + cycleKey) {
-            case "starter.monthly" -> "pri_01ksge6ezebjjhq4gt887fnqt1";
-            case "pro.monthly" -> "pri_01ksgeahph8s0j59vm4ba2g1t2";
-            case "godsai.monthly" -> "pri_01ksgdxcatyps3scp8eqpnhv7n";
+        return switch (planKey + "." + cycleKey + "." + currencyKey) {
+            case "starter.monthly.usd" -> "pri_01ksge6ezebjjhq4gt887fnqt1";
+            case "pro.monthly.usd" -> "pri_01ksgeahph8s0j59vm4ba2g1t2";
+            case "godsai.monthly.usd" -> "pri_01ksgdxcatyps3scp8eqpnhv7n";
             default -> "";
         };
     }
