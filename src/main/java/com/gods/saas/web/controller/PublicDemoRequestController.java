@@ -21,4 +21,11 @@ public class PublicDemoRequestController {
     ) {
         return ResponseEntity.ok(demoRequestService.createPublicRequest(request));
     }
+
+    @PostMapping("/activate")
+    public ResponseEntity<DemoRequestResponse> activateTrial(
+            @RequestBody CreateDemoRequest request
+    ) {
+        return ResponseEntity.ok(demoRequestService.activatePublicTrial(request));
+    }
 }

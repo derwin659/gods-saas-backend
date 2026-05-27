@@ -10,6 +10,8 @@ public interface DemoRequestService {
 
     DemoRequestResponse createPublicRequest(CreateDemoRequest request);
 
+    DemoRequestResponse activatePublicTrial(CreateDemoRequest request);
+
     List<DemoRequestResponse> findAll();
 
     List<DemoRequestResponse> findPending();

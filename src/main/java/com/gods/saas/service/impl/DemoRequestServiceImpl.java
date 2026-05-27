@@ -28,6 +28,7 @@ public class DemoRequestServiceImpl implements DemoRequestService {
 
     private static final String DEFAULT_TIMEZONE = "America/Lima";
     private static final String DEFAULT_PASSWORD = "123456";
+    private static final int TRIAL_DAYS = 7;
 
     private final DemoRequestRepository demoRequestRepository;
     private final TenantRepository tenantRepository;
@@ -72,6 +73,61 @@ public class DemoRequestServiceImpl implements DemoRequestService {
                 .build();
 
         return mapToResponse(demoRequestRepository.save(demoRequest));
+    }
+
+    @Override
+    public DemoRequestResponse activatePublicTrial(CreateDemoRequest request) {
+        validateCreateRequest(request);
+
+        String email = normalizeEmail(request.getOwnerEmail());
+        String phone = trim(request.getOwnerPhone());
+
+        if (appUserRepository.existsByEmail(email)) {
+            throw new IllegalArgumentException("Ya existe una cuenta con este correo. Inicia sesion o vincula Gmail desde seguridad.");
+        }
+
+        if (demoRequestRepository.existsByOwnerEmailIgnoreCaseAndStatus(email, DemoRequestStatus.PENDING_REVIEW)) {
+            throw new IllegalArgumentException("Ya existe una solicitud pendiente con este correo.");
+        }
+
+        if (demoRequestRepository.existsByOwnerPhoneAndStatus(phone, DemoRequestStatus.PENDING_REVIEW)) {
+            throw new IllegalArgumentException("Ya existe una solicitud pendiente con este WhatsApp.");
+        }
+
+        LocalDateTime now = nowLima();
+
+        DemoRequest demoRequest = DemoRequest.builder()
+                .businessName(trim(request.getBusinessName()))
+                .businessType(request.getBusinessType() != null ? request.getBusinessType() : BusinessType.BARBERSHOP)
+                .ownerName(trim(request.getOwnerName()))
+                .ownerEmail(email)
+                .ownerPhone(phone)
+                .country(trimToNull(request.getCountry()))
+                .city(trimToNull(request.getCity()))
+                .branchesCount(request.getBranchesCount())
+                .professionalsCount(request.getProfessionalsCount())
+                .socialLink(trimToNull(request.getSocialLink()))
+                .googleMapsLink(trimToNull(request.getGoogleMapsLink()))
+                .message(trimToNull(request.getMessage()))
+                .status(DemoRequestStatus.PENDING_REVIEW)
+                .createdAt(now)
+                .build();
+
+        demoRequest = demoRequestRepository.save(demoRequest);
+
+        Tenant tenant = createTenantFromDemoRequest(demoRequest, now);
+        Branch branch = createMainBranch(tenant, demoRequest, now);
+        AppUser owner = createOwnerUser(tenant, branch, demoRequest, now);
+        createOwnerRole(owner, tenant, branch);
+        createTrialSubscription(tenant, now);
+        createTenantSettings(tenant, now);
+
+        demoRequest.setStatus(DemoRequestStatus.CONVERTED_TO_TENANT);
+        demoRequest.setReviewNotes("Autoactivada desde registro publico.");
+        demoRequest.setReviewedAt(now);
+        demoRequest.setCreatedTenantId(tenant.getId());
+
+        return mapToResponseWithAccess(demoRequestRepository.save(demoRequest));
     }
 
     @Override
@@ -214,8 +270,8 @@ public class DemoRequestServiceImpl implements DemoRequestService {
         subscription.setPrecioMensual(pricingService.resolveMonthlyPrice("STARTER", tenant.getPais(), resolveCurrencyForCountry(tenant.getPais())).doubleValue());
         subscription.setEstado("TRIAL");
         subscription.setFechaInicio(now);
-        subscription.setFechaRenovacion(now.plusDays(7));
-        subscription.setFechaFin(now.plusDays(7));
+        subscription.setFechaRenovacion(now.plusDays(TRIAL_DAYS));
+        subscription.setFechaFin(now.plusDays(TRIAL_DAYS));
         subscription.setTrial(true);
         subscription.setDiasGracia(0);
         subscription.setMaxBranches(1);
@@ -289,6 +345,33 @@ public class DemoRequestServiceImpl implements DemoRequestService {
                 .reviewNotes(demoRequest.getReviewNotes())
                 .reviewedBy(demoRequest.getReviewedBy())
                 .createdTenantId(demoRequest.getCreatedTenantId())
+                .createdAt(demoRequest.getCreatedAt())
+                .reviewedAt(demoRequest.getReviewedAt())
+                .build();
+    }
+
+    private DemoRequestResponse mapToResponseWithAccess(DemoRequest demoRequest) {
+        return DemoRequestResponse.builder()
+                .id(demoRequest.getId())
+                .businessName(demoRequest.getBusinessName())
+                .businessType(demoRequest.getBusinessType())
+                .ownerName(demoRequest.getOwnerName())
+                .ownerEmail(demoRequest.getOwnerEmail())
+                .ownerPhone(demoRequest.getOwnerPhone())
+                .country(demoRequest.getCountry())
+                .city(demoRequest.getCity())
+                .branchesCount(demoRequest.getBranchesCount())
+                .professionalsCount(demoRequest.getProfessionalsCount())
+                .socialLink(demoRequest.getSocialLink())
+                .googleMapsLink(demoRequest.getGoogleMapsLink())
+                .message(demoRequest.getMessage())
+                .status(demoRequest.getStatus())
+                .reviewNotes(demoRequest.getReviewNotes())
+                .reviewedBy(demoRequest.getReviewedBy())
+                .createdTenantId(demoRequest.getCreatedTenantId())
+                .accessEmail(demoRequest.getOwnerEmail())
+                .temporaryPassword(DEFAULT_PASSWORD)
+                .trialDays(TRIAL_DAYS)
                 .createdAt(demoRequest.getCreatedAt())
                 .reviewedAt(demoRequest.getReviewedAt())
                 .build();

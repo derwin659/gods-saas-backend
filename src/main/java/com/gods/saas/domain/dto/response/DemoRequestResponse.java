@@ -35,6 +35,10 @@ public class DemoRequestResponse {
     private Long reviewedBy;
     private Long createdTenantId;
 
+    private String accessEmail;
+    private String temporaryPassword;
+    private Integer trialDays;
+
     private LocalDateTime createdAt;
     private LocalDateTime reviewedAt;
 }
