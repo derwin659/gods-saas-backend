@@ -122,7 +122,8 @@ public class GoogleOAuthService {
                 .queryParam("state", stateToken)
                 .queryParam("access_type", "offline")
                 .queryParam("prompt", "select_account")
-                .build(true)
+                .build()
+                .encode(StandardCharsets.UTF_8)
                 .toUri();
     }
 
