@@ -184,6 +184,8 @@ public class GoogleOAuthService {
     private void ensureGoogleLinked(AppUser user, GoogleProfile profile) {
         user.setGoogleSubject(profile.subject());
         user.setGoogleEmail(profile.email());
+        user.setGoogleName(profile.name());
+        user.setGooglePictureUrl(profile.pictureUrl());
         user.setGoogleLinkedAt(LocalDateTime.now());
         appUserRepository.save(user);
     }
@@ -249,13 +251,15 @@ public class GoogleOAuthService {
 
             String subject = String.valueOf(payload.getOrDefault("sub", "")).trim();
             String email = String.valueOf(payload.getOrDefault("email", "")).trim();
+            String name = String.valueOf(payload.getOrDefault("name", "")).trim();
+            String pictureUrl = String.valueOf(payload.getOrDefault("picture", "")).trim();
             boolean emailVerified = Boolean.parseBoolean(String.valueOf(payload.getOrDefault("email_verified", "false")));
 
             if (subject.isEmpty() || email.isEmpty() || !emailVerified) {
                 throw new ResponseStatusException(UNAUTHORIZED, "Google no confirmo un correo valido");
             }
 
-            return new GoogleProfile(subject, email);
+            return new GoogleProfile(subject, email, name, pictureUrl);
         } catch (ResponseStatusException e) {
             throw e;
         } catch (Exception e) {
@@ -359,5 +363,5 @@ public class GoogleOAuthService {
         }
     }
 
-    private record GoogleProfile(String subject, String email) {}
+    private record GoogleProfile(String subject, String email, String name, String pictureUrl) {}
 }

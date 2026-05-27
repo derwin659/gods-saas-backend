@@ -66,6 +66,12 @@ public class AppUser implements UserDetails {
     @Column(name = "google_email", length = 150)
     private String googleEmail;
 
+    @Column(name = "google_name", length = 180)
+    private String googleName;
+
+    @Column(name = "google_picture_url", length = 600)
+    private String googlePictureUrl;
+
     @Column(name = "google_linked_at")
     private LocalDateTime googleLinkedAt;
 
