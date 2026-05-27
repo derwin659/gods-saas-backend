@@ -257,7 +257,10 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         if (priceId.isBlank()) {
             throw new BusinessException(
                     "PADDLE_NOT_CONFIGURED",
-                    "El precio internacional de Paddle todavia no esta configurado para este plan."
+                    "No existe priceId de Paddle configurado para el plan " + requestedPlan +
+                            ", ciclo " + billingCycle + " y moneda " + currency +
+                            ". Revisa la variable BILLING_PADDLE_PRICE_" +
+                            requestedPlan.replace("_", "") + "_" + billingCycle + "_" + currency
             );
         }
 
@@ -275,17 +278,28 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         String cycleKey = normalizeBillingCycle(billingCycle).toLowerCase(Locale.ROOT);
         String currencyKey = normalizeText(currency).toLowerCase(Locale.ROOT);
 
+        // Primero buscamos por moneda para evitar que Peru/PEN use por error el priceId USD.
+        // Railway variables esperadas:
+        // BILLING_PADDLE_PRICE_STARTER_MONTHLY_PEN
+        // BILLING_PADDLE_PRICE_PRO_MONTHLY_PEN
+        // BILLING_PADDLE_PRICE_GODSAI_MONTHLY_PEN
         String specificCurrencyKey = "billing.paddle.price." + planKey + "." + cycleKey + "." + currencyKey;
-        String specificKey = "billing.paddle.price." + planKey + "." + cycleKey;
-        String planKeyOnly = "billing.paddle.price." + planKey;
-
-        String currencySpecific = environment.getProperty(specificCurrencyKey, "").trim();
+        String currencySpecific = readProperty(specificCurrencyKey);
         if (!currencySpecific.isBlank()) return currencySpecific;
 
-        String specific = environment.getProperty(specificKey, "").trim();
+        // Seguridad: si la moneda es PEN, NO hacemos fallback a las variables antiguas sin moneda,
+        // porque esas variables apuntan a USD y Paddle lo convierte a soles.
+        if ("pen".equals(currencyKey)) {
+            return "";
+        }
+
+        // Compatibilidad para internacional/USD con tus variables antiguas.
+        String specificKey = "billing.paddle.price." + planKey + "." + cycleKey;
+        String specific = readProperty(specificKey);
         if (!specific.isBlank()) return specific;
 
-        String planPrice = environment.getProperty(planKeyOnly, "").trim();
+        String planKeyOnly = "billing.paddle.price." + planKey;
+        String planPrice = readProperty(planKeyOnly);
         if (!planPrice.isBlank()) return planPrice;
 
         return switch (planKey + "." + cycleKey + "." + currencyKey) {
@@ -294,6 +308,19 @@ public class SubscriptionServiceImpl implements SubscriptionService {
             case "godsai.monthly.usd" -> "pri_01ksgdxcatyps3scp8eqpnhv7n";
             default -> "";
         };
+    }
+
+    private String readProperty(String propertyKey) {
+        String value = environment.getProperty(propertyKey, "");
+        if (value != null && !value.trim().isBlank()) return value.trim();
+
+        // Lectura explicita para Railway/env vars, por si el mapeo relaxed no resuelve dots a underscores.
+        String envKey = propertyKey.toUpperCase(Locale.ROOT).replace('.', '_').replace('-', '_');
+        value = environment.getProperty(envKey, "");
+        if (value != null && !value.trim().isBlank()) return value.trim();
+
+        value = System.getenv(envKey);
+        return value == null ? "" : value.trim();
     }
     @Override
     public SubscriptionPayment reportManualPayment(Long tenantId, ReportPaymentRequest request) {
