@@ -260,7 +260,8 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                     "No existe priceId de Paddle configurado para el plan " + requestedPlan +
                             ", ciclo " + billingCycle + " y moneda " + currency +
                             ". Revisa la variable BILLING_PADDLE_PRICE_" +
-                            requestedPlan.replace("_", "") + "_" + billingCycle + "_" + currency
+                            requestedPlan.replace("_", "") + "_" + billingCycle + "_" + currency +
+                            " o BILLING_PADDLE_PRICE_" + requestedPlan.replace("_", "") + "_" + billingCycle + "_PERU"
             );
         }
 
@@ -286,6 +287,16 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         String specificCurrencyKey = "billing.paddle.price." + planKey + "." + cycleKey + "." + currencyKey;
         String currencySpecific = readProperty(specificCurrencyKey);
         if (!currencySpecific.isBlank()) return currencySpecific;
+
+        // Compatibilidad con tus variables actuales en Railway:
+        // BILLING_PADDLE_PRICE_STARTER_MONTHLY_PERU
+        // BILLING_PADDLE_PRICE_PRO_MONTHLY_PERU
+        // BILLING_PADDLE_PRICE_GODSAI_MONTHLY_PERU
+        if ("pen".equals(currencyKey)) {
+            String peruKey = "billing.paddle.price." + planKey + "." + cycleKey + ".peru";
+            String peruSpecific = readProperty(peruKey);
+            if (!peruSpecific.isBlank()) return peruSpecific;
+        }
 
         // Seguridad: si la moneda es PEN, NO hacemos fallback a las variables antiguas sin moneda,
         // porque esas variables apuntan a USD y Paddle lo convierte a soles.
