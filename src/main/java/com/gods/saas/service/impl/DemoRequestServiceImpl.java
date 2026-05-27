@@ -14,6 +14,7 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.text.Normalizer;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -29,6 +30,8 @@ public class DemoRequestServiceImpl implements DemoRequestService {
     private static final String DEFAULT_TIMEZONE = "America/Lima";
     private static final String DEFAULT_PASSWORD = "123456";
     private static final int TRIAL_DAYS = 7;
+    private static final String TEMP_PASSWORD_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+    private static final SecureRandom SECURE_RANDOM = new SecureRandom();
 
     private final DemoRequestRepository demoRequestRepository;
     private final TenantRepository tenantRepository;
@@ -117,7 +120,8 @@ public class DemoRequestServiceImpl implements DemoRequestService {
 
         Tenant tenant = createTenantFromDemoRequest(demoRequest, now);
         Branch branch = createMainBranch(tenant, demoRequest, now);
-        AppUser owner = createOwnerUser(tenant, branch, demoRequest, now);
+        String temporaryPassword = generateTemporaryPassword();
+        AppUser owner = createOwnerUser(tenant, branch, demoRequest, now, temporaryPassword);
         createOwnerRole(owner, tenant, branch);
         createTrialSubscription(tenant, now);
         createTenantSettings(tenant, now);
@@ -127,7 +131,7 @@ public class DemoRequestServiceImpl implements DemoRequestService {
         demoRequest.setReviewedAt(now);
         demoRequest.setCreatedTenantId(tenant.getId());
 
-        return mapToResponseWithAccess(demoRequestRepository.save(demoRequest));
+        return mapToResponseWithAccess(demoRequestRepository.save(demoRequest), temporaryPassword);
     }
 
     @Override
@@ -172,7 +176,7 @@ public class DemoRequestServiceImpl implements DemoRequestService {
 
         Tenant tenant = createTenantFromDemoRequest(demoRequest, now);
         Branch branch = createMainBranch(tenant, demoRequest, now);
-        AppUser owner = createOwnerUser(tenant, branch, demoRequest, now);
+        AppUser owner = createOwnerUser(tenant, branch, demoRequest, now, DEFAULT_PASSWORD);
         createOwnerRole(owner, tenant, branch);
         createTrialSubscription(tenant, now);
         createTenantSettings(tenant, now);
@@ -239,14 +243,20 @@ public class DemoRequestServiceImpl implements DemoRequestService {
         return branchRepository.save(branch);
     }
 
-    private AppUser createOwnerUser(Tenant tenant, Branch branch, DemoRequest demoRequest, LocalDateTime now) {
+    private AppUser createOwnerUser(
+            Tenant tenant,
+            Branch branch,
+            DemoRequest demoRequest,
+            LocalDateTime now,
+            String temporaryPassword
+    ) {
         AppUser owner = new AppUser();
         owner.setTenant(tenant);
         owner.setBranch(branch);
         owner.setNombre(demoRequest.getOwnerName());
         owner.setEmail(demoRequest.getOwnerEmail());
         owner.setPhone(demoRequest.getOwnerPhone());
-        owner.setPasswordHash(passwordEncoder.encode(DEFAULT_PASSWORD));
+        owner.setPasswordHash(passwordEncoder.encode(temporaryPassword));
         owner.setRol("OWNER");
         owner.setActivo(true);
         owner.setFechaCreacion(now);
@@ -350,7 +360,7 @@ public class DemoRequestServiceImpl implements DemoRequestService {
                 .build();
     }
 
-    private DemoRequestResponse mapToResponseWithAccess(DemoRequest demoRequest) {
+    private DemoRequestResponse mapToResponseWithAccess(DemoRequest demoRequest, String temporaryPassword) {
         return DemoRequestResponse.builder()
                 .id(demoRequest.getId())
                 .businessName(demoRequest.getBusinessName())
@@ -370,11 +380,19 @@ public class DemoRequestServiceImpl implements DemoRequestService {
                 .reviewedBy(demoRequest.getReviewedBy())
                 .createdTenantId(demoRequest.getCreatedTenantId())
                 .accessEmail(demoRequest.getOwnerEmail())
-                .temporaryPassword(DEFAULT_PASSWORD)
+                .temporaryPassword(temporaryPassword)
                 .trialDays(TRIAL_DAYS)
                 .createdAt(demoRequest.getCreatedAt())
                 .reviewedAt(demoRequest.getReviewedAt())
                 .build();
+    }
+
+    private String generateTemporaryPassword() {
+        StringBuilder value = new StringBuilder("SG-");
+        for (int i = 0; i < 10; i++) {
+            value.append(TEMP_PASSWORD_CHARS.charAt(SECURE_RANDOM.nextInt(TEMP_PASSWORD_CHARS.length())));
+        }
+        return value.toString();
     }
 
     private String generateTenantCode(String businessName) {
