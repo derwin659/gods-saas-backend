@@ -24,4 +24,6 @@ public class CreateDemoRequest {
     private String socialLink;
     private String googleMapsLink;
     private String message;
+
+    private String googleSignupToken;
 }

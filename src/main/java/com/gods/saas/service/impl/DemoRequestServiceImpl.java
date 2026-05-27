@@ -42,6 +42,8 @@ public class DemoRequestServiceImpl implements DemoRequestService {
     private final UserTenantRoleRepository userTenantRoleRepository;
     private final PasswordEncoder passwordEncoder;
     private final SubscriptionPlanPricingService pricingService;
+    private final GoogleOAuthService googleOAuthService;
+    private final JwtService jwtService;
 
     @Override
     public DemoRequestResponse createPublicRequest(CreateDemoRequest request) {
@@ -82,11 +84,21 @@ public class DemoRequestServiceImpl implements DemoRequestService {
     public DemoRequestResponse activatePublicTrial(CreateDemoRequest request) {
         validateCreateRequest(request);
 
-        String email = normalizeEmail(request.getOwnerEmail());
+        GoogleOAuthService.GoogleSignupProfile googleProfile = resolveGoogleSignupProfile(request);
+        String email = googleProfile != null
+                ? normalizeEmail(googleProfile.email())
+                : normalizeEmail(request.getOwnerEmail());
+        String ownerName = googleProfile != null && !isBlank(googleProfile.name())
+                ? trim(googleProfile.name())
+                : trim(request.getOwnerName());
         String phone = trim(request.getOwnerPhone());
 
         if (appUserRepository.existsByEmail(email)) {
             throw new IllegalArgumentException("Ya existe una cuenta con este correo. Inicia sesion o vincula Gmail desde seguridad.");
+        }
+
+        if (googleProfile != null && appUserRepository.findByGoogleSubject(googleProfile.subject()).isPresent()) {
+            throw new IllegalArgumentException("Este Gmail ya esta vinculado a otra cuenta.");
         }
 
         if (demoRequestRepository.existsByOwnerEmailIgnoreCaseAndStatus(email, DemoRequestStatus.PENDING_REVIEW)) {
@@ -102,7 +114,7 @@ public class DemoRequestServiceImpl implements DemoRequestService {
         DemoRequest demoRequest = DemoRequest.builder()
                 .businessName(trim(request.getBusinessName()))
                 .businessType(request.getBusinessType() != null ? request.getBusinessType() : BusinessType.BARBERSHOP)
-                .ownerName(trim(request.getOwnerName()))
+                .ownerName(ownerName)
                 .ownerEmail(email)
                 .ownerPhone(phone)
                 .country(trimToNull(request.getCountry()))
@@ -122,6 +134,9 @@ public class DemoRequestServiceImpl implements DemoRequestService {
         Branch branch = createMainBranch(tenant, demoRequest, now);
         String temporaryPassword = generateTemporaryPassword();
         AppUser owner = createOwnerUser(tenant, branch, demoRequest, now, temporaryPassword);
+        if (googleProfile != null) {
+            linkOwnerWithGoogle(owner, googleProfile, now);
+        }
         createOwnerRole(owner, tenant, branch);
         createTrialSubscription(tenant, now);
         createTenantSettings(tenant, now);
@@ -131,7 +146,12 @@ public class DemoRequestServiceImpl implements DemoRequestService {
         demoRequest.setReviewedAt(now);
         demoRequest.setCreatedTenantId(tenant.getId());
 
-        return mapToResponseWithAccess(demoRequestRepository.save(demoRequest), temporaryPassword);
+        return mapToResponseWithAccess(
+                demoRequestRepository.save(demoRequest),
+                googleProfile == null ? temporaryPassword : "Ingresa con Google",
+                googleProfile,
+                buildOwnerSession(owner, tenant, branch)
+        );
     }
 
     @Override
@@ -264,6 +284,39 @@ public class DemoRequestServiceImpl implements DemoRequestService {
         return appUserRepository.save(owner);
     }
 
+    private void linkOwnerWithGoogle(
+            AppUser owner,
+            GoogleOAuthService.GoogleSignupProfile profile,
+            LocalDateTime now
+    ) {
+        owner.setGoogleSubject(profile.subject());
+        owner.setGoogleEmail(profile.email());
+        owner.setGoogleName(profile.name());
+        owner.setGooglePictureUrl(profile.pictureUrl());
+        owner.setGoogleLinkedAt(now);
+        appUserRepository.save(owner);
+    }
+
+    private com.gods.saas.domain.dto.LoginFinalResponse buildOwnerSession(
+            AppUser owner,
+            Tenant tenant,
+            Branch branch
+    ) {
+        String token = jwtService.generateToken(owner, tenant.getId(), RoleType.OWNER.name(), branch.getId());
+        return com.gods.saas.domain.dto.LoginFinalResponse.builder()
+                .token(token)
+                .userId(owner.getId())
+                .nombre(owner.getNombre())
+                .email(owner.getEmail())
+                .tenantId(tenant.getId())
+                .tenantName(tenant.getNombre())
+                .businessType(tenant.getBusinessType())
+                .branchId(branch.getId())
+                .branchName(branch.getNombre())
+                .role(RoleType.OWNER.name())
+                .build();
+    }
+
     private void createOwnerRole(AppUser owner, Tenant tenant, Branch branch) {
         UserTenantRole role = new UserTenantRole();
         role.setUser(owner);
@@ -360,7 +413,12 @@ public class DemoRequestServiceImpl implements DemoRequestService {
                 .build();
     }
 
-    private DemoRequestResponse mapToResponseWithAccess(DemoRequest demoRequest, String temporaryPassword) {
+    private DemoRequestResponse mapToResponseWithAccess(
+            DemoRequest demoRequest,
+            String temporaryPassword,
+            GoogleOAuthService.GoogleSignupProfile googleProfile,
+            com.gods.saas.domain.dto.LoginFinalResponse session
+    ) {
         return DemoRequestResponse.builder()
                 .id(demoRequest.getId())
                 .businessName(demoRequest.getBusinessName())
@@ -382,9 +440,20 @@ public class DemoRequestServiceImpl implements DemoRequestService {
                 .accessEmail(demoRequest.getOwnerEmail())
                 .temporaryPassword(temporaryPassword)
                 .trialDays(TRIAL_DAYS)
+                .googleLinked(googleProfile != null)
+                .googlePictureUrl(googleProfile != null ? googleProfile.pictureUrl() : null)
+                .session(session)
                 .createdAt(demoRequest.getCreatedAt())
                 .reviewedAt(demoRequest.getReviewedAt())
                 .build();
+    }
+
+    private GoogleOAuthService.GoogleSignupProfile resolveGoogleSignupProfile(CreateDemoRequest request) {
+        String token = request.getGoogleSignupToken();
+        if (token == null || token.isBlank()) {
+            return null;
+        }
+        return googleOAuthService.verifySignupToken(token.trim());
     }
 
     private String generateTemporaryPassword() {

@@ -2,6 +2,7 @@ package com.gods.saas.domain.dto.response;
 
 import com.gods.saas.domain.enums.BusinessType;
 import com.gods.saas.domain.enums.DemoRequestStatus;
+import com.gods.saas.domain.dto.LoginFinalResponse;
 import lombok.Builder;
 import lombok.Getter;
 
@@ -38,6 +39,9 @@ public class DemoRequestResponse {
     private String accessEmail;
     private String temporaryPassword;
     private Integer trialDays;
+    private Boolean googleLinked;
+    private String googlePictureUrl;
+    private LoginFinalResponse session;
 
     private LocalDateTime createdAt;
     private LocalDateTime reviewedAt;

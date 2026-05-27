@@ -42,6 +42,8 @@ public class GoogleOAuthService {
 
     private static final String ACTION_LOGIN = "LOGIN";
     private static final String ACTION_LINK = "LINK";
+    private static final String ACTION_SIGNUP = "SIGNUP";
+    private static final String ACTION_SIGNUP_PROFILE = "SIGNUP_PROFILE";
 
     private final AppUserRepository appUserRepository;
     private final UserTenantRoleRepository userTenantRoleRepository;
@@ -66,9 +68,10 @@ public class GoogleOAuthService {
 
     public URI buildLoginUrl(String mode, String redirectUri) {
         assertConfigured();
+        String cleanMode = cleanMode(mode);
         Map<String, Object> state = new HashMap<>();
-        state.put("action", ACTION_LOGIN);
-        state.put("mode", cleanMode(mode));
+        state.put("action", "SIGNUP".equals(cleanMode) ? ACTION_SIGNUP : ACTION_LOGIN);
+        state.put("mode", cleanMode);
         state.put("redirectUri", cleanRedirectUri(redirectUri));
         state.put("createdAt", Instant.now().getEpochSecond());
         return buildGoogleUrl(signState(state));
@@ -108,8 +111,31 @@ public class GoogleOAuthService {
                     .toUri();
         }
 
+        if (ACTION_SIGNUP.equals(action)) {
+            return redirectWithSignupProfile(redirectUri, profile);
+        }
+
         LoginFinalResponse session = loginWithGoogle(profile);
         return redirectWithSession(redirectUri, session);
+    }
+
+    public GoogleSignupProfile verifySignupToken(String token) {
+        Map<String, Object> state = verifyState(token);
+        String action = String.valueOf(state.getOrDefault("action", ""));
+        if (!ACTION_SIGNUP_PROFILE.equals(action)) {
+            throw new ResponseStatusException(UNAUTHORIZED, "Token de registro Google invalido");
+        }
+
+        String subject = String.valueOf(state.getOrDefault("subject", "")).trim();
+        String email = String.valueOf(state.getOrDefault("email", "")).trim();
+        String name = String.valueOf(state.getOrDefault("name", "")).trim();
+        String pictureUrl = String.valueOf(state.getOrDefault("pictureUrl", "")).trim();
+
+        if (subject.isEmpty() || email.isEmpty()) {
+            throw new ResponseStatusException(UNAUTHORIZED, "Token de registro Google incompleto");
+        }
+
+        return new GoogleSignupProfile(subject, email, name, pictureUrl);
     }
 
     private URI buildGoogleUrl(String stateToken) {
@@ -201,6 +227,27 @@ public class GoogleOAuthService {
         } catch (Exception e) {
             throw new ResponseStatusException(INTERNAL_SERVER_ERROR, "No se pudo crear la sesion Google");
         }
+    }
+
+    private URI redirectWithSignupProfile(String redirectUri, GoogleProfile profile) {
+        Map<String, Object> signupState = new HashMap<>();
+        signupState.put("action", ACTION_SIGNUP_PROFILE);
+        signupState.put("subject", profile.subject());
+        signupState.put("email", profile.email());
+        signupState.put("name", profile.name());
+        signupState.put("pictureUrl", profile.pictureUrl());
+        signupState.put("createdAt", Instant.now().getEpochSecond());
+
+        String signupToken = signState(signupState);
+        return UriComponentsBuilder.fromUriString(redirectUri)
+                .queryParam("googleSignup", "1")
+                .queryParam("googleSignupToken", signupToken)
+                .queryParam("googleEmail", profile.email())
+                .queryParam("googleName", profile.name())
+                .queryParam("googlePicture", profile.pictureUrl())
+                .build()
+                .encode(StandardCharsets.UTF_8)
+                .toUri();
     }
 
     private GoogleProfile exchangeCodeForProfile(String code) {
@@ -362,6 +409,8 @@ public class GoogleOAuthService {
             );
         }
     }
+
+    public record GoogleSignupProfile(String subject, String email, String name, String pictureUrl) {}
 
     private record GoogleProfile(String subject, String email, String name, String pictureUrl) {}
 }
