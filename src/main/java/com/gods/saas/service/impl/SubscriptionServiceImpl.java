@@ -241,12 +241,10 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         String currency = resolveCurrencyForTenant(tenantId, sub.getCurrency());
         double amount = calculateExpectedAmount(requestedPlan, billingCycle, tenantId, currency);
 
-        if ("PEN".equalsIgnoreCase(currency)) {
-            throw new BusinessException(
-                    "MANUAL_PAYMENT_REQUIRED",
-                    "Para Peru se mantiene el pago manual por Yape o transferencia."
-            );
-        }
+        // Permitimos checkout con Paddle tambien para Peru/PEN.
+        // El cliente puede elegir pago manual por Yape o pago automatico con tarjeta.
+        // Si Paddle no tiene configurado el priceId correcto para el entorno,
+        // se controlara abajo con PADDLE_NOT_CONFIGURED.
 
         if (!"MONTHLY".equalsIgnoreCase(billingCycle)) {
             throw new BusinessException(
