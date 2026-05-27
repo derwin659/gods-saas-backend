@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -34,6 +35,7 @@ public class AuthController {
     private final CustomerService customerService;
     private final AuthService authService;
     private final JwtService jwtService;
+    private final GoogleOAuthService googleOAuthService;
     private final UserTenantRoleService userTenantRoleService;
     private final PasswordEncoder passwordEncoder;
 
@@ -53,6 +55,26 @@ public class AuthController {
     public ResponseEntity<Void> sendOtp(@RequestBody SendOtpRequest request) {
         authService.sendOtp(request);
         return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/google/start")
+    public ResponseEntity<Void> startGoogleLogin(
+            @RequestParam(required = false) String mode,
+            @RequestParam(required = false) String redirectUri
+    ) {
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .header(HttpHeaders.LOCATION, googleOAuthService.buildLoginUrl(mode, redirectUri).toString())
+                .build();
+    }
+
+    @GetMapping("/google/callback")
+    public ResponseEntity<Void> googleCallback(
+            @RequestParam String code,
+            @RequestParam String state
+    ) {
+        return ResponseEntity.status(HttpStatus.FOUND)
+                .header(HttpHeaders.LOCATION, googleOAuthService.handleCallback(code, state).toString())
+                .build();
     }
 
     @PostMapping("/otp/verify")

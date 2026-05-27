@@ -30,6 +30,16 @@ public interface UserTenantRoleRepository extends JpaRepository<UserTenantRole, 
 
     List<UserTenantRole> findByUserId(Long userId);
 
+    @Query("""
+    select utr
+    from UserTenantRole utr
+    join fetch utr.tenant t
+    left join fetch utr.branch b
+    where utr.user.id = :userId
+    order by utr.id asc
+""")
+    List<UserTenantRole> findByUserIdWithRelations(@Param("userId") Long userId);
+
     Optional<UserTenantRole> findByUserIdAndTenantId(Long userId, Long tenantId);
 
     List<UserTenantRole> findByTenantId(Long tenantId);
