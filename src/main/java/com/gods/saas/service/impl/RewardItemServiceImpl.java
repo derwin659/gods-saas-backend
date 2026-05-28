@@ -10,6 +10,8 @@ import com.gods.saas.domain.repository.SubscriptionRepository;
 import com.gods.saas.domain.repository.TenantRepository;
 import com.gods.saas.service.impl.impl.NotificationService;
 import com.gods.saas.service.impl.impl.RewardItemService;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -29,6 +31,9 @@ public class RewardItemServiceImpl implements RewardItemService {
     private final SubscriptionRepository subscriptionRepository;
     private final NotificationService notificationService;
     private final CloudinaryStorageService cloudinaryStorageService;
+
+    @PersistenceContext
+    private EntityManager entityManager;
 
     @Override
     public List<RewardItemResponse> getAll(Long tenantId, Boolean onlyActive) {
@@ -123,6 +128,17 @@ public class RewardItemServiceImpl implements RewardItemService {
 
         RewardItem entity = repository.findByIdAndTenant_Id(id, tenantId)
                 .orElseThrow(() -> new RuntimeException("Premio no encontrado"));
+
+        // Eliminación real:
+        // 1) Primero borra los canjes asociados para evitar error por FK.
+        // 2) Luego borra el premio.
+        // OJO: esto elimina también el historial de canjes de este premio.
+        entityManager.createNativeQuery(
+                        "DELETE FROM reward_redemption WHERE tenant_id = :tenantId AND reward_id = :rewardId"
+                )
+                .setParameter("tenantId", tenantId)
+                .setParameter("rewardId", id)
+                .executeUpdate();
 
         repository.delete(entity);
     }
