@@ -356,69 +356,93 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
     );
 
     @Query(value = """
+        with sale_barbers as (
+            select
+                s.sale_id,
+                count(distinct si.barber_user_id) as barber_count
+            from sale s
+            join sale_item si on si.sale_id = s.sale_id
+            where s.tenant_id = :tenantId
+              and (:branchId is null or s.branch_id = :branchId)
+              and si.barber_user_id is not null
+              and COALESCE(s.sale_date, s.fecha_creacion) >= :start
+              and COALESCE(s.sale_date, s.fecha_creacion) < :end
+            group by s.sale_id
+        ),
+        barber_sale_rows as (
+            select
+                u.user_id as barberId,
+                u.nombre as barberName,
+                s.sale_id,
+                coalesce(s.total, 0) as saleTotal,
+                coalesce(s.subtotal, 0) as saleSubtotal,
+                coalesce(s.discount, 0) as saleDiscount,
+                coalesce(sb.barber_count, 1) as barberCount,
+                upper(trim(coalesce(s.metodo_pago, ''))) as metodoPago,
+                coalesce(sum(si.subtotal), 0) as barberSubtotal
+            from sale s
+            join sale_item si on si.sale_id = s.sale_id
+            join app_user u on u.user_id = si.barber_user_id
+            join sale_barbers sb on sb.sale_id = s.sale_id
+            where s.tenant_id = :tenantId
+              and (:branchId is null or s.branch_id = :branchId)
+              and COALESCE(s.sale_date, s.fecha_creacion) >= :start
+              and COALESCE(s.sale_date, s.fecha_creacion) < :end
+            group by
+                u.user_id,
+                u.nombre,
+                s.sale_id,
+                s.total,
+                s.subtotal,
+                s.discount,
+                sb.barber_count,
+                s.metodo_pago
+        )
         select
-            u.user_id as barberId,
-            u.nombre as barberName,
+            r.barberId as barberId,
+            r.barberName as barberName,
             coalesce(sum(
                 case
-                    when upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
+                    when r.metodoPago in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
                         then 0
-                    when coalesce(s.subtotal, 0) <= 0
+                    when r.saleTotal <= 0
+                        then 0
+                    when r.barberCount = 1
+                        then r.saleTotal
+                    when r.saleSubtotal <= 0
                         then 0
                     else greatest(
-                        coalesce(si.subtotal, 0)
+                        r.barberSubtotal
                         - (
-                            least(coalesce(s.discount, 0), coalesce(s.subtotal, 0))
-                            * coalesce(si.subtotal, 0)
-                            / coalesce(nullif(s.subtotal, 0), 1)
+                            least(r.saleDiscount, r.saleSubtotal)
+                            * r.barberSubtotal
+                            / coalesce(nullif(r.saleSubtotal, 0), 1)
                         ),
                         0
                     )
                 end
             ), 0) as totalSales,
-            count(distinct s.sale_id) as salesCount,
+            count(distinct r.sale_id) as salesCount,
             count(distinct case
-                when upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
+                when r.metodoPago in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
                     then null
-                else s.sale_id
+                else r.sale_id
             end) as paidSalesCount,
             count(distinct case
-                when upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
-                    then s.sale_id
+                when r.metodoPago in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
+                    then r.sale_id
                 else null
             end) as courtesySalesCount,
             coalesce(sum(
                 case
-                    when upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
-                        then coalesce(si.subtotal, 0)
+                    when r.metodoPago in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
+                        then r.barberSubtotal
                     else 0
                 end
             ), 0) as courtesyReferenceAmount
-        from sale s
-        join sale_item si on si.sale_id = s.sale_id
-        join app_user u on u.user_id = si.barber_user_id
-        where s.tenant_id = :tenantId
-          and (:branchId is null or s.branch_id = :branchId)
-          and COALESCE(s.sale_date, s.fecha_creacion) >= :start
-          and COALESCE(s.sale_date, s.fecha_creacion) < :end
-        group by u.user_id, u.nombre
-        order by coalesce(sum(
-            case
-                when upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
-                    then 0
-                when coalesce(s.subtotal, 0) <= 0
-                    then 0
-                else greatest(
-                    coalesce(si.subtotal, 0)
-                    - (
-                        least(coalesce(s.discount, 0), coalesce(s.subtotal, 0))
-                        * coalesce(si.subtotal, 0)
-                        / coalesce(nullif(s.subtotal, 0), 1)
-                    ),
-                    0
-                )
-            end
-        ), 0) desc, u.nombre asc
+        from barber_sale_rows r
+        group by r.barberId, r.barberName
+        order by totalSales desc, r.barberName asc
         """, nativeQuery = true)
     List<BarberSalesSummaryProjection> getBarberSalesSummary(
             @Param("tenantId") Long tenantId,
