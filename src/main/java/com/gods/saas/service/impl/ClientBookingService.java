@@ -1,6 +1,7 @@
 package com.gods.saas.service.impl;
 
 import com.gods.saas.domain.dto.request.CreateAppointmentRequest;
+import com.gods.saas.domain.dto.request.PublicCreateAppointmentRequest;
 import com.gods.saas.domain.dto.response.*;
 import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.*;
@@ -30,6 +31,7 @@ public class ClientBookingService {
 
     private final TenantPaymentMethodRepository tenantPaymentMethodRepository;
     private final TenantSettingsRepository tenantSettingsRepository;
+    private final TenantRepository tenantRepository;
 
     private static final LocalTime DEFAULT_OPENING_TIME = LocalTime.of(8, 0);
     private static final LocalTime DEFAULT_CLOSING_TIME = LocalTime.of(21, 0);
@@ -939,6 +941,196 @@ public class ClientBookingService {
         }
 
         return discount.setScale(2, RoundingMode.HALF_UP);
+    }
+
+    public BookingBootstrapResponse getPublicBootstrapByCode(
+            String codigoNegocio,
+            Long branchId,
+            Long barberId
+    ) {
+        Tenant tenant = findActiveTenantByCode(codigoNegocio);
+
+        // Reutilizamos tu bootstrap existente. Los filtros branchId/barberId
+        // se aplican en el frontend público cuando el link viene preseleccionado.
+        return getBootstrap(tenant.getId());
+    }
+
+    public PublicBookingLinkInfoResponse getPublicBookingLinkInfo(
+            String codigoNegocio,
+            Long branchId,
+            Long barberId
+    ) {
+        Tenant tenant = findActiveTenantByCode(codigoNegocio);
+
+        Branch branch = null;
+        if (branchId != null) {
+            branch = branchRepository.findById(branchId)
+                    .orElseThrow(() -> new RuntimeException("Sede no encontrada."));
+
+            if (branch.getTenant() == null || !tenant.getId().equals(branch.getTenant().getId())) {
+                throw new RuntimeException("La sede no pertenece al negocio.");
+            }
+        }
+
+        AppUser barber = null;
+        if (barberId != null) {
+            barber = appUserRepository.findByIdAndTenant_Id(barberId, tenant.getId())
+                    .orElseThrow(() -> new RuntimeException("Barbero no encontrado."));
+
+            if (branchId != null) {
+                validateBarberBranch(barber, branchId);
+            }
+        }
+
+        return PublicBookingLinkInfoResponse.builder()
+                .codigoNegocio(tenant.getCodigo())
+                .tenantId(tenant.getId())
+                .branchId(branchId)
+                .barberId(barberId)
+                .tenantName(tenant.getNombre())
+                .branchName(branch != null ? branch.getNombre() : null)
+                .barberName(barber != null ? buildUserFullName(barber) : null)
+                .bookingLink(buildBookingLink(tenant.getCodigo(), branchId, barberId))
+                .build();
+    }
+
+    public BookingAvailabilityResponse getPublicAvailabilityByCode(
+            String codigoNegocio,
+            Long branchId,
+            Long serviceId,
+            String date,
+            Long barberId
+    ) {
+        Tenant tenant = findActiveTenantByCode(codigoNegocio);
+
+        return getAvailability(
+                tenant.getId(),
+                branchId,
+                serviceId,
+                date,
+                barberId
+        );
+    }
+
+    @Transactional
+    public CreateAppointmentResponse createPublicAppointment(
+            String codigoNegocio,
+            PublicCreateAppointmentRequest request
+    ) {
+        Tenant tenant = findActiveTenantByCode(codigoNegocio);
+
+        Customer customer = resolveOrCreatePublicCustomer(tenant, request);
+
+        CreateAppointmentRequest internalRequest = new CreateAppointmentRequest();
+        internalRequest.setBranchId(request.getBranchId());
+        internalRequest.setServiceId(request.getServiceId());
+        internalRequest.setBarberId(request.getBarberId());
+        internalRequest.setDate(request.getDate());
+        internalRequest.setHoraInicio(request.getHoraInicio());
+        internalRequest.setPromotionId(request.getPromotionId());
+        internalRequest.setDepositRequired(request.getDepositRequired());
+        internalRequest.setDepositPaymentMethodId(request.getDepositPaymentMethodId());
+        internalRequest.setDepositAmount(request.getDepositAmount());
+        internalRequest.setDepositOperationCode(request.getDepositOperationCode());
+        internalRequest.setDepositEvidenceUrl(request.getDepositEvidenceUrl());
+        internalRequest.setDepositNote(request.getDepositNote());
+
+        return createAppointment(tenant.getId(), customer.getId(), internalRequest);
+    }
+
+    private Tenant findActiveTenantByCode(String codigoNegocio) {
+        String code = trimToNull(codigoNegocio);
+        if (code == null) {
+            throw new RuntimeException("Código de negocio requerido.");
+        }
+
+        return tenantRepository.findByCodigoIgnoreCaseAndActiveTrue(code)
+                .orElseThrow(() -> new RuntimeException("Negocio no encontrado."));
+    }
+
+    private Customer resolveOrCreatePublicCustomer(Tenant tenant, PublicCreateAppointmentRequest request) {
+        String phone = normalizePhone(request.getCustomerPhone());
+        String email = trimToNull(request.getCustomerEmail());
+        String firstName = trimToNull(request.getCustomerName());
+        String lastName = trimToNull(request.getCustomerLastName());
+
+        if (phone == null) {
+            throw new RuntimeException("Ingresa el teléfono del cliente.");
+        }
+
+        if (firstName == null) {
+            throw new RuntimeException("Ingresa el nombre del cliente.");
+        }
+
+        Customer existing = customerRepository.findByTenant_IdAndTelefonoAndActivoTrue(tenant.getId(), phone)
+                .orElse(null);
+
+        if (existing != null) {
+            boolean changed = false;
+
+            if (trimToNull(existing.getNombres()) == null) {
+                existing.setNombres(firstName);
+                changed = true;
+            }
+            if (trimToNull(existing.getApellidos()) == null && lastName != null) {
+                existing.setApellidos(lastName);
+                changed = true;
+            }
+            if (trimToNull(existing.getEmail()) == null && email != null) {
+                existing.setEmail(email);
+                changed = true;
+            }
+
+            return changed ? customerRepository.save(existing) : existing;
+        }
+
+        Customer customer = Customer.builder()
+                .tenant(tenant)
+                .nombres(firstName)
+                .apellidos(lastName)
+                .telefono(phone)
+                .email(email)
+                .phoneVerified(false)
+                .phonePendiente(null)
+                .phonePendienteVerificacion(false)
+                .origenCliente("PUBLIC_BOOKING")
+                .puntosDisponibles(0)
+                .activo(true)
+                .source("PUBLIC_BOOKING")
+                .build();
+
+        return customerRepository.save(customer);
+    }
+
+    private String buildBookingLink(String codigoNegocio, Long branchId, Long barberId) {
+        StringBuilder url = new StringBuilder("https://www.supergodsapp.com/reservar/")
+                .append(codigoNegocio.trim());
+
+        boolean hasQuery = false;
+        if (branchId != null) {
+            url.append("?branchId=").append(branchId);
+            hasQuery = true;
+        }
+        if (barberId != null) {
+            url.append(hasQuery ? "&" : "?").append("barberId=").append(barberId);
+        }
+
+        return url.toString();
+    }
+
+    private String buildUserFullName(AppUser user) {
+        String nombre = user.getNombre() == null ? "" : user.getNombre().trim();
+        String apellido = user.getApellido() == null ? "" : user.getApellido().trim();
+        String fullName = (nombre + " " + apellido).trim();
+        return fullName.isBlank() ? user.getEmail() : fullName;
+    }
+
+    private String normalizePhone(String phone) {
+        String value = trimToNull(phone);
+        if (value == null) return null;
+
+        String normalized = value.replaceAll("[^0-9+]", "").trim();
+        return normalized.isEmpty() ? null : normalized;
     }
 
     private BigDecimal extractFirstMoneyValue(String text) {

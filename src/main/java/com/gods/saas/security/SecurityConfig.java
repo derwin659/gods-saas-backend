@@ -62,6 +62,7 @@ public class SecurityConfig {
                         .requestMatchers(
                                 "/api/auth/login-basic",
                                 "/api/auth/**",
+                                "/api/public/booking/**",
                                 "/api/auth/cliente/register",
                                 "/api/auth/cliente/otp/request",
                                 "/api/auth/cliente/otp/verify",
@@ -104,6 +105,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/owner/device-tokens/**")
                         .hasAnyRole("OWNER", "ADMIN", "BARBER", "CASHIER")
                         .requestMatchers("/api/public/**").permitAll()
+                        .requestMatchers("/api/owner/booking-links/**").hasAnyRole("OWNER", "ADMIN")
                         .requestMatchers("/api/owner/home/**").hasAnyRole("OWNER", "ADMIN")
                         .requestMatchers("/api/owner/agenda/**").hasAnyRole("OWNER", "ADMIN")
                         .requestMatchers("/api/owner/reports/**").hasAnyRole("OWNER", "ADMIN")
