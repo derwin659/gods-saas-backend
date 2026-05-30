@@ -798,9 +798,6 @@ public class SaleServiceImpl implements SaleService {
             return "ADMIN";
         }
 
-        if (hasTenantRole(userId, tenantId, RoleType.CASHIER)) {
-            return "CASHIER";
-        }
 
         if (hasTenantRole(userId, tenantId, RoleType.OWNER)) {
             return "OWNER";
