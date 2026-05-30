@@ -86,6 +86,23 @@ public class Sale {
     @JoinColumn(name = "appointment_id")
     private Appointment appointment;
 
+    @Column(name = "payment_validation_status", length = 30, nullable = false)
+    @Builder.Default
+    private String paymentValidationStatus = "APPROVED";
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "validated_by_user_id")
+    private AppUser validatedByUser;
+
+    @Column(name = "validated_at")
+    private LocalDateTime validatedAt;
+
+    @Column(name = "rejection_reason", length = 500)
+    private String rejectionReason;
+
+    @Column(name = "created_by_role", length = 30)
+    private String createdByRole;
+
     @OneToMany(mappedBy = "sale", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<SaleItem> items = new ArrayList<>();

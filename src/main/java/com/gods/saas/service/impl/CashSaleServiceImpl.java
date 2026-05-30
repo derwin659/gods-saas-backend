@@ -97,6 +97,16 @@ public class CashSaleServiceImpl implements CashSaleService {
         saleRequest.setTipAmount(safe(request.getTipAmount()));
         saleRequest.setTipBarberUserId(request.getTipBarberUserId());
         saleRequest.setPayments(request.getPayments());
+        saleRequest.setPaymentValidationStatus(
+                request.getPaymentValidationStatus() == null || request.getPaymentValidationStatus().isBlank()
+                        ? "APPROVED"
+                        : request.getPaymentValidationStatus()
+        );
+        saleRequest.setCreatedByRole(
+                request.getCreatedByRole() == null || request.getCreatedByRole().isBlank()
+                        ? "OWNER"
+                        : request.getCreatedByRole()
+        );
 
         saleRequest.setCutType(request.getCutType());
         saleRequest.setCutDetail(request.getCutDetail());
@@ -182,6 +192,65 @@ public class CashSaleServiceImpl implements CashSaleService {
                 .orElseThrow(() -> new EntityNotFoundException("Venta no encontrada"));
 
         return mapResponse(sale, 0);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<SaleResponse> getPendingValidationSales(Long tenantId, Long branchId) {
+        return saleRepository.findPendingValidationSales(tenantId, branchId)
+                .stream()
+                .map(sale -> mapResponse(sale, 0))
+                .collect(Collectors.toList());
+    }
+
+    @Override
+    @Transactional
+    public SaleResponse approveSalePayment(Long tenantId, Long branchId, Long userId, Long saleId) {
+        requireOwnerForSensitiveSaleAction(tenantId, userId);
+
+        Sale sale = saleRepository.findByIdAndTenant_IdAndBranch_Id(saleId, tenantId, branchId)
+                .orElseThrow(() -> new RuntimeException("Venta no encontrada"));
+
+        if (!"PENDING_VALIDATION".equals(resolveValidationStatus(sale))) {
+            throw new RuntimeException("Esta venta ya no está pendiente de validación.");
+        }
+
+        AppUser validator = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario validador no encontrado"));
+
+        sale.setPaymentValidationStatus("APPROVED");
+        sale.setValidatedByUser(validator);
+        sale.setValidatedAt(tenantTimeService.now(tenantId));
+        sale.setRejectionReason(null);
+
+        Sale saved = saleRepository.save(sale);
+        return mapResponse(saved, 0);
+    }
+
+    @Override
+    @Transactional
+    public SaleResponse rejectSalePayment(Long tenantId, Long branchId, Long userId, Long saleId, String reason) {
+        requireOwnerForSensitiveSaleAction(tenantId, userId);
+
+        Sale sale = saleRepository.findByIdAndTenant_IdAndBranch_Id(saleId, tenantId, branchId)
+                .orElseThrow(() -> new RuntimeException("Venta no encontrada"));
+
+        if (!"PENDING_VALIDATION".equals(resolveValidationStatus(sale))) {
+            throw new RuntimeException("Esta venta ya no está pendiente de validación.");
+        }
+
+        AppUser validator = userRepository.findById(userId)
+                .orElseThrow(() -> new RuntimeException("Usuario validador no encontrado"));
+
+        sale.setPaymentValidationStatus("REJECTED");
+        sale.setValidatedByUser(validator);
+        sale.setValidatedAt(tenantTimeService.now(tenantId));
+        sale.setRejectionReason(reason == null || reason.trim().isEmpty()
+                ? "Pago rechazado por el dueño/administrador."
+                : reason.trim());
+
+        Sale saved = saleRepository.save(sale);
+        return mapResponse(saved, 0);
     }
 
     @Override
@@ -414,9 +483,22 @@ public class CashSaleServiceImpl implements CashSaleService {
                                         .build()
                         ).collect(Collectors.toList())
                 )
+                .paymentValidationStatus(resolveValidationStatus(sale))
+                .validatedByUserId(sale.getValidatedByUser() != null ? sale.getValidatedByUser().getId() : null)
+                .validatedByUserName(sale.getValidatedByUser() != null ? sale.getValidatedByUser().getNombre() : null)
+                .validatedAt(sale.getValidatedAt())
+                .rejectionReason(sale.getRejectionReason())
+                .createdByRole(sale.getCreatedByRole())
                 .build();
     }
 
+
+    private String resolveValidationStatus(Sale sale) {
+        if (sale == null || sale.getPaymentValidationStatus() == null || sale.getPaymentValidationStatus().isBlank()) {
+            return "APPROVED";
+        }
+        return sale.getPaymentValidationStatus();
+    }
 
     private String buildCustomerFullName(Customer customer) {
         if (customer == null) {

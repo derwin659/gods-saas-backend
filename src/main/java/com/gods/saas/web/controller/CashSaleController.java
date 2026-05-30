@@ -1,6 +1,7 @@
 package com.gods.saas.web.controller;
 
 import com.gods.saas.domain.dto.request.CreateCashSaleRequest;
+import com.gods.saas.domain.dto.request.RejectSalePaymentRequest;
 import com.gods.saas.domain.dto.request.UpdateSaleRequest;
 import com.gods.saas.domain.dto.response.SaleResponse;
 import com.gods.saas.service.impl.impl.CashSaleService;
@@ -39,6 +40,43 @@ public class CashSaleController {
         Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
         return cashSaleService.getTodaySales(tenantId, effectiveBranchId);
     }
+
+    @GetMapping("/pending-validation")
+    public List<SaleResponse> pendingValidation(
+            @RequestAttribute("tenantId") Long tenantId,
+            @RequestAttribute("branchId") Long sessionBranchId,
+            @RequestParam(required = false) Long branchId
+    ) {
+        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        return cashSaleService.getPendingValidationSales(tenantId, effectiveBranchId);
+    }
+
+    @PostMapping("/{saleId}/approve-payment")
+    public SaleResponse approvePayment(
+            @RequestAttribute("tenantId") Long tenantId,
+            @RequestAttribute("branchId") Long sessionBranchId,
+            @RequestAttribute("userId") Long userId,
+            @PathVariable Long saleId,
+            @RequestParam(required = false) Long branchId
+    ) {
+        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        return cashSaleService.approveSalePayment(tenantId, effectiveBranchId, userId, saleId);
+    }
+
+    @PostMapping("/{saleId}/reject-payment")
+    public SaleResponse rejectPayment(
+            @RequestAttribute("tenantId") Long tenantId,
+            @RequestAttribute("branchId") Long sessionBranchId,
+            @RequestAttribute("userId") Long userId,
+            @PathVariable Long saleId,
+            @RequestParam(required = false) Long branchId,
+            @RequestBody(required = false) RejectSalePaymentRequest request
+    ) {
+        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        String reason = request != null ? request.getReason() : null;
+        return cashSaleService.rejectSalePayment(tenantId, effectiveBranchId, userId, saleId, reason);
+    }
+
 
     @GetMapping
     public List<SaleResponse> byRange(

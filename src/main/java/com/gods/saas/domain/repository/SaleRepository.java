@@ -697,6 +697,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         where s.tenant.id = :tenantId
           and s.branch.id = :branchId
           and s.cashRegister.id = :cashRegisterId
+          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
         order by coalesce(s.saleDate, s.fechaCreacion) desc
         """)
     List<Sale> findCashSalesByCashRegister(
@@ -706,6 +707,27 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
     );
 
     Optional<Sale> findByIdAndTenant_IdAndBranch_Id(Long saleId, Long tenantId, Long branchId);
+
+    @Query("""
+        select distinct s
+        from Sale s
+        left join fetch s.customer
+        left join fetch s.user
+        left join fetch s.appointment
+        left join fetch s.items i
+        left join fetch i.service
+        left join fetch i.product
+        left join fetch i.barberUser
+        where s.tenant.id = :tenantId
+          and s.branch.id = :branchId
+          and s.paymentValidationStatus = 'PENDING_VALIDATION'
+        order by coalesce(s.saleDate, s.fechaCreacion) asc
+        """)
+    List<Sale> findPendingValidationSales(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId
+    );
+
 
     @Query("""
         select s
@@ -891,6 +913,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
           and s.branch.id = :branchId
           and coalesce(s.saleDate, s.fechaCreacion) >= :start
           and coalesce(s.saleDate, s.fechaCreacion) < :end
+          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
         order by coalesce(s.saleDate, s.fechaCreacion) desc
         """)
     List<Sale> findCashSalesByBusinessDateRange(

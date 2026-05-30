@@ -36,4 +36,11 @@ public class SaleResponse {
     private List<SalePaymentResponse> payments;
 
     private String barberName;
+
+    private String paymentValidationStatus;
+    private Long validatedByUserId;
+    private String validatedByUserName;
+    private LocalDateTime validatedAt;
+    private String rejectionReason;
+    private String createdByRole;
 }

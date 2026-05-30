@@ -13,6 +13,7 @@ public class CreateSaleFromAppointmentResponse {
     private String message;
 
     private Long saleId;
+    private String paymentValidationStatus;
     private Long appointmentId;
 
     private String cliente;

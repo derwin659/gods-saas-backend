@@ -32,4 +32,7 @@ public class CreateSaleRequest {
     private String cutType;
     private String cutDetail;
     private String cutObservations;
+
+    private String paymentValidationStatus;
+    private String createdByRole;
 }

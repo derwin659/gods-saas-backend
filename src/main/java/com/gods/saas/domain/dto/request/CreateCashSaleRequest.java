@@ -36,4 +36,7 @@ public class CreateCashSaleRequest {
     private String cutType;
     private String cutDetail;
     private String cutObservations;
+
+    private String paymentValidationStatus;
+    private String createdByRole;
 }

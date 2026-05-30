@@ -104,6 +104,12 @@ public class SaleServiceImpl implements SaleService {
         sale.setAppointment(appointment);
         sale.setCashRegister(cashRegister);
         sale.setFechaCreacion(tenantTimeService.now(tenant.getId()));
+        sale.setPaymentValidationStatus(resolvePaymentValidationStatus(request.getPaymentValidationStatus()));
+        sale.setCreatedByRole(resolveCreatedByRole(request.getCreatedByRole()));
+        if ("APPROVED".equals(sale.getPaymentValidationStatus())) {
+            sale.setValidatedByUser(user);
+            sale.setValidatedAt(tenantTimeService.now(tenant.getId()));
+        }
 
         List<SaleItem> items = new ArrayList<>();
         List<SaleItemResponse> itemResponses = new ArrayList<>();
@@ -408,6 +414,12 @@ public class SaleServiceImpl implements SaleService {
                 .puntosDisponibles(puntosDisponibles)
                 .items(itemResponses)
                 .payments(mapPaymentResponses(savedSale))
+                .paymentValidationStatus(resolveSaleValidationStatus(savedSale))
+                .validatedByUserId(savedSale.getValidatedByUser() != null ? savedSale.getValidatedByUser().getId() : null)
+                .validatedByUserName(savedSale.getValidatedByUser() != null ? savedSale.getValidatedByUser().getNombre() : null)
+                .validatedAt(savedSale.getValidatedAt())
+                .rejectionReason(savedSale.getRejectionReason())
+                .createdByRole(savedSale.getCreatedByRole())
                 .build();
     }
 

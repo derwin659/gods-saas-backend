@@ -284,6 +284,8 @@ public class BarberSaleService {
         saleRequest.setTipAmount(tipAmount);
         saleRequest.setTipBarberUserId(userId);
         saleRequest.setPayments(request.getPayments());
+        saleRequest.setPaymentValidationStatus("PENDING_VALIDATION");
+        saleRequest.setCreatedByRole("BARBER");
         saleRequest.setCutType(request.getCutType());
         saleRequest.setCutDetail(request.getCutDetail());
         saleRequest.setCutObservations(request.getCutObservations());
@@ -329,8 +331,9 @@ public class BarberSaleService {
 
         CreateSaleFromAppointmentResponse response = new CreateSaleFromAppointmentResponse();
         response.setSuccess(true);
-        response.setMessage("Venta registrada correctamente");
+        response.setMessage("Venta enviada para validación del dueño");
         response.setSaleId(saleResponse.getSaleId());
+        response.setPaymentValidationStatus(saleResponse.getPaymentValidationStatus());
         response.setAppointmentId(appointment.getId());
         response.setCliente(clienteNombre);
         response.setServicio(service.getNombre() != null ? service.getNombre() : "Servicio");

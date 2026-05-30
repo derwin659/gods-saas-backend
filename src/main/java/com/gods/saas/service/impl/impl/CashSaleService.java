@@ -21,5 +21,11 @@ public interface CashSaleService {
 
     SaleResponse updateSale(Long tenantId, Long branchId, Long userId, Long saleId, UpdateSaleRequest request);
 
+    List<SaleResponse> getPendingValidationSales(Long tenantId, Long branchId);
+
+    SaleResponse approveSalePayment(Long tenantId, Long branchId, Long userId, Long saleId);
+
+    SaleResponse rejectSalePayment(Long tenantId, Long branchId, Long userId, Long saleId, String reason);
+
     void deleteSale(Long tenantId, Long branchId, Long userId, Long saleId);
 }
