@@ -331,7 +331,7 @@ public class BarberSaleService {
 
         CreateSaleFromAppointmentResponse response = new CreateSaleFromAppointmentResponse();
         response.setSuccess(true);
-        response.setMessage("Venta enviada a caja correctamente. Quedará pendiente hasta que el dueño o administrador apruebe el pago.");
+        response.setMessage("Venta enviada a caja correctamente. Quedará pendiente hasta que el dueno o administrador apruebe el pago.");
         response.setSaleId(saleResponse.getSaleId());
         response.setPaymentValidationStatus(saleResponse.getPaymentValidationStatus());
         response.setAppointmentId(appointment.getId());
@@ -378,7 +378,7 @@ public class BarberSaleService {
         String depositStatus = normalize(appointment.getDepositStatus());
 
         if ("PENDING_VALIDATION".equals(depositStatus)) {
-            throw new RuntimeException("La reserva tiene un pago inicial pendiente de validación");
+            throw new RuntimeException("La reserva tiene un pago inicial pendiente de validacion");
         }
 
         if ("REJECTED".equals(depositStatus)) {

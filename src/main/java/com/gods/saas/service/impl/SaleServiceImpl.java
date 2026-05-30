@@ -106,6 +106,18 @@ public class SaleServiceImpl implements SaleService {
         sale.setFechaCreacion(tenantTimeService.now(tenant.getId()));
 
         String createdByRole = resolveCreatedByRole(request.getCreatedByRole());
+
+        // Seguridad extra:
+        // La venta que nace desde la atención de una cita del barbero debe quedar pendiente,
+        // aunque por error el request llegue sin createdByRole o con status APPROVED.
+        if (appointment != null && request.getAppointmentId() != null && !"OWNER".equals(createdByRole) && !"ADMIN".equals(createdByRole)) {
+            createdByRole = "BARBER";
+        }
+
+        if (appointment != null && request.getAppointmentId() != null && request.getCreatedByRole() == null) {
+            createdByRole = "BARBER";
+        }
+
         String validationStatus = resolvePaymentValidationStatus(request.getPaymentValidationStatus(), createdByRole);
 
         sale.setCreatedByRole(createdByRole);
