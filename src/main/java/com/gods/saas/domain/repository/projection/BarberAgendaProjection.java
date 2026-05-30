@@ -13,4 +13,9 @@ public interface BarberAgendaProjection {
     LocalDate getFecha();
     LocalTime getHoraInicio();
     LocalTime getHoraFin();
+
+    // Nota interna creada por el dueño al agendar la cita.
+    String getInternalNote();
+    String getNotaInterna();
+    String getNotes();
 }

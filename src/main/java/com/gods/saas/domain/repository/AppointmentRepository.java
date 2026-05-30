@@ -322,7 +322,10 @@ limit :limit
         a.estado as estado,
         a.fecha as fecha,
         a.hora_inicio as horaInicio,
-        a.hora_fin as horaFin
+        a.hora_fin as horaFin,
+        a.notas as internalNote,
+        a.notas as notaInterna,
+        a.notas as notes
     from appointment a
     left join customer c on c.customer_id = a.customer_id
     left join service s on s.service_id = a.service_id
