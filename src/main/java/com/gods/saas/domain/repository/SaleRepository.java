@@ -16,6 +16,9 @@ import java.util.Optional;
 @Repository
 public interface SaleRepository extends JpaRepository<Sale, Long> {
 
+    // Importante: reportes, dashboard y caja solo deben sumar ventas APROBADAS.
+    // Las ventas PENDING_VALIDATION no entran a producción/caja hasta que owner/admin apruebe.
+
     @Query(value = """
 SELECT
     c.customer_id AS customerId,
@@ -47,6 +50,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         count(s.sale_id) as salesCount
     from sale s
     where s.tenant_id = :tenantId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
       and (:branchId is null or s.branch_id = :branchId)
       and COALESCE(s.sale_date, s.fecha_creacion) >= :start
       and COALESCE(s.sale_date, s.fecha_creacion) < :end
@@ -80,6 +84,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         left join service se on se.service_id = si.service_id
         left join product p on p.product_id = si.product_id
         where s.tenant_id = :tenantId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
           and (:branchId is null or s.branch_id = :branchId)
           and COALESCE(s.sale_date, s.fecha_creacion) >= :start
           and COALESCE(s.sale_date, s.fecha_creacion) < :end
@@ -125,6 +130,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         from sale s
         join sale_payment sp on sp.sale_id = s.sale_id
         where s.tenant_id = :tenantId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
           and (:branchId is null or s.branch_id = :branchId)
           and COALESCE(s.sale_date, s.fecha_creacion) >= :start
           and COALESCE(s.sale_date, s.fecha_creacion) < :end
@@ -145,6 +151,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
             coalesce(s.total, 0) as amount
         from sale s
         where s.tenant_id = :tenantId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
           and (:branchId is null or s.branch_id = :branchId)
           and COALESCE(s.sale_date, s.fecha_creacion) >= :start
           and COALESCE(s.sale_date, s.fecha_creacion) < :end
@@ -179,9 +186,9 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         select coalesce(sum(s.total), 0)
         from Sale s
         where s.tenant.id = :tenantId
+          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
           and s.branch.id = :branchId
           and s.user.id = :barberId
-          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
           and coalesce(s.saleDate, s.fechaCreacion) >= :start
           and coalesce(s.saleDate, s.fechaCreacion) < :end
         """)
@@ -197,9 +204,9 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         select count(s)
         from Sale s
         where s.tenant.id = :tenantId
+          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
           and s.branch.id = :branchId
           and s.user.id = :barberId
-          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
           and coalesce(s.saleDate, s.fechaCreacion) >= :start
           and coalesce(s.saleDate, s.fechaCreacion) < :end
         """)
@@ -215,9 +222,9 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         select s
         from Sale s
         where s.tenant.id = :tenantId
+          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
           and s.branch.id = :branchId
           and s.user.id = :userId
-          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
           and coalesce(s.saleDate, s.fechaCreacion) >= :start
           and coalesce(s.saleDate, s.fechaCreacion) < :end
         """)
@@ -253,10 +260,10 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
             from sale s
             join sale_item six on six.sale_id = s.sale_id
             where s.tenant_id = :tenantId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
               and s.branch_id = :branchId
               and upper(trim(coalesce(s.metodo_pago, ''))) not in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
               and coalesce(s.total, 0) > 0
-              and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
               and coalesce(s.sale_date, s.fecha_creacion) >= :start
               and coalesce(s.sale_date, s.fecha_creacion) < :end
             group by s.sale_id, s.total, s.tip_amount, s.sale_date, s.fecha_creacion
@@ -269,6 +276,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
             from sale s
             join sale_item si on si.sale_id = s.sale_id
             where s.tenant_id = :tenantId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
               and s.branch_id = :branchId
               and si.barber_user_id = :barberId
               and (
@@ -281,7 +289,6 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
                   )
               and upper(trim(coalesce(s.metodo_pago, ''))) not in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
               and coalesce(s.total, 0) > 0
-              and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
               and coalesce(s.sale_date, s.fecha_creacion) >= :start
               and coalesce(s.sale_date, s.fecha_creacion) < :end
             group by s.sale_id, si.barber_user_id
@@ -316,6 +323,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         select coalesce(sum(s.total), 0)
         from Sale s
         where s.cashRegister.id = :cashRegisterId
+          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
         """)
     BigDecimal sumTotalByCashRegisterId(@Param("cashRegisterId") Long cashRegisterId);
 
@@ -334,6 +342,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
           on sp.sale_id = s.sale_id
          and upper(trim(sp.method)) in ('EFECTIVO', 'CASH')
         where s.cash_register_id = :cashRegisterId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
         """, nativeQuery = true)
     BigDecimal sumCashTotalByCashRegisterId(@Param("cashRegisterId") Long cashRegisterId);
 
@@ -341,6 +350,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         select coalesce(sum(s.total), 0)
         from Sale s
         where s.cashRegister.id = :cashRegisterId
+          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
           and coalesce(s.saleDate, s.fechaCreacion) >= :start
           and coalesce(s.saleDate, s.fechaCreacion) < :end
         """)
@@ -365,6 +375,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
           on sp.sale_id = s.sale_id
          and upper(trim(sp.method)) in ('EFECTIVO', 'CASH')
         where s.cash_register_id = :cashRegisterId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
           and COALESCE(s.sale_date, s.fecha_creacion) >= :start
           and COALESCE(s.sale_date, s.fecha_creacion) < :end
         """, nativeQuery = true)
@@ -380,6 +391,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         select s
         from Sale s
         where s.tenant.id = :tenantId
+          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
           and s.branch.id = :branchId
           and coalesce(s.saleDate, s.fechaCreacion) >= :from
           and coalesce(s.saleDate, s.fechaCreacion) < :to
@@ -401,6 +413,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
             from sale s
             join sale_item six on six.sale_id = s.sale_id
             where s.tenant_id = :tenantId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
               and (:branchId is null or s.branch_id = :branchId)
               and six.barber_user_id is not null
               and COALESCE(s.sale_date, s.fecha_creacion) >= :start
@@ -423,6 +436,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
             join sale_item si on si.sale_id = s.sale_id
             join app_user u on u.user_id = si.barber_user_id
             where s.tenant_id = :tenantId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
               and (:branchId is null or s.branch_id = :branchId)
               and COALESCE(s.sale_date, s.fecha_creacion) >= :start
               and COALESCE(s.sale_date, s.fecha_creacion) < :end
@@ -483,6 +497,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         select coalesce(sum(s.total), 0)
         from Sale s
         where s.tenant.id = :tenantId
+          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
           and (:branchId is null or s.branch.id = :branchId)
           and coalesce(s.saleDate, s.fechaCreacion) >= :start
           and coalesce(s.saleDate, s.fechaCreacion) < :end
@@ -498,6 +513,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         select count(s)
         from Sale s
         where s.tenant.id = :tenantId
+          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
           and (:branchId is null or s.branch.id = :branchId)
           and coalesce(s.saleDate, s.fechaCreacion) >= :start
           and coalesce(s.saleDate, s.fechaCreacion) < :end
@@ -514,6 +530,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         select count(distinct s.sale_id)
         from sale s
         where s.tenant_id = :tenantId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
           and (:branchId is null or s.branch_id = :branchId)
           and COALESCE(s.sale_date, s.fecha_creacion) >= :start
           and COALESCE(s.sale_date, s.fecha_creacion) < :end
@@ -530,6 +547,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         select count(distinct s.sale_id)
         from sale s
         where s.tenant_id = :tenantId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
           and (:branchId is null or s.branch_id = :branchId)
           and COALESCE(s.sale_date, s.fecha_creacion) >= :start
           and COALESCE(s.sale_date, s.fecha_creacion) < :end
@@ -547,6 +565,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         from sale s
         join sale_item si on si.sale_id = s.sale_id
         where s.tenant_id = :tenantId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
           and (:branchId is null or s.branch_id = :branchId)
           and COALESCE(s.sale_date, s.fecha_creacion) >= :start
           and COALESCE(s.sale_date, s.fecha_creacion) < :end
@@ -564,6 +583,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         from sale s
         join sale_item si on si.sale_id = s.sale_id
         where s.tenant_id = :tenantId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
           and (:branchId is null or s.branch_id = :branchId)
           and si.barber_user_id is not null
           and COALESCE(s.sale_date, s.fecha_creacion) >= :start
@@ -601,6 +621,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         left join service se on se.service_id = si.service_id
         left join product p on p.product_id = si.product_id
         where s.tenant_id = :tenantId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
           and (:branchId is null or s.branch_id = :branchId)
           and si.barber_user_id = :barberId
           and COALESCE(s.sale_date, s.fecha_creacion) >= :start
@@ -627,6 +648,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         from Sale s
         join s.branch b
         where s.tenant.id = :tenantId
+          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
           and (:fromDateTime is null or coalesce(s.saleDate, s.fechaCreacion) >= :fromDateTime)
           and (:toDateTime is null or coalesce(s.saleDate, s.fechaCreacion) < :toDateTime)
         group by b.id, b.nombre
@@ -653,6 +675,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         join si.barberUser u
         join s.branch b
         where s.tenant.id = :tenantId
+          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
           and (:branchId is null or b.id = :branchId)
           and (:fromDateTime is null or coalesce(s.saleDate, s.fechaCreacion) >= :fromDateTime)
           and (:toDateTime is null or coalesce(s.saleDate, s.fechaCreacion) < :toDateTime)
@@ -670,6 +693,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         select coalesce(sum(s.total), 0)
         from Sale s
         where s.tenant.id = :tenantId
+          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
           and (:branchId is null or s.branch.id = :branchId)
           and coalesce(s.saleDate, s.fechaCreacion) >= :start
           and coalesce(s.saleDate, s.fechaCreacion) < :end
@@ -685,6 +709,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         select coalesce(avg(s.total), 0)
         from Sale s
         where s.tenant.id = :tenantId
+          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
           and (:branchId is null or s.branch.id = :branchId)
           and coalesce(s.saleDate, s.fechaCreacion) >= :start
           and coalesce(s.saleDate, s.fechaCreacion) < :end
@@ -700,6 +725,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         select s
         from Sale s
         where s.tenant.id = :tenantId
+          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
           and s.branch.id = :branchId
           and s.cashRegister.id = :cashRegisterId
           and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
@@ -731,6 +757,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         select s
         from Sale s
         where s.tenant.id = :tenantId
+          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
           and s.branch.id = :branchId
           and coalesce(s.saleDate, s.fechaCreacion) >= :start
           and coalesce(s.saleDate, s.fechaCreacion) < :end
@@ -776,10 +803,10 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         from sale s
         join sale_item six on six.sale_id = s.sale_id
         where s.tenant_id = :tenantId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
           and (:branchId is null or s.branch_id = :branchId)
           and upper(trim(coalesce(s.metodo_pago, ''))) not in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
           and coalesce(s.total, 0) > 0
-          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
           and COALESCE(s.sale_date, s.fecha_creacion) >= :start
           and COALESCE(s.sale_date, s.fecha_creacion) < :end
         group by s.sale_id, s.total, s.tip_amount
@@ -792,6 +819,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         from sale s
         join sale_item si on si.sale_id = s.sale_id
         where s.tenant_id = :tenantId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
           and (:branchId is null or s.branch_id = :branchId)
           and si.barber_user_id = :barberUserId
           and (
@@ -804,7 +832,6 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
               )
           and upper(trim(coalesce(s.metodo_pago, ''))) not in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
           and coalesce(s.total, 0) > 0
-          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
           and COALESCE(s.sale_date, s.fecha_creacion) >= :start
           and COALESCE(s.sale_date, s.fecha_creacion) < :end
         group by s.sale_id, si.barber_user_id
@@ -847,12 +874,12 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         join sale s on s.sale_id = si.sale_id
         join product p on p.product_id = si.product_id
         where s.tenant_id = :tenantId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
           and (:branchId is null or s.branch_id = :branchId)
           and si.barber_user_id = :barberUserId
           and si.product_id is not null
           and upper(trim(coalesce(s.metodo_pago, ''))) not in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
           and coalesce(s.total, 0) > 0
-          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
           and COALESCE(s.sale_date, s.fecha_creacion) >= :start
           and COALESCE(s.sale_date, s.fecha_creacion) < :end
         """, nativeQuery = true)
@@ -868,9 +895,9 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         select coalesce(sum(s.tipAmount), 0)
         from Sale s
         where s.tenant.id = :tenantId
+          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
           and (:branchId is null or s.branch.id = :branchId)
           and s.tipBarberUser.id = :barberUserId
-          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
           and coalesce(s.saleDate, s.fechaCreacion) >= :start
           and coalesce(s.saleDate, s.fechaCreacion) < :end
         """)
@@ -897,6 +924,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
           on sp.sale_id = s.sale_id
          and upper(trim(sp.method)) in ('EFECTIVO', 'CASH')
         where s.tenant_id = :tenantId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
           and (:branchId is null or s.branch_id = :branchId)
           and COALESCE(s.sale_date, s.fecha_creacion) >= :start
           and COALESCE(s.sale_date, s.fecha_creacion) < :end
@@ -912,6 +940,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         select s
         from Sale s
         where s.tenant.id = :tenantId
+          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
           and s.branch.id = :branchId
           and coalesce(s.saleDate, s.fechaCreacion) >= :start
           and coalesce(s.saleDate, s.fechaCreacion) < :end
@@ -977,6 +1006,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         from sale s
         join sale_payment sp on sp.sale_id = s.sale_id
         where s.cash_register_id = :cashRegisterId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
 
         union all
 
@@ -992,6 +1022,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
             coalesce(s.total, 0) as amount
         from sale s
         where s.cash_register_id = :cashRegisterId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
           and not exists (
               select 1
               from sale_payment spx
@@ -1028,6 +1059,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         from sale s
         join sale_payment sp on sp.sale_id = s.sale_id
         where s.cash_register_id = :cashRegisterId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
           and COALESCE(s.sale_date, s.fecha_creacion) >= :start
           and COALESCE(s.sale_date, s.fecha_creacion) < :end
 
@@ -1045,6 +1077,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
             coalesce(s.total, 0) as amount
         from sale s
         where s.cash_register_id = :cashRegisterId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
           and COALESCE(s.sale_date, s.fecha_creacion) >= :start
           and COALESCE(s.sale_date, s.fecha_creacion) < :end
           and not exists (
