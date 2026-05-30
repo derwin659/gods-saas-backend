@@ -371,7 +371,7 @@ public class CashSaleServiceImpl implements CashSaleService {
                 .saleId(sale.getId())
                 .cashRegisterId(sale.getCashRegister() != null ? sale.getCashRegister().getId() : null)
                 .customerId(sale.getCustomer() != null ? sale.getCustomer().getId() : null)
-                .customerName(sale.getCustomer() != null ? sale.getCustomer().getNombres() : null)
+                .customerName(buildCustomerFullName(sale.getCustomer()))
                 .appointmentId(sale.getAppointment() != null ? sale.getAppointment().getId() : null)
                 .metodoPago(sale.getMetodoPago())
                 .subtotal(safe(sale.getSubtotal()))
@@ -415,6 +415,19 @@ public class CashSaleServiceImpl implements CashSaleService {
                         ).collect(Collectors.toList())
                 )
                 .build();
+    }
+
+
+    private String buildCustomerFullName(Customer customer) {
+        if (customer == null) {
+            return null;
+        }
+
+        String nombres = customer.getNombres() == null ? "" : customer.getNombres().trim();
+        String apellidos = customer.getApellidos() == null ? "" : customer.getApellidos().trim();
+
+        String fullName = (nombres + " " + apellidos).trim();
+        return fullName.isEmpty() ? null : fullName;
     }
 
     private BigDecimal safe(BigDecimal value) {

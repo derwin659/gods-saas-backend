@@ -259,9 +259,7 @@ public class SaleServiceImpl implements SaleService {
                         hasText(request.getCutDetail()) ||
                         hasText(request.getCutObservations());
 
-        // Solo exigimos registrar el corte cuando la venta tiene cliente.
-        // Si la venta se registra como "sin cliente", no existe historial de cliente donde guardar ese dato.
-        if (customer != null && hasHaircutService && !hasCutData) {
+        if (hasHaircutService && !hasCutData) {
             throw new RuntimeException("Debes registrar el corte realizado.");
         }
 
@@ -321,14 +319,12 @@ public class SaleServiceImpl implements SaleService {
 
         registerProductStockMovements(savedSale, tenant, branch, user);
 
-        if (savedSale.getCustomer() != null && hasCutData) {
-            customerCutHistoryService.registerFromSale(
-                    savedSale,
-                    clean(request.getCutType()),
-                    clean(request.getCutDetail()),
-                    clean(request.getCutObservations())
-            );
-        }
+        customerCutHistoryService.registerFromSale(
+                savedSale,
+                clean(request.getCutType()),
+                clean(request.getCutDetail()),
+                clean(request.getCutObservations())
+        );
 
         for (int i = 0; i < savedSale.getItems().size(); i++) {
             SaleItem savedItem = savedSale.getItems().get(i);
@@ -395,6 +391,7 @@ public class SaleServiceImpl implements SaleService {
                 .tenantId(savedSale.getTenant().getId())
                 .branchId(savedSale.getBranch().getId())
                 .customerId(savedSale.getCustomer() != null ? savedSale.getCustomer().getId() : null)
+                .customerName(buildCustomerFullName(savedSale.getCustomer()))
                 .userId(savedSale.getUser() != null ? savedSale.getUser().getId() : null)
                 .appointmentId(savedSale.getAppointment() != null ? savedSale.getAppointment().getId() : null)
                 .metodoPago(savedSale.getMetodoPago())
@@ -755,6 +752,19 @@ public class SaleServiceImpl implements SaleService {
             case "DEPOSIT_APPLIED", "DEPOSITO_APLICADO", "INICIAL_APLICADO" -> "DEPOSIT_APPLIED";
             default -> metodoPago.trim().toUpperCase();
         };
+    }
+
+
+    private String buildCustomerFullName(Customer customer) {
+        if (customer == null) {
+            return null;
+        }
+
+        String nombres = customer.getNombres() == null ? "" : customer.getNombres().trim();
+        String apellidos = customer.getApellidos() == null ? "" : customer.getApellidos().trim();
+
+        String fullName = (nombres + " " + apellidos).trim();
+        return fullName.isEmpty() ? null : fullName;
     }
 
     private BigDecimal safe(BigDecimal value) {
