@@ -743,6 +743,29 @@ public class SaleServiceImpl implements SaleService {
         }
     }
 
+
+    private String resolvePaymentValidationStatus(String value) {
+        String status = value == null ? "" : value.trim().toUpperCase();
+
+        return switch (status) {
+            case "PENDING_VALIDATION", "PENDING", "PENDIENTE" -> "PENDING_VALIDATION";
+            case "REJECTED", "RECHAZADO" -> "REJECTED";
+            default -> "APPROVED";
+        };
+    }
+
+    private String resolveCreatedByRole(String value) {
+        String role = value == null ? "" : value.trim().toUpperCase();
+        return role.isBlank() ? "OWNER" : role;
+    }
+
+    private String resolveSaleValidationStatus(Sale sale) {
+        if (sale == null || sale.getPaymentValidationStatus() == null || sale.getPaymentValidationStatus().isBlank()) {
+            return "APPROVED";
+        }
+        return sale.getPaymentValidationStatus();
+    }
+
     private String normalizarMetodoPago(String metodoPago) {
         if (metodoPago == null) {
             return "EFECTIVO";
