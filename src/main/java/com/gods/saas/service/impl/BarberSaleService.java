@@ -331,7 +331,7 @@ public class BarberSaleService {
 
         CreateSaleFromAppointmentResponse response = new CreateSaleFromAppointmentResponse();
         response.setSuccess(true);
-        response.setMessage("Venta enviada a caja correctamente. Quedará pendiente hasta que el dueno o administrador apruebe el pago.");
+        response.setMessage("Venta enviada a caja correctamente. Quedara pendiente hasta que el dueno o administrador apruebe el pago.");
         response.setSaleId(saleResponse.getSaleId());
         response.setPaymentValidationStatus(saleResponse.getPaymentValidationStatus());
         response.setAppointmentId(appointment.getId());

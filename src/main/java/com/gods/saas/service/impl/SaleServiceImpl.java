@@ -43,6 +43,7 @@ public class SaleServiceImpl implements SaleService {
     private final TenantTimeService tenantTimeService;
     private final CustomerCutHistoryService customerCutHistoryService;
     private final NotificationService notificationService;
+    private final UserTenantRoleRepository userTenantRoleRepository;
 
     @Override
     public SaleResponse crearVenta(CreateSaleRequest request) {
@@ -105,16 +106,19 @@ public class SaleServiceImpl implements SaleService {
         sale.setCashRegister(cashRegister);
         sale.setFechaCreacion(tenantTimeService.now(tenant.getId()));
 
-        String createdByRole = resolveCreatedByRole(request.getCreatedByRole());
+        // El rol verdadero del usuario dentro del negocio vive en user_tenant_roles.
+        // Si el usuario creador tiene rol BARBER en este tenant, la venta queda pendiente,
+        // tenga cita o no tenga cita.
+        String createdByRole = resolveCreatedByRole(user, request.getCreatedByRole(), tenant.getId());
 
-        // Seguridad extra:
-        // La venta que nace desde la atención de una cita del barbero debe quedar pendiente,
-        // aunque por error el request llegue sin createdByRole o con status APPROVED.
-        if (appointment != null && request.getAppointmentId() != null && !"OWNER".equals(createdByRole) && !"ADMIN".equals(createdByRole)) {
-            createdByRole = "BARBER";
-        }
-
-        if (appointment != null && request.getAppointmentId() != null && request.getCreatedByRole() == null) {
+        // Seguridad extra para ventas desde cita: si hay cita y no vino rol explicito,
+        // se trata como venta de barbero, salvo que el rol real sea OWNER/ADMIN/CASHIER.
+        if (appointment != null
+                && request.getAppointmentId() != null
+                && request.getCreatedByRole() == null
+                && !"OWNER".equals(createdByRole)
+                && !"ADMIN".equals(createdByRole)
+                && !"CASHIER".equals(createdByRole)) {
             createdByRole = "BARBER";
         }
 
@@ -769,7 +773,8 @@ public class SaleServiceImpl implements SaleService {
         String role = createdByRole == null ? "" : createdByRole.trim().toUpperCase();
         String status = value == null ? "" : value.trim().toUpperCase();
 
-        // Regla de seguridad: toda venta creada por BARBER debe pasar por validación del dueño/admin.
+        // Regla de seguridad:
+        // toda venta creada por BARBER queda pendiente hasta que dueno/admin apruebe el pago.
         if ("BARBER".equals(role)) {
             return "PENDING_VALIDATION";
         }
@@ -781,9 +786,74 @@ public class SaleServiceImpl implements SaleService {
         };
     }
 
-    private String resolveCreatedByRole(String value) {
-        String role = value == null ? "" : value.trim().toUpperCase();
-        return role.isBlank() ? "OWNER" : role;
+    private String resolveCreatedByRole(AppUser creatorUser, String requestedRole, Long tenantId) {
+        Long userId = creatorUser != null ? creatorUser.getId() : null;
+
+        // Fuente de verdad: user_tenant_roles.
+        if (hasTenantRole(userId, tenantId, RoleType.BARBER)) {
+            return "BARBER";
+        }
+
+        if (hasTenantRole(userId, tenantId, RoleType.ADMIN)) {
+            return "ADMIN";
+        }
+
+        if (hasTenantRole(userId, tenantId, RoleType.CASHIER)) {
+            return "CASHIER";
+        }
+
+        if (hasTenantRole(userId, tenantId, RoleType.OWNER)) {
+            return "OWNER";
+        }
+
+        // Fallback: si por alguna razon aun no existe registro en user_tenant_roles,
+        // usamos el campo legacy app_user.rol y luego el valor solicitado.
+        String userRole = creatorUser != null && creatorUser.getRol() != null
+                ? creatorUser.getRol().trim().toUpperCase()
+                : "";
+
+        if (isBarberRole(userRole)) {
+            return "BARBER";
+        }
+
+        String role = requestedRole == null ? "" : requestedRole.trim().toUpperCase();
+
+        if (isBarberRole(role)) {
+            return "BARBER";
+        }
+
+        if ("ADMIN".equals(role)) {
+            return "ADMIN";
+        }
+
+        if ("CASHIER".equals(role) || "CAJERO".equals(role)) {
+            return "CASHIER";
+        }
+
+        return "OWNER";
+    }
+
+    private boolean hasTenantRole(Long userId, Long tenantId, RoleType role) {
+        if (userId == null || tenantId == null || role == null) {
+            return false;
+        }
+
+        return userTenantRoleRepository.existsByUserIdAndTenantIdAndRoleIn(
+                userId,
+                tenantId,
+                List.of(role)
+        );
+    }
+
+    private boolean isBarberRole(String role) {
+        if (role == null) {
+            return false;
+        }
+
+        String cleanRole = role.trim().toUpperCase();
+        return "BARBER".equals(cleanRole)
+                || "PROFESSIONAL".equals(cleanRole)
+                || "PROFESIONAL".equals(cleanRole);
     }
 
     private String resolveSaleValidationStatus(Sale sale) {

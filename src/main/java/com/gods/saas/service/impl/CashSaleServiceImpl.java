@@ -97,16 +97,13 @@ public class CashSaleServiceImpl implements CashSaleService {
         saleRequest.setTipAmount(safe(request.getTipAmount()));
         saleRequest.setTipBarberUserId(request.getTipBarberUserId());
         saleRequest.setPayments(request.getPayments());
-        saleRequest.setPaymentValidationStatus(
-                request.getPaymentValidationStatus() == null || request.getPaymentValidationStatus().isBlank()
-                        ? "APPROVED"
-                        : request.getPaymentValidationStatus()
-        );
-        saleRequest.setCreatedByRole(
-                request.getCreatedByRole() == null || request.getCreatedByRole().isBlank()
-                        ? "OWNER"
-                        : request.getCreatedByRole()
-        );
+
+        String creatorRole = resolveCashSaleCreatorRole(tenantId, userId, request);
+        saleRequest.setCreatedByRole(creatorRole);
+        saleRequest.setPaymentValidationStatus(resolveCashSaleValidationStatus(
+                request.getPaymentValidationStatus(),
+                creatorRole
+        ));
 
         saleRequest.setCutType(request.getCutType());
         saleRequest.setCutDetail(request.getCutDetail());
@@ -427,6 +424,94 @@ public class CashSaleServiceImpl implements CashSaleService {
     }
 
 
+    private String resolveCashSaleCreatorRole(Long tenantId, Long userId, CreateCashSaleRequest request) {
+        // Fuente de verdad: user_tenant_roles.
+        if (hasTenantRole(userId, tenantId, RoleType.BARBER)) {
+            return "BARBER";
+        }
+
+        if (hasTenantRole(userId, tenantId, RoleType.ADMIN)) {
+            return "ADMIN";
+        }
+
+        if (hasTenantRole(userId, tenantId, RoleType.CASHIER)) {
+            return "CASHIER";
+        }
+
+        if (hasTenantRole(userId, tenantId, RoleType.OWNER)) {
+            return "OWNER";
+        }
+
+        // Fallback para compatibilidad si aun no existe registro en user_tenant_roles.
+        AppUser creator = userId == null
+                ? null
+                : userRepository.findById(userId).orElse(null);
+
+        String userRole = creator != null && creator.getRol() != null
+                ? creator.getRol().trim().toUpperCase()
+                : "";
+
+        if (isBarberRole(userRole)) {
+            return "BARBER";
+        }
+
+        String requestedRole = request != null && request.getCreatedByRole() != null
+                ? request.getCreatedByRole().trim().toUpperCase()
+                : "";
+
+        if (isBarberRole(requestedRole)) {
+            return "BARBER";
+        }
+
+        if ("ADMIN".equals(requestedRole)) {
+            return "ADMIN";
+        }
+
+        if ("CASHIER".equals(requestedRole) || "CAJERO".equals(requestedRole)) {
+            return "CASHIER";
+        }
+
+        return "OWNER";
+    }
+
+    private String resolveCashSaleValidationStatus(String requestedStatus, String creatorRole) {
+        String role = creatorRole == null ? "" : creatorRole.trim().toUpperCase();
+        String status = requestedStatus == null ? "" : requestedStatus.trim().toUpperCase();
+
+        if ("BARBER".equals(role)) {
+            return "PENDING_VALIDATION";
+        }
+
+        return switch (status) {
+            case "PENDING_VALIDATION", "PENDING", "PENDIENTE" -> "PENDING_VALIDATION";
+            case "REJECTED", "RECHAZADO" -> "REJECTED";
+            default -> "APPROVED";
+        };
+    }
+
+    private boolean hasTenantRole(Long userId, Long tenantId, RoleType role) {
+        if (userId == null || tenantId == null || role == null) {
+            return false;
+        }
+
+        return userTenantRoleRepository.existsByUserIdAndTenantIdAndRoleIn(
+                userId,
+                tenantId,
+                List.of(role)
+        );
+    }
+
+    private boolean isBarberRole(String role) {
+        if (role == null) {
+            return false;
+        }
+
+        String cleanRole = role.trim().toUpperCase();
+        return "BARBER".equals(cleanRole)
+                || "PROFESSIONAL".equals(cleanRole)
+                || "PROFESIONAL".equals(cleanRole);
+    }
+
     private LocalDateTime resolveBusinessDate(Sale sale) {
         return sale.getSaleDate() != null ? sale.getSaleDate() : sale.getFechaCreacion();
     }
@@ -641,14 +726,14 @@ public class CashSaleServiceImpl implements CashSaleService {
     }
 
     private void requireOwnerForSensitiveSaleAction(Long tenantId, Long userId) {
-        boolean isOwner = userTenantRoleRepository.existsByUserIdAndTenantIdAndRoleIn(
+        boolean canValidate = userTenantRoleRepository.existsByUserIdAndTenantIdAndRoleIn(
                 userId,
                 tenantId,
-                List.of(RoleType.OWNER)
+                List.of(RoleType.OWNER, RoleType.ADMIN)
         );
 
-        if (!isOwner) {
-            throw new org.springframework.security.access.AccessDeniedException("Solo el dueño puede editar o eliminar ventas.");
+        if (!canValidate) {
+            throw new org.springframework.security.access.AccessDeniedException("Solo el dueno o administrador puede validar ventas.");
         }
     }
 
