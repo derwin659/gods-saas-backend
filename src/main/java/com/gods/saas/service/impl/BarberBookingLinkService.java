@@ -8,6 +8,7 @@ import com.gods.saas.domain.repository.AppUserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -21,7 +22,7 @@ public class BarberBookingLinkService {
 
     @Transactional(readOnly = true)
     public BarberBookingLinkResponse getBookingLink() {
-        AppUser barber = getCurrentUser();
+        AppUser barber = resolveCurrentUser();
 
         Tenant tenant = barber.getTenant();
         if (tenant == null) {
@@ -38,50 +39,69 @@ public class BarberBookingLinkService {
             throw new RuntimeException("El negocio no tiene código configurado.");
         }
 
+        String cleanCode = codigoNegocio.trim();
+
         String bookingLink = PUBLIC_WEB_BASE_URL
-                + "/" + codigoNegocio.trim()
+                + "/" + cleanCode
                 + "?branchId=" + branch.getId()
                 + "&barberId=" + barber.getId();
 
+        String barberName = (
+                (barber.getNombre() != null ? barber.getNombre() : "") + " " +
+                (barber.getApellido() != null ? barber.getApellido() : "")
+        ).trim();
+
         return BarberBookingLinkResponse.builder()
                 .bookingLink(bookingLink)
-                .codigoNegocio(codigoNegocio)
+                .codigoNegocio(cleanCode)
                 .tenantId(tenant.getId())
                 .branchId(branch.getId())
                 .barberId(barber.getId())
                 .tenantName(tenant.getNombre())
                 .branchName(branch.getNombre())
-                .barberName(buildUserFullName(barber))
+                .barberName(barberName.isEmpty() ? barber.getEmail() : barberName)
                 .build();
     }
 
-    private AppUser getCurrentUser() {
+    private AppUser resolveCurrentUser() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
         if (authentication == null || !authentication.isAuthenticated()) {
-            throw new RuntimeException("Sesión no válida.");
+            throw new RuntimeException("Usuario autenticado no encontrado.");
         }
 
         Object principal = authentication.getPrincipal();
 
-        if (principal instanceof AppUser currentUser) {
-            return appUserRepository.findById(currentUser.getId())
-                    .orElseThrow(() -> new RuntimeException("Usuario no encontrado."));
+        if (principal instanceof AppUser appUser) {
+            return appUserRepository.findById(appUser.getId())
+                    .orElseThrow(() -> new RuntimeException("Usuario autenticado no encontrado."));
         }
 
-        String email = authentication.getName();
-        if (email == null || email.trim().isEmpty()) {
-            throw new RuntimeException("No se pudo identificar al usuario actual.");
+        String identifier = null;
+
+        if (principal instanceof UserDetails userDetails) {
+            identifier = userDetails.getUsername();
         }
 
-        return appUserRepository.findByEmailIgnoreCase(email.trim())
-                .orElseThrow(() -> new RuntimeException("Usuario no encontrado."));
-    }
+        if ((identifier == null || identifier.isBlank()) && authentication.getName() != null) {
+            identifier = authentication.getName();
+        }
 
-    private String buildUserFullName(AppUser user) {
-        String nombre = user.getNombre() == null ? "" : user.getNombre().trim();
-        String apellido = user.getApellido() == null ? "" : user.getApellido().trim();
-        String fullName = (nombre + " " + apellido).trim();
-        return fullName.isBlank() ? user.getEmail() : fullName;
+        if (identifier == null || identifier.isBlank() || "anonymousUser".equalsIgnoreCase(identifier)) {
+            throw new RuntimeException("Usuario autenticado no encontrado.");
+        }
+
+        String value = identifier.trim();
+
+        try {
+            Long userId = Long.parseLong(value);
+            return appUserRepository.findById(userId)
+                    .orElseThrow(() -> new RuntimeException("Usuario autenticado no encontrado."));
+        } catch (NumberFormatException ignored) {
+            // Si no es ID, se busca por email.
+        }
+
+        return appUserRepository.findByEmailIgnoreCase(value)
+                .orElseThrow(() -> new RuntimeException("Usuario autenticado no encontrado."));
     }
 }
