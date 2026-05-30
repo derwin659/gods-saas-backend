@@ -709,15 +709,8 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
     Optional<Sale> findByIdAndTenant_IdAndBranch_Id(Long saleId, Long tenantId, Long branchId);
 
     @Query("""
-        select distinct s
+        select s
         from Sale s
-        left join fetch s.customer
-        left join fetch s.user
-        left join fetch s.appointment
-        left join fetch s.items i
-        left join fetch i.service
-        left join fetch i.product
-        left join fetch i.barberUser
         where s.tenant.id = :tenantId
           and s.branch.id = :branchId
           and s.paymentValidationStatus = 'PENDING_VALIDATION'

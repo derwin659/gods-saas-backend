@@ -104,9 +104,14 @@ public class SaleServiceImpl implements SaleService {
         sale.setAppointment(appointment);
         sale.setCashRegister(cashRegister);
         sale.setFechaCreacion(tenantTimeService.now(tenant.getId()));
-        sale.setPaymentValidationStatus(resolvePaymentValidationStatus(request.getPaymentValidationStatus()));
-        sale.setCreatedByRole(resolveCreatedByRole(request.getCreatedByRole()));
-        if ("APPROVED".equals(sale.getPaymentValidationStatus())) {
+
+        String createdByRole = resolveCreatedByRole(request.getCreatedByRole());
+        String validationStatus = resolvePaymentValidationStatus(request.getPaymentValidationStatus(), createdByRole);
+
+        sale.setCreatedByRole(createdByRole);
+        sale.setPaymentValidationStatus(validationStatus);
+
+        if ("APPROVED".equals(validationStatus)) {
             sale.setValidatedByUser(user);
             sale.setValidatedAt(tenantTimeService.now(tenant.getId()));
         }
@@ -359,7 +364,11 @@ public class SaleServiceImpl implements SaleService {
 
         BigDecimal servicePointsBase = calculateServicePointsBase(savedSale);
 
-        if (customer != null && servicePointsBase.compareTo(BigDecimal.ZERO) > 0) {
+        // Los puntos solo se entregan cuando la venta ya está aprobada.
+        // Si la venta viene del barbero queda PENDING_VALIDATION y los puntos se entregan al aprobar desde caja.
+        if ("APPROVED".equals(resolveSaleValidationStatus(savedSale))
+                && customer != null
+                && servicePointsBase.compareTo(BigDecimal.ZERO) > 0) {
             puntosGanados = loyaltyService.grantSalePoints(
                     tenant,
                     customer,
@@ -744,8 +753,14 @@ public class SaleServiceImpl implements SaleService {
     }
 
 
-    private String resolvePaymentValidationStatus(String value) {
+    private String resolvePaymentValidationStatus(String value, String createdByRole) {
+        String role = createdByRole == null ? "" : createdByRole.trim().toUpperCase();
         String status = value == null ? "" : value.trim().toUpperCase();
+
+        // Regla de seguridad: toda venta creada por BARBER debe pasar por validación del dueño/admin.
+        if ("BARBER".equals(role)) {
+            return "PENDING_VALIDATION";
+        }
 
         return switch (status) {
             case "PENDING_VALIDATION", "PENDING", "PENDIENTE" -> "PENDING_VALIDATION";

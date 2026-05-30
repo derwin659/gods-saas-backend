@@ -148,6 +148,7 @@ public class CashSaleServiceImpl implements CashSaleService {
                         to
                 )
                 .stream()
+                .filter(this::isApprovedSale)
                 .map(sale -> mapResponse(sale, 0))
                 .collect(Collectors.toList());
     }
@@ -163,6 +164,7 @@ public class CashSaleServiceImpl implements CashSaleService {
                         tenantId, branchId, fromDateTime, toDateTime
                 )
                 .stream()
+                .filter(this::isApprovedSale)
                 .map(sale -> mapResponse(sale, 0))
                 .collect(Collectors.toList());
     }
@@ -181,6 +183,7 @@ public class CashSaleServiceImpl implements CashSaleService {
         return saleRepository
                 .findCashSalesByCashRegister(tenantId, branchId, cashRegisterId)
                 .stream()
+                .filter(this::isApprovedSale)
                 .map(sale -> mapResponse(sale, 0))
                 .collect(Collectors.toList());
     }
@@ -224,7 +227,10 @@ public class CashSaleServiceImpl implements CashSaleService {
         sale.setRejectionReason(null);
 
         Sale saved = saleRepository.save(sale);
-        return mapResponse(saved, 0);
+
+        int puntosGanados = grantPointsAfterApproval(saved, validator);
+
+        return mapResponse(saved, puntosGanados);
     }
 
     @Override
@@ -492,6 +498,10 @@ public class CashSaleServiceImpl implements CashSaleService {
                 .build();
     }
 
+
+    private boolean isApprovedSale(Sale sale) {
+        return "APPROVED".equals(resolveValidationStatus(sale));
+    }
 
     private String resolveValidationStatus(Sale sale) {
         if (sale == null || sale.getPaymentValidationStatus() == null || sale.getPaymentValidationStatus().isBlank()) {
