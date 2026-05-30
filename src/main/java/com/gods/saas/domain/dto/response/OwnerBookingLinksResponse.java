@@ -13,17 +13,17 @@ import java.util.List;
 @AllArgsConstructor
 public class OwnerBookingLinksResponse {
 
-    private String codigoNegocio;
     private Long tenantId;
     private String tenantName;
+    private String codigoNegocio;
     private String businessLink;
-    private List<BranchBookingLinkResponse> branches;
+    private List<BranchBookingLink> branches;
 
     @Data
     @Builder
     @NoArgsConstructor
     @AllArgsConstructor
-    public static class BranchBookingLinkResponse {
+    public static class BranchBookingLink {
         private Long branchId;
         private String branchName;
         private String bookingLink;

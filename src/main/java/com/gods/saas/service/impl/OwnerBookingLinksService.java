@@ -9,10 +9,9 @@ import com.gods.saas.domain.repository.BranchRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 @Service
@@ -25,11 +24,11 @@ public class OwnerBookingLinksService {
     private final BranchRepository branchRepository;
 
     public OwnerBookingLinksResponse getOwnerBookingLinks() {
-        AppUser user = getCurrentUser();
+        AppUser currentUser = resolveCurrentUser();
 
-        Tenant tenant = user.getTenant();
+        Tenant tenant = currentUser.getTenant();
         if (tenant == null) {
-            throw new RuntimeException("El usuario no tiene negocio asignado.");
+            throw new RuntimeException("El usuario autenticado no tiene negocio asignado.");
         }
 
         String codigoNegocio = tenant.getCodigo();
@@ -37,39 +36,70 @@ public class OwnerBookingLinksService {
             throw new RuntimeException("El negocio no tiene código configurado.");
         }
 
-        String encodedCode = URLEncoder.encode(codigoNegocio.trim(), StandardCharsets.UTF_8);
-        String businessLink = PUBLIC_WEB_BASE_URL + "/" + encodedCode;
+        String cleanCode = codigoNegocio.trim();
+        String businessLink = PUBLIC_WEB_BASE_URL + "/" + cleanCode;
 
         List<Branch> branches = branchRepository.findByTenant_IdAndActivoTrue(tenant.getId());
 
-        List<OwnerBookingLinksResponse.BranchBookingLinkResponse> branchLinks = branches.stream()
-                .map(branch -> OwnerBookingLinksResponse.BranchBookingLinkResponse.builder()
+        List<OwnerBookingLinksResponse.BranchBookingLink> branchLinks = branches.stream()
+                .map(branch -> OwnerBookingLinksResponse.BranchBookingLink.builder()
                         .branchId(branch.getId())
                         .branchName(branch.getNombre())
                         .bookingLink(businessLink + "?branchId=" + branch.getId())
-                        .build()
-                )
+                        .build())
                 .toList();
 
         return OwnerBookingLinksResponse.builder()
-                .codigoNegocio(codigoNegocio)
                 .tenantId(tenant.getId())
                 .tenantName(tenant.getNombre())
+                .codigoNegocio(cleanCode)
                 .businessLink(businessLink)
                 .branches(branchLinks)
                 .build();
     }
 
-    private AppUser getCurrentUser() {
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+    private AppUser resolveCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
 
-        if (auth == null || auth.getName() == null || auth.getName().trim().isEmpty()) {
-            throw new RuntimeException("Sesión no válida.");
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new RuntimeException("Usuario autenticado no encontrado.");
         }
 
-        String email = auth.getName().trim();
+        Object principal = authentication.getPrincipal();
 
-        return appUserRepository.findByEmailIgnoreCase(email)
+        if (principal instanceof AppUser appUser) {
+            return appUserRepository.findByIdWithTenant(appUser.getId())
+                    .or(() -> appUserRepository.findById(appUser.getId()))
+                    .orElseThrow(() -> new RuntimeException("Usuario autenticado no encontrado."));
+        }
+
+        String identifier = null;
+
+        if (principal instanceof UserDetails userDetails) {
+            identifier = userDetails.getUsername();
+        }
+
+        if ((identifier == null || identifier.isBlank()) && authentication.getName() != null) {
+            identifier = authentication.getName();
+        }
+
+        if (identifier == null || identifier.isBlank() || "anonymousUser".equalsIgnoreCase(identifier)) {
+            throw new RuntimeException("Usuario autenticado no encontrado.");
+        }
+
+        String value = identifier.trim();
+
+        // En algunos JWT el subject puede venir como ID numérico.
+        try {
+            Long userId = Long.parseLong(value);
+            return appUserRepository.findByIdWithTenant(userId)
+                    .or(() -> appUserRepository.findById(userId))
+                    .orElseThrow(() -> new RuntimeException("Usuario autenticado no encontrado."));
+        } catch (NumberFormatException ignored) {
+            // Si no es número, se intenta como email.
+        }
+
+        return appUserRepository.findByEmailIgnoreCase(value)
                 .orElseThrow(() -> new RuntimeException("Usuario autenticado no encontrado."));
     }
 }
