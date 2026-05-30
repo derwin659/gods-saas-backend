@@ -502,7 +502,38 @@ public class CashSaleServiceImpl implements CashSaleService {
     private boolean isApprovedSale(Sale sale) {
         return "APPROVED".equals(resolveValidationStatus(sale));
     }
+    private int grantPointsAfterApproval(Sale sale, AppUser validator) {
+        if (sale == null || sale.getCustomer() == null) {
+            return 0;
+        }
 
+        BigDecimal servicePointsBase = calculateServicePointsBase(sale);
+
+        if (servicePointsBase.compareTo(BigDecimal.ZERO) <= 0) {
+            return 0;
+        }
+
+        return loyaltyService.grantSalePoints(
+                sale.getTenant(),
+                sale.getCustomer(),
+                validator,
+                sale,
+                servicePointsBase.doubleValue()
+        );
+    }
+
+    private BigDecimal calculateServicePointsBase(Sale sale) {
+        if (sale == null || sale.getItems() == null || sale.getItems().isEmpty()) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
+        return sale.getItems().stream()
+                .filter(item -> item.getService() != null)
+                .map(SaleItem::getSubtotal)
+                .map(this::safe)
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+    }
     private String resolveValidationStatus(Sale sale) {
         if (sale == null || sale.getPaymentValidationStatus() == null || sale.getPaymentValidationStatus().isBlank()) {
             return "APPROVED";
