@@ -181,6 +181,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         where s.tenant.id = :tenantId
           and s.branch.id = :branchId
           and s.user.id = :barberId
+          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
           and coalesce(s.saleDate, s.fechaCreacion) >= :start
           and coalesce(s.saleDate, s.fechaCreacion) < :end
         """)
@@ -198,6 +199,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         where s.tenant.id = :tenantId
           and s.branch.id = :branchId
           and s.user.id = :barberId
+          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
           and coalesce(s.saleDate, s.fechaCreacion) >= :start
           and coalesce(s.saleDate, s.fechaCreacion) < :end
         """)
@@ -215,6 +217,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         where s.tenant.id = :tenantId
           and s.branch.id = :branchId
           and s.user.id = :userId
+          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
           and coalesce(s.saleDate, s.fechaCreacion) >= :start
           and coalesce(s.saleDate, s.fechaCreacion) < :end
         """)
@@ -253,6 +256,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
               and s.branch_id = :branchId
               and upper(trim(coalesce(s.metodo_pago, ''))) not in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
               and coalesce(s.total, 0) > 0
+              and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
               and coalesce(s.sale_date, s.fecha_creacion) >= :start
               and coalesce(s.sale_date, s.fecha_creacion) < :end
             group by s.sale_id, s.total, s.tip_amount, s.sale_date, s.fecha_creacion
@@ -277,6 +281,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
                   )
               and upper(trim(coalesce(s.metodo_pago, ''))) not in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
               and coalesce(s.total, 0) > 0
+              and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
               and coalesce(s.sale_date, s.fecha_creacion) >= :start
               and coalesce(s.sale_date, s.fecha_creacion) < :end
             group by s.sale_id, si.barber_user_id
@@ -774,6 +779,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
           and (:branchId is null or s.branch_id = :branchId)
           and upper(trim(coalesce(s.metodo_pago, ''))) not in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
           and coalesce(s.total, 0) > 0
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
           and COALESCE(s.sale_date, s.fecha_creacion) >= :start
           and COALESCE(s.sale_date, s.fecha_creacion) < :end
         group by s.sale_id, s.total, s.tip_amount
@@ -798,6 +804,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
               )
           and upper(trim(coalesce(s.metodo_pago, ''))) not in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
           and coalesce(s.total, 0) > 0
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
           and COALESCE(s.sale_date, s.fecha_creacion) >= :start
           and COALESCE(s.sale_date, s.fecha_creacion) < :end
         group by s.sale_id, si.barber_user_id
@@ -845,6 +852,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
           and si.product_id is not null
           and upper(trim(coalesce(s.metodo_pago, ''))) not in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
           and coalesce(s.total, 0) > 0
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
           and COALESCE(s.sale_date, s.fecha_creacion) >= :start
           and COALESCE(s.sale_date, s.fecha_creacion) < :end
         """, nativeQuery = true)
@@ -862,6 +870,7 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
         where s.tenant.id = :tenantId
           and (:branchId is null or s.branch.id = :branchId)
           and s.tipBarberUser.id = :barberUserId
+          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
           and coalesce(s.saleDate, s.fechaCreacion) >= :start
           and coalesce(s.saleDate, s.fechaCreacion) < :end
         """)

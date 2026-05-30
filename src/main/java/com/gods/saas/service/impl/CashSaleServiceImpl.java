@@ -44,6 +44,7 @@ public class CashSaleServiceImpl implements CashSaleService {
     private final BranchRepository branchRepository;
     private final AppUserRepository userRepository;
     private final UserTenantRoleRepository userTenantRoleRepository;
+    private final LoyaltyAccountRepository loyaltyAccountRepository;
 
     @Override
     public SaleResponse createCashSale(Long tenantId, Long branchId, Long userId, CreateCashSaleRequest request) {
@@ -199,7 +200,7 @@ public class CashSaleServiceImpl implements CashSaleService {
     public List<SaleResponse> getPendingValidationSales(Long tenantId, Long branchId) {
         return saleRepository.findPendingValidationSales(tenantId, branchId)
                 .stream()
-                .map(sale -> mapResponse(sale, 0))
+                .map(sale -> mapResponse(sale, calculatePendingPointsPreview(sale)))
                 .collect(Collectors.toList());
     }
 
@@ -433,7 +434,7 @@ public class CashSaleServiceImpl implements CashSaleService {
         if (hasTenantRole(userId, tenantId, RoleType.ADMIN)) {
             return "ADMIN";
         }
-
+        
 
         if (hasTenantRole(userId, tenantId, RoleType.OWNER)) {
             return "OWNER";
@@ -541,6 +542,7 @@ public class CashSaleServiceImpl implements CashSaleService {
                 .changeAmount(safe(sale.getChangeAmount()))
                 .fechaCreacion(resolveBusinessDate(sale))
                 .puntosGanados(puntosGanados == null ? 0 : puntosGanados)
+                .puntosDisponibles(resolveCustomerPointsBalance(sale))
                 .barberName(resolveBarberName(sale))
                 .items(
                         sale.getItems() == null
@@ -580,6 +582,34 @@ public class CashSaleServiceImpl implements CashSaleService {
                 .build();
     }
 
+
+
+    private int calculatePendingPointsPreview(Sale sale) {
+        if (sale == null || sale.getCustomer() == null) {
+            return 0;
+        }
+
+        BigDecimal servicePointsBase = calculateServicePointsBase(sale);
+        if (servicePointsBase.compareTo(BigDecimal.ZERO) <= 0) {
+            return 0;
+        }
+
+        // Preview simple: mismo criterio base que se usa al aprobar.
+        // No guarda nada en BD. Solo sirve para mostrar:
+        // puntos actuales + puntos que ganara si se aprueba.
+        return servicePointsBase.setScale(0, RoundingMode.DOWN).intValue();
+    }
+
+    private int resolveCustomerPointsBalance(Sale sale) {
+        if (sale == null || sale.getTenant() == null || sale.getCustomer() == null) {
+            return 0;
+        }
+
+        return loyaltyAccountRepository
+                .findByTenant_IdAndCustomer_Id(sale.getTenant().getId(), sale.getCustomer().getId())
+                .map(account -> account.getPuntosDisponibles() == null ? 0 : account.getPuntosDisponibles())
+                .orElse(0);
+    }
 
     private int grantPointsAfterApproval(Sale sale, AppUser validator) {
         if (sale == null || sale.getCustomer() == null) {
