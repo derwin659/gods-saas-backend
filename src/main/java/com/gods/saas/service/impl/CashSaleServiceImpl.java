@@ -434,8 +434,8 @@ public class CashSaleServiceImpl implements CashSaleService {
             return "ADMIN";
         }
 
-        if (hasTenantRole(userId, tenantId, RoleType.CASHIER)) {
-            return "CASHIER";
+        if (hasTenantRole(userId, tenantId, RoleType.ADMIN)) {
+            return "ADMIN";
         }
 
         if (hasTenantRole(userId, tenantId, RoleType.OWNER)) {
