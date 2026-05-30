@@ -2,16 +2,18 @@ package com.gods.saas.domain.dto.response;
 
 import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Getter;
-import lombok.Setter;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
-@Getter
-@Setter
+@Data
 @Builder
+@NoArgsConstructor
 @AllArgsConstructor
 public class BarberAgendaItemResponse {
+
     private Long appointmentId;
     private Long customerId;
+
     private String hora;
     private String horaFin;
     private String cliente;
@@ -19,4 +21,8 @@ public class BarberAgendaItemResponse {
     private String estado;
     private String telefono;
     private String fecha;
+
+    private String internalNote;
+    private String notaInterna;
+    private String notes;
 }

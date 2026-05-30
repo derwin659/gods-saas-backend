@@ -38,6 +38,15 @@ public class BarberAgendaServiceImpl implements BarberAgendaService {
                                     + ", fecha=" + r.getFecha()
                                     + ", horaInicio=" + r.getHoraInicio()
                                     + ", horaFin=" + r.getHoraFin()
+                                    + ", internalNote=" + r.getInternalNote()
+                    );
+
+                    String internalNote = cleanText(
+                            firstText(
+                                    r.getInternalNote(),
+                                    r.getNotaInterna(),
+                                    r.getNotes()
+                            )
                     );
 
                     return BarberAgendaItemResponse.builder()
@@ -50,6 +59,9 @@ public class BarberAgendaServiceImpl implements BarberAgendaService {
                             .fecha(r.getFecha() != null ? r.getFecha().toString() : null)
                             .hora(r.getHoraInicio() != null ? r.getHoraInicio().format(hourFmt) : "")
                             .horaFin(r.getHoraFin() != null ? r.getHoraFin().format(hourFmt) : null)
+                            .internalNote(internalNote)
+                            .notaInterna(internalNote)
+                            .notes(internalNote)
                             .build();
                 })
                 .toList();
@@ -60,5 +72,33 @@ public class BarberAgendaServiceImpl implements BarberAgendaService {
             return fallback;
         }
         return value.trim();
+    }
+
+    private String firstText(String... values) {
+        if (values == null) {
+            return null;
+        }
+
+        for (String value : values) {
+            String clean = cleanText(value);
+            if (clean != null) {
+                return clean;
+            }
+        }
+
+        return null;
+    }
+
+    private String cleanText(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String clean = value.trim();
+        if (clean.isEmpty() || "null".equalsIgnoreCase(clean)) {
+            return null;
+        }
+
+        return clean;
     }
 }
