@@ -259,7 +259,9 @@ public class SaleServiceImpl implements SaleService {
                         hasText(request.getCutDetail()) ||
                         hasText(request.getCutObservations());
 
-        if (hasHaircutService && !hasCutData) {
+        // Solo exigimos registrar el corte cuando la venta tiene cliente.
+        // Si la venta se registra como "sin cliente", no existe historial de cliente donde guardar ese dato.
+        if (customer != null && hasHaircutService && !hasCutData) {
             throw new RuntimeException("Debes registrar el corte realizado.");
         }
 
@@ -319,12 +321,14 @@ public class SaleServiceImpl implements SaleService {
 
         registerProductStockMovements(savedSale, tenant, branch, user);
 
-        customerCutHistoryService.registerFromSale(
-                savedSale,
-                clean(request.getCutType()),
-                clean(request.getCutDetail()),
-                clean(request.getCutObservations())
-        );
+        if (savedSale.getCustomer() != null && hasCutData) {
+            customerCutHistoryService.registerFromSale(
+                    savedSale,
+                    clean(request.getCutType()),
+                    clean(request.getCutDetail()),
+                    clean(request.getCutObservations())
+            );
+        }
 
         for (int i = 0; i < savedSale.getItems().size(); i++) {
             SaleItem savedItem = savedSale.getItems().get(i);
