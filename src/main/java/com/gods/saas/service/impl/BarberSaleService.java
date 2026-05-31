@@ -307,6 +307,7 @@ public class BarberSaleService {
         Customer customer = appointment.getCustomer();
 
         int pointsEarned = saleResponse.getPuntosGanados() != null ? saleResponse.getPuntosGanados() : 0;
+        int pointsPending = saleResponse.getPuntosPendientes() != null ? saleResponse.getPuntosPendientes() : 0;
         int customerPointsBalance = saleResponse.getPuntosDisponibles() != null ? saleResponse.getPuntosDisponibles() : 0;
 
         String clienteNombre = "Sin cliente";
@@ -364,6 +365,7 @@ public class BarberSaleService {
         );
 
         response.setPointsEarned(pointsEarned);
+        response.setPointsPending(pointsPending);
         response.setCustomerPointsBalance(customerPointsBalance);
         response.setFechaHora(LocalDateTime.now().toString());
 

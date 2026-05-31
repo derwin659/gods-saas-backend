@@ -44,6 +44,7 @@ public class CreateSaleFromAppointmentResponse {
     private Double change;
 
     private Integer pointsEarned;
+    private Integer pointsPending;
     private Integer customerPointsBalance;
 
     private String fechaHora;

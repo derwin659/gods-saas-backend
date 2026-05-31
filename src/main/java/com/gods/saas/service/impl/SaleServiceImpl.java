@@ -20,12 +20,15 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 @Service
 @RequiredArgsConstructor
 @Transactional
 public class SaleServiceImpl implements SaleService {
+    private static final BigDecimal DEFAULT_POINTS_PER_CURRENCY_UNIT = BigDecimal.valueOf(5);
+    private static final String POINTS_PER_CURRENCY_UNIT_KEY = "loyaltyPointsPerCurrencyUnit";
 
     private final LoyaltyService loyaltyService;
     private final SaleRepository saleRepository;
@@ -44,6 +47,7 @@ public class SaleServiceImpl implements SaleService {
     private final CustomerCutHistoryService customerCutHistoryService;
     private final NotificationService notificationService;
     private final UserTenantRoleRepository userTenantRoleRepository;
+    private final TenantSettingsRepository tenantSettingsRepository;
 
     @Override
     public SaleResponse crearVenta(CreateSaleRequest request) {
@@ -376,13 +380,15 @@ public class SaleServiceImpl implements SaleService {
         }
 
         int puntosGanados = 0;
+        int puntosPendientes = 0;
         int puntosDisponibles = 0;
 
         BigDecimal servicePointsBase = calculateServicePointsBase(savedSale);
+        boolean approvedSale = "APPROVED".equals(resolveSaleValidationStatus(savedSale));
 
         // Los puntos solo se entregan cuando la venta ya está aprobada.
         // Si la venta viene del barbero queda PENDING_VALIDATION y los puntos se entregan al aprobar desde caja.
-        if ("APPROVED".equals(resolveSaleValidationStatus(savedSale))
+        if (approvedSale
                 && customer != null
                 && servicePointsBase.compareTo(BigDecimal.ZERO) > 0) {
             puntosGanados = loyaltyService.grantSalePoints(
@@ -405,6 +411,10 @@ public class SaleServiceImpl implements SaleService {
                 notificationService.notifyPointsEarned(customer, puntosGanados, savedSale.getId());
             }
         } else if (customer != null) {
+            puntosPendientes = servicePointsBase.compareTo(BigDecimal.ZERO) > 0
+                    ? calculatePointsPreview(tenant, servicePointsBase)
+                    : 0;
+
             LoyaltyAccount current = loyaltyAccountRepository
                     .findByTenant_IdAndCustomer_Id(tenant.getId(), customer.getId())
                     .orElse(null);
@@ -436,6 +446,7 @@ public class SaleServiceImpl implements SaleService {
                 .changeAmount(savedSale.getChangeAmount())
                 .fechaCreacion(savedSale.getFechaCreacion())
                 .puntosGanados(puntosGanados)
+                .puntosPendientes(puntosPendientes)
                 .puntosDisponibles(puntosDisponibles)
                 .items(itemResponses)
                 .payments(mapPaymentResponses(savedSale))
@@ -660,6 +671,46 @@ public class SaleServiceImpl implements SaleService {
                 .map(this::safe)
                 .reduce(BigDecimal.ZERO, BigDecimal::add)
                 .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private int calculatePointsPreview(Tenant tenant, BigDecimal servicePointsBase) {
+        if (servicePointsBase == null || servicePointsBase.compareTo(BigDecimal.ZERO) <= 0) {
+            return 0;
+        }
+
+        return servicePointsBase
+                .multiply(resolvePointsPerCurrencyUnit(tenant))
+                .setScale(0, RoundingMode.FLOOR)
+                .intValue();
+    }
+
+    private BigDecimal resolvePointsPerCurrencyUnit(Tenant tenant) {
+        if (tenant == null || tenant.getId() == null) {
+            return DEFAULT_POINTS_PER_CURRENCY_UNIT;
+        }
+
+        return tenantSettingsRepository.findByTenant_Id(tenant.getId())
+                .map(settings -> {
+                    Map<String, Object> config = settings.getScheduleConfig();
+                    if (config == null) {
+                        return DEFAULT_POINTS_PER_CURRENCY_UNIT;
+                    }
+
+                    Object raw = config.get(POINTS_PER_CURRENCY_UNIT_KEY);
+                    if (raw == null) {
+                        return DEFAULT_POINTS_PER_CURRENCY_UNIT;
+                    }
+
+                    try {
+                        BigDecimal value = new BigDecimal(raw.toString());
+                        return value.compareTo(BigDecimal.ZERO) < 0
+                                ? BigDecimal.ZERO
+                                : value;
+                    } catch (Exception ignored) {
+                        return DEFAULT_POINTS_PER_CURRENCY_UNIT;
+                    }
+                })
+                .orElse(DEFAULT_POINTS_PER_CURRENCY_UNIT);
     }
 
     private void registerProductStockMovements(Sale savedSale, Tenant tenant, Branch branch, AppUser user) {

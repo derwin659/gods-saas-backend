@@ -21,12 +21,15 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 @Transactional
 public class CashSaleServiceImpl implements CashSaleService {
+    private static final BigDecimal DEFAULT_POINTS_PER_CURRENCY_UNIT = BigDecimal.valueOf(5);
+    private static final String POINTS_PER_CURRENCY_UNIT_KEY = "loyaltyPointsPerCurrencyUnit";
 
     private final SaleRepository saleRepository;
     private final CashRegisterRepository cashRegisterRepository;
@@ -45,6 +48,7 @@ public class CashSaleServiceImpl implements CashSaleService {
     private final AppUserRepository userRepository;
     private final UserTenantRoleRepository userTenantRoleRepository;
     private final LoyaltyAccountRepository loyaltyAccountRepository;
+    private final TenantSettingsRepository tenantSettingsRepository;
 
     @Override
     public SaleResponse createCashSale(Long tenantId, Long branchId, Long userId, CreateCashSaleRequest request) {
@@ -525,6 +529,9 @@ public class CashSaleServiceImpl implements CashSaleService {
     }
 
     private SaleResponse mapResponse(Sale sale, Integer puntosGanados) {
+        boolean pendingValidation = "PENDING_VALIDATION".equals(resolveValidationStatus(sale));
+        int pointsValue = puntosGanados == null ? 0 : puntosGanados;
+
         return SaleResponse.builder()
                 .saleId(sale.getId())
                 .cashRegisterId(sale.getCashRegister() != null ? sale.getCashRegister().getId() : null)
@@ -541,7 +548,8 @@ public class CashSaleServiceImpl implements CashSaleService {
                 .cashReceived(safe(sale.getCashReceived()))
                 .changeAmount(safe(sale.getChangeAmount()))
                 .fechaCreacion(resolveBusinessDate(sale))
-                .puntosGanados(puntosGanados == null ? 0 : puntosGanados)
+                .puntosGanados(pendingValidation ? 0 : pointsValue)
+                .puntosPendientes(pendingValidation ? pointsValue : 0)
                 .puntosDisponibles(resolveCustomerPointsBalance(sale))
                 .barberName(resolveBarberName(sale))
                 .items(
@@ -594,10 +602,42 @@ public class CashSaleServiceImpl implements CashSaleService {
             return 0;
         }
 
-        // Preview simple: mismo criterio base que se usa al aprobar.
+        // Preview simple: mismo criterio configurado que se usa al aprobar.
         // No guarda nada en BD. Solo sirve para mostrar:
         // puntos actuales + puntos que ganara si se aprueba.
-        return servicePointsBase.setScale(0, RoundingMode.DOWN).intValue();
+        return servicePointsBase
+                .multiply(resolvePointsPerCurrencyUnit(sale.getTenant()))
+                .setScale(0, RoundingMode.FLOOR)
+                .intValue();
+    }
+
+    private BigDecimal resolvePointsPerCurrencyUnit(Tenant tenant) {
+        if (tenant == null || tenant.getId() == null) {
+            return DEFAULT_POINTS_PER_CURRENCY_UNIT;
+        }
+
+        return tenantSettingsRepository.findByTenant_Id(tenant.getId())
+                .map(settings -> {
+                    Map<String, Object> config = settings.getScheduleConfig();
+                    if (config == null) {
+                        return DEFAULT_POINTS_PER_CURRENCY_UNIT;
+                    }
+
+                    Object raw = config.get(POINTS_PER_CURRENCY_UNIT_KEY);
+                    if (raw == null) {
+                        return DEFAULT_POINTS_PER_CURRENCY_UNIT;
+                    }
+
+                    try {
+                        BigDecimal value = new BigDecimal(raw.toString());
+                        return value.compareTo(BigDecimal.ZERO) < 0
+                                ? BigDecimal.ZERO
+                                : value;
+                    } catch (Exception ignored) {
+                        return DEFAULT_POINTS_PER_CURRENCY_UNIT;
+                    }
+                })
+                .orElse(DEFAULT_POINTS_PER_CURRENCY_UNIT);
     }
 
     private int resolveCustomerPointsBalance(Sale sale) {

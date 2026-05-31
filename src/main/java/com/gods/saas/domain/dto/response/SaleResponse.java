@@ -22,6 +22,7 @@ public class SaleResponse {
     private BigDecimal total;
     private LocalDateTime fechaCreacion;
     private Integer puntosGanados;
+    private Integer puntosPendientes;
     private Integer puntosDisponibles;
     private List<SaleItemResponse> items;
     private Long cashRegisterId;
