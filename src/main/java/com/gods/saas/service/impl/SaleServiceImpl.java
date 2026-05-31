@@ -290,7 +290,7 @@ public class SaleServiceImpl implements SaleService {
                         hasText(request.getCutDetail()) ||
                         hasText(request.getCutObservations());
 
-        if (hasHaircutService && !hasCutData) {
+        if (customer != null && hasHaircutService && !hasCutData) {
             throw new RuntimeException("Debes registrar el corte realizado.");
         }
 
