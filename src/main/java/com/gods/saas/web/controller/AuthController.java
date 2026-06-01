@@ -16,6 +16,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.BadCredentialsException;
+import org.springframework.security.authentication.DisabledException;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -191,19 +192,6 @@ public class AuthController {
 
     @PostMapping("/login-basic")
     public ResponseEntity<?> loginBasic(@RequestBody LoginRequest req) {
-        System.out.println("EMAIL REQ => " + req.getEmail());
-        System.out.println("PASSWORD REQ => " + req.getPassword());
-        var userOpt = appUserRepository.findByEmail(req.getEmail());
-        if (userOpt.isPresent()) {
-            var user = userOpt.get();
-            System.out.println("PASSWORD REQ => [" + req.getPassword() + "]");
-            System.out.println("PASSWORD LEN => " + req.getPassword().length());
-            System.out.println("HASH DB DIRECT => [" + user.getPasswordHash() + "]");
-            System.out.println("HASH LEN => " + user.getPasswordHash().length());
-            System.out.println("DIRECT MATCH => " +
-                    passwordEncoder.matches(req.getPassword(), user.getPasswordHash()));
-
-        }
         try {
             Authentication auth = authenticationManager.authenticate(
                     new UsernamePasswordAuthenticationToken(
@@ -240,6 +228,10 @@ public class AuthController {
             return ResponseEntity
                     .status(HttpStatus.UNAUTHORIZED)
                     .body(new ErrorResponse("Usuario o contraseña inválidos"));
+        } catch (DisabledException e) {
+            return ResponseEntity
+                    .status(HttpStatus.FORBIDDEN)
+                    .body(new ErrorResponse("Tu usuario esta desactivado. Contacta al administrador del negocio."));
         }
     }
 
