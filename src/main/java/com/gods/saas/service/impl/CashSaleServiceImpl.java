@@ -620,6 +620,7 @@ public class CashSaleServiceImpl implements CashSaleService {
 
         String customerName = buildCustomerFirstName(sale.getCustomer());
         int balance = resolveCustomerPointsBalance(sale);
+        String tenantCode = sale.getTenant() == null ? null : cleanText(sale.getTenant().getCodigo());
         String bookingUrl = buildBookingUrl(sale);
 
         StringBuilder message = new StringBuilder();
@@ -645,8 +646,16 @@ public class CashSaleServiceImpl implements CashSaleService {
         message.append("\n");
         message.append(resolveMobileAppDownloadUrl());
 
+        if (tenantCode != null) {
+            message.append("\n\nPara ver tus puntos en la app:");
+            message.append("\n1. Ingresa como cliente.");
+            message.append("\n2. Coloca el codigo del negocio: ");
+            message.append(tenantCode);
+            message.append("\n3. Revisa tus puntos, premios y proximas reservas.");
+        }
+
         if (bookingUrl != null) {
-            message.append("\n\nReserva tu proxima cita aqui:");
+            message.append("\n\nTambien puedes reservar tu proxima cita desde la app o por este link y seguir ganando puntos:");
             message.append("\n");
             message.append(bookingUrl);
         }
