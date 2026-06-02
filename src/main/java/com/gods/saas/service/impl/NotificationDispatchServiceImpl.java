@@ -33,6 +33,7 @@ public class NotificationDispatchServiceImpl implements NotificationDispatchServ
 
     private static final Set<String> BASIC_PUSH_TYPES = Set.of(
             "BOOKING_CREATED",
+            "BOOKING_REMINDER_24H",
             "BOOKING_REMINDER_60",
             "BOOKING_REMINDER_30",
             "POINTS_EARNED",

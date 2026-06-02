@@ -7,6 +7,7 @@ import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.CustomerRepository;
 import com.gods.saas.domain.repository.NotificationDeliveryRepository;
 import com.gods.saas.domain.repository.NotificationRepository;
+import com.gods.saas.domain.repository.TenantSettingsRepository;
 import com.gods.saas.domain.repository.UserTenantRoleRepository;
 import com.gods.saas.service.impl.impl.NotificationService;
 import lombok.RequiredArgsConstructor;
@@ -27,6 +28,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final NotificationDeliveryRepository notificationDeliveryRepository;
     private final UserTenantRoleRepository userTenantRoleRepository;
     private final CustomerRepository customerRepository;
+    private final TenantSettingsRepository tenantSettingsRepository;
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
@@ -166,13 +168,20 @@ public class NotificationServiceImpl implements NotificationService {
         String serviceName = appointment.getService() != null ? appointment.getService().getNombre() : "Servicio";
         String time = appointment.getHoraInicio() != null ? appointment.getHoraInicio().format(TIME_FMT) : "";
 
-        String title = reminderType == NotificationType.BOOKING_REMINDER_60
-                ? "Tu cita es en 1 hora"
-                : "Tu cita es en 30 minutos";
+        String title = switch (reminderType) {
+            case BOOKING_REMINDER_24H -> "Tu cita es manana";
+            case BOOKING_REMINDER_60 -> "Tu cita es en 1 hora";
+            default -> "Tu cita es en 30 minutos";
+        };
 
-        String message = reminderType == NotificationType.BOOKING_REMINDER_60
-                ? "Te recordamos tu reserva de " + serviceName + " a las " + time + "."
-                : "Tu reserva de " + serviceName + " es en 30 minutos. Te esperamos a las " + time + ".";
+        String message = switch (reminderType) {
+            case BOOKING_REMINDER_24H ->
+                    "Te recordamos tu reserva de " + serviceName + " para manana a las " + time + ".";
+            case BOOKING_REMINDER_60 ->
+                    "Te recordamos tu reserva de " + serviceName + " a las " + time + ".";
+            default ->
+                    "Tu reserva de " + serviceName + " es en 30 minutos. Te esperamos a las " + time + ".";
+        };
 
         Notification n = saveCustomerNotification(
                 appointment.getTenant(),
@@ -185,7 +194,7 @@ public class NotificationServiceImpl implements NotificationService {
                 appointment.getId()
         );
 
-        registerDefaultChannels(n, true);
+        registerDefaultChannels(n, shouldIncludeWhatsappForBookingReminder(appointment, reminderType));
     }
 
     @Override
@@ -509,6 +518,51 @@ public class NotificationServiceImpl implements NotificationService {
                 .build();
 
         notificationDeliveryRepository.save(delivery);
+    }
+
+    private boolean shouldIncludeWhatsappForBookingReminder(
+            Appointment appointment,
+            NotificationType reminderType
+    ) {
+        if (appointment == null || appointment.getTenant() == null || appointment.getTenant().getId() == null) {
+            return true;
+        }
+
+        if (reminderType != NotificationType.BOOKING_REMINDER_24H
+                && reminderType != NotificationType.BOOKING_REMINDER_60
+                && reminderType != NotificationType.BOOKING_REMINDER_30) {
+            return true;
+        }
+
+        String key = reminderType == NotificationType.BOOKING_REMINDER_24H
+                ? OwnerWhatsappSettingsService.REMINDER_24H_ENABLED_KEY
+                : OwnerWhatsappSettingsService.REMINDER_60_ENABLED_KEY;
+        boolean fallback = reminderType != NotificationType.BOOKING_REMINDER_24H;
+
+        return tenantSettingsRepository.findByTenant_Id(appointment.getTenant().getId())
+                .map(settings -> readBooleanConfig(
+                        settings.getScheduleConfig(),
+                        key,
+                        fallback
+                ))
+                .orElse(fallback);
+    }
+
+    private boolean readBooleanConfig(Map<String, Object> config, String key, boolean fallback) {
+        if (config == null || !config.containsKey(key)) {
+            return fallback;
+        }
+
+        Object value = config.get(key);
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+
+        if (value instanceof String text) {
+            return Boolean.parseBoolean(text.trim());
+        }
+
+        return fallback;
     }
 
     private String safeText(String value, String fallback) {
