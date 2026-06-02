@@ -23,9 +23,15 @@ public class OwnerWhatsappSettingsService {
     public static final String REMINDER_24H_ENABLED_KEY = "whatsappReminder24hEnabled";
     public static final String INACTIVE_CUSTOMER_FOLLOW_UP_ENABLED_KEY = "whatsappInactiveCustomerFollowUpEnabled";
     public static final String APP_DOWNLOAD_URL_KEY = "whatsappAppDownloadUrl";
+    public static final String PROVIDER_KEY = "whatsappProvider";
+    public static final String CONNECTION_STATUS_KEY = "whatsappConnectionStatus";
+    public static final String SENDER_PHONE_KEY = "whatsappSenderPhone";
+    public static final String SENDER_LABEL_KEY = "whatsappSenderLabel";
 
     private static final String DEFAULT_APP_DOWNLOAD_URL =
             "https://play.google.com/store/apps/details?id=com.gods.barberia";
+    private static final String DEFAULT_PROVIDER = "MANUAL";
+    private static final String DEFAULT_CONNECTION_STATUS = "NOT_CONNECTED";
 
     private final TenantSettingsRepository tenantSettingsRepository;
 
@@ -42,6 +48,11 @@ public class OwnerWhatsappSettingsService {
                 .appointmentReminder24hEnabled(readBoolean(config, REMINDER_24H_ENABLED_KEY, false))
                 .inactiveCustomerFollowUpEnabled(readBoolean(config, INACTIVE_CUSTOMER_FOLLOW_UP_ENABLED_KEY, false))
                 .appDownloadUrl(readString(config, APP_DOWNLOAD_URL_KEY, DEFAULT_APP_DOWNLOAD_URL))
+                .provider(readString(config, PROVIDER_KEY, DEFAULT_PROVIDER))
+                .connectionStatus(readString(config, CONNECTION_STATUS_KEY, DEFAULT_CONNECTION_STATUS))
+                .senderPhone(readString(config, SENDER_PHONE_KEY, ""))
+                .senderLabel(readString(config, SENDER_LABEL_KEY, ""))
+                .connected("CONNECTED".equalsIgnoreCase(readString(config, CONNECTION_STATUS_KEY, DEFAULT_CONNECTION_STATUS)))
                 .build();
     }
 
@@ -74,6 +85,11 @@ public class OwnerWhatsappSettingsService {
             }
         }
 
+        putText(config, PROVIDER_KEY, normalizeProvider(request.getProvider()));
+        putText(config, CONNECTION_STATUS_KEY, normalizeConnectionStatus(request.getConnectionStatus()));
+        putText(config, SENDER_PHONE_KEY, cleanPhone(request.getSenderPhone()));
+        putText(config, SENDER_LABEL_KEY, cleanText(request.getSenderLabel()));
+
         settings.setScheduleConfig(config);
         settings.setUpdatedAt(LocalDateTime.now());
         tenantSettingsRepository.save(settings);
@@ -90,6 +106,57 @@ public class OwnerWhatsappSettingsService {
         if (value != null) {
             config.put(key, value);
         }
+    }
+
+    private void putText(Map<String, Object> config, String key, String value) {
+        if (value == null) {
+            return;
+        }
+
+        if (value.isBlank()) {
+            config.remove(key);
+        } else {
+            config.put(key, value);
+        }
+    }
+
+    private String normalizeProvider(String value) {
+        String text = cleanText(value);
+        if (text == null || text.isBlank()) return null;
+
+        text = text.toUpperCase();
+        return switch (text) {
+            case "MANUAL", "MOCK", "META_CLOUD", "TWILIO", "BAILEYS" -> text;
+            default -> throw new RuntimeException("Proveedor de WhatsApp no valido.");
+        };
+    }
+
+    private String normalizeConnectionStatus(String value) {
+        String text = cleanText(value);
+        if (text == null || text.isBlank()) return null;
+
+        text = text.toUpperCase();
+        return switch (text) {
+            case "NOT_CONNECTED", "PENDING", "CONNECTED", "PAUSED", "ERROR" -> text;
+            default -> throw new RuntimeException("Estado de WhatsApp no valido.");
+        };
+    }
+
+    private String cleanPhone(String value) {
+        String text = cleanText(value);
+        if (text == null) return null;
+
+        String cleaned = text.replaceAll("[^0-9+]", "");
+        if (cleaned.length() > 25) {
+            throw new RuntimeException("El numero de WhatsApp es demasiado largo.");
+        }
+        return cleaned;
+    }
+
+    private String cleanText(String value) {
+        if (value == null) return null;
+        String text = value.trim();
+        return text.isEmpty() ? "" : text;
     }
 
     private boolean readBoolean(Map<String, Object> config, String key, boolean fallback) {

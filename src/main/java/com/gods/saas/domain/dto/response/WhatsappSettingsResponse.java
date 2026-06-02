@@ -13,4 +13,9 @@ public class WhatsappSettingsResponse {
     private Boolean appointmentReminder24hEnabled;
     private Boolean inactiveCustomerFollowUpEnabled;
     private String appDownloadUrl;
+    private String provider;
+    private String connectionStatus;
+    private String senderPhone;
+    private String senderLabel;
+    private Boolean connected;
 }
