@@ -44,4 +44,7 @@ public class SaleResponse {
     private LocalDateTime validatedAt;
     private String rejectionReason;
     private String createdByRole;
+    private String customerPhone;
+    private String customerWhatsappMessage;
+    private String customerWhatsappUrl;
 }

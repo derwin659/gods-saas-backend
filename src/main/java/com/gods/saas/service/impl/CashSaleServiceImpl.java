@@ -12,15 +12,19 @@ import com.gods.saas.service.impl.impl.LoyaltyService;
 import com.gods.saas.service.impl.impl.SaleService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -30,6 +34,12 @@ import java.util.stream.Collectors;
 public class CashSaleServiceImpl implements CashSaleService {
     private static final BigDecimal DEFAULT_POINTS_PER_CURRENCY_UNIT = BigDecimal.valueOf(5);
     private static final String POINTS_PER_CURRENCY_UNIT_KEY = "loyaltyPointsPerCurrencyUnit";
+
+    @Value("${app.mobile.download-url:https://play.google.com/store/apps/details?id=com.gods.barberia}")
+    private String mobileAppDownloadUrl;
+
+    @Value("${app.public.base-url:https://www.supergodsapp.com}")
+    private String publicBaseUrl;
 
     private final SaleRepository saleRepository;
     private final CashRegisterRepository cashRegisterRepository;
@@ -531,12 +541,19 @@ public class CashSaleServiceImpl implements CashSaleService {
     private SaleResponse mapResponse(Sale sale, Integer puntosGanados) {
         boolean pendingValidation = "PENDING_VALIDATION".equals(resolveValidationStatus(sale));
         int pointsValue = puntosGanados == null ? 0 : puntosGanados;
+        String customerWhatsappMessage = pendingValidation
+                ? null
+                : buildPostSaleWhatsappMessage(sale, pointsValue);
+        String customerWhatsappUrl = buildCustomerWhatsappUrl(sale, customerWhatsappMessage);
 
         return SaleResponse.builder()
                 .saleId(sale.getId())
                 .cashRegisterId(sale.getCashRegister() != null ? sale.getCashRegister().getId() : null)
                 .customerId(sale.getCustomer() != null ? sale.getCustomer().getId() : null)
                 .customerName(buildCustomerFullName(sale.getCustomer()))
+                .customerPhone(resolveCustomerPhone(sale.getCustomer()))
+                .customerWhatsappMessage(customerWhatsappMessage)
+                .customerWhatsappUrl(customerWhatsappUrl)
                 .appointmentId(sale.getAppointment() != null ? sale.getAppointment().getId() : null)
                 .metodoPago(sale.getMetodoPago())
                 .subtotal(safe(sale.getSubtotal()))
@@ -590,6 +607,169 @@ public class CashSaleServiceImpl implements CashSaleService {
                 .build();
     }
 
+
+    private String buildPostSaleWhatsappMessage(Sale sale, int pointsEarned) {
+        if (sale == null || sale.getCustomer() == null) {
+            return null;
+        }
+
+        String tenantName = sale.getTenant() != null ? cleanText(sale.getTenant().getNombre()) : null;
+        if (tenantName == null) {
+            tenantName = "Super Gods";
+        }
+
+        String customerName = buildCustomerFirstName(sale.getCustomer());
+        int balance = resolveCustomerPointsBalance(sale);
+        String bookingUrl = buildBookingUrl(sale);
+
+        StringBuilder message = new StringBuilder();
+        message.append("Hola ");
+        message.append(customerName == null ? "cliente" : customerName);
+        message.append(", gracias por tu visita a ");
+        message.append(tenantName);
+        message.append(".");
+
+        if (pointsEarned > 0) {
+            message.append("\n\nGanaste +");
+            message.append(pointsEarned);
+            message.append(" puntos por tu compra.");
+        }
+
+        if (balance > 0) {
+            message.append("\nAhora tienes ");
+            message.append(balance);
+            message.append(" puntos disponibles.");
+        }
+
+        message.append("\n\nDescarga la app movil de Super Gods para ver tus puntos, premios y reservas:");
+        message.append("\n");
+        message.append(resolveMobileAppDownloadUrl());
+
+        if (bookingUrl != null) {
+            message.append("\n\nReserva tu proxima cita aqui:");
+            message.append("\n");
+            message.append(bookingUrl);
+        }
+
+        message.append("\n\nTe esperamos pronto.");
+        return message.toString();
+    }
+
+    private String buildCustomerWhatsappUrl(Sale sale, String message) {
+        if (sale == null || sale.getCustomer() == null || message == null || message.isBlank()) {
+            return null;
+        }
+
+        String phone = normalizeWhatsappPhone(sale.getCustomer().getTelefono(), sale.getTenant());
+        if (phone == null) {
+            return null;
+        }
+
+        return "https://wa.me/" + phone + "?text="
+                + URLEncoder.encode(message, StandardCharsets.UTF_8);
+    }
+
+    private String normalizeWhatsappPhone(String rawPhone, Tenant tenant) {
+        String digits = rawPhone == null ? "" : rawPhone.replaceAll("[^0-9]", "");
+        if (digits.isBlank()) {
+            return null;
+        }
+
+        if (digits.startsWith("00") && digits.length() > 2) {
+            digits = digits.substring(2);
+        }
+
+        if (digits.length() >= 11) {
+            return digits;
+        }
+
+        String countryCode = tenant == null ? null : cleanText(tenant.getPais());
+        String prefix = whatsappCountryPrefix(countryCode);
+        if (prefix == null) {
+            return digits;
+        }
+
+        if (digits.startsWith(prefix)) {
+            return digits;
+        }
+
+        return prefix + digits;
+    }
+
+    private String whatsappCountryPrefix(String countryCode) {
+        if (countryCode == null || countryCode.isBlank()) {
+            return null;
+        }
+
+        return switch (countryCode.trim().toUpperCase(Locale.ROOT)) {
+            case "PE", "PERU" -> "51";
+            case "CO", "COLOMBIA" -> "57";
+            case "MX", "MEXICO" -> "52";
+            case "CL", "CHILE" -> "56";
+            case "AR", "ARGENTINA" -> "54";
+            case "BO", "BOLIVIA" -> "591";
+            case "BR", "BRASIL", "BRAZIL" -> "55";
+            case "UY", "URUGUAY" -> "598";
+            case "PY", "PARAGUAY" -> "595";
+            case "CR", "COSTA RICA" -> "506";
+            case "DO", "REPUBLICA DOMINICANA", "DOMINICAN REPUBLIC" -> "1";
+            case "GT", "GUATEMALA" -> "502";
+            case "US", "USA", "UNITED STATES" -> "1";
+            default -> null;
+        };
+    }
+
+    private String buildBookingUrl(Sale sale) {
+        if (sale == null || sale.getTenant() == null) {
+            return null;
+        }
+
+        String code = cleanText(sale.getTenant().getCodigo());
+        if (code == null) {
+            return null;
+        }
+
+        return resolvePublicBaseUrl() + "/reservar/" + code;
+    }
+
+    private String resolveMobileAppDownloadUrl() {
+        String url = cleanText(mobileAppDownloadUrl);
+        return url == null ? "https://play.google.com/store/apps/details?id=com.gods.barberia" : url;
+    }
+
+    private String resolvePublicBaseUrl() {
+        String url = cleanText(publicBaseUrl);
+        if (url == null) {
+            return "https://www.supergodsapp.com";
+        }
+        while (url.endsWith("/")) {
+            url = url.substring(0, url.length() - 1);
+        }
+        return url;
+    }
+
+    private String resolveCustomerPhone(Customer customer) {
+        return customer == null ? null : cleanText(customer.getTelefono());
+    }
+
+    private String buildCustomerFirstName(Customer customer) {
+        String fullName = buildCustomerFullName(customer);
+        if (fullName == null) {
+            return null;
+        }
+
+        String[] parts = fullName.split("\\s+");
+        return parts.length == 0 ? fullName : parts[0];
+    }
+
+    private String cleanText(String value) {
+        if (value == null) {
+            return null;
+        }
+
+        String clean = value.trim();
+        return clean.isEmpty() ? null : clean;
+    }
 
 
     private int calculatePendingPointsPreview(Sale sale) {
