@@ -34,6 +34,10 @@ import java.util.stream.Collectors;
 public class CashSaleServiceImpl implements CashSaleService {
     private static final BigDecimal DEFAULT_POINTS_PER_CURRENCY_UNIT = BigDecimal.valueOf(5);
     private static final String POINTS_PER_CURRENCY_UNIT_KEY = "loyaltyPointsPerCurrencyUnit";
+    private static final String WHATSAPP_POST_SALE_MESSAGE_ENABLED_KEY = "whatsappPostSaleMessageEnabled";
+    private static final String WHATSAPP_INCLUDE_APP_DOWNLOAD_LINK_KEY = "whatsappIncludeAppDownloadLink";
+    private static final String WHATSAPP_INCLUDE_BOOKING_LINK_KEY = "whatsappIncludeBookingLink";
+    private static final String WHATSAPP_APP_DOWNLOAD_URL_KEY = "whatsappAppDownloadUrl";
 
     @Value("${app.mobile.download-url:https://play.google.com/store/apps/details?id=com.gods.barberia}")
     private String mobileAppDownloadUrl;
@@ -613,6 +617,11 @@ public class CashSaleServiceImpl implements CashSaleService {
             return null;
         }
 
+        Map<String, Object> whatsappConfig = resolveWhatsappConfig(sale.getTenant());
+        if (!readBooleanConfig(whatsappConfig, WHATSAPP_POST_SALE_MESSAGE_ENABLED_KEY, true)) {
+            return null;
+        }
+
         String tenantName = sale.getTenant() != null ? cleanText(sale.getTenant().getNombre()) : null;
         if (tenantName == null) {
             tenantName = "Super Gods";
@@ -622,6 +631,8 @@ public class CashSaleServiceImpl implements CashSaleService {
         int balance = resolveCustomerPointsBalance(sale);
         String tenantCode = sale.getTenant() == null ? null : cleanText(sale.getTenant().getCodigo());
         String bookingUrl = buildBookingUrl(sale);
+        boolean includeAppLink = readBooleanConfig(whatsappConfig, WHATSAPP_INCLUDE_APP_DOWNLOAD_LINK_KEY, true);
+        boolean includeBookingLink = readBooleanConfig(whatsappConfig, WHATSAPP_INCLUDE_BOOKING_LINK_KEY, true);
 
         StringBuilder message = new StringBuilder();
         message.append("Hola ");
@@ -642,19 +653,21 @@ public class CashSaleServiceImpl implements CashSaleService {
             message.append(" puntos disponibles.");
         }
 
-        message.append("\n\nDescarga la app movil de Super Gods para ver tus puntos, premios y reservas:");
-        message.append("\n");
-        message.append(resolveMobileAppDownloadUrl());
+        if (includeAppLink) {
+            message.append("\n\nDescarga la app movil de Super Gods para ver tus puntos, premios y reservas:");
+            message.append("\n");
+            message.append(resolveMobileAppDownloadUrl(whatsappConfig));
 
-        if (tenantCode != null) {
-            message.append("\n\nPara ver tus puntos en la app:");
-            message.append("\n1. Ingresa como cliente.");
-            message.append("\n2. Coloca el codigo del negocio: ");
-            message.append(tenantCode);
-            message.append("\n3. Revisa tus puntos, premios y proximas reservas.");
+            if (tenantCode != null) {
+                message.append("\n\nPara ver tus puntos en la app:");
+                message.append("\n1. Ingresa como cliente.");
+                message.append("\n2. Coloca el codigo del negocio: ");
+                message.append(tenantCode);
+                message.append("\n3. Revisa tus puntos, premios y proximas reservas.");
+            }
         }
 
-        if (bookingUrl != null) {
+        if (includeBookingLink && bookingUrl != null) {
             message.append("\n\nTambien puedes reservar tu proxima cita desde la app o por este link y seguir ganando puntos:");
             message.append("\n");
             message.append(bookingUrl);
@@ -741,8 +754,47 @@ public class CashSaleServiceImpl implements CashSaleService {
         return resolvePublicBaseUrl() + "/reservar/" + code;
     }
 
-    private String resolveMobileAppDownloadUrl() {
-        String url = cleanText(mobileAppDownloadUrl);
+    private Map<String, Object> resolveWhatsappConfig(Tenant tenant) {
+        if (tenant == null || tenant.getId() == null) {
+            return Map.of();
+        }
+
+        return tenantSettingsRepository.findByTenant_Id(tenant.getId())
+                .map(TenantSettings::getScheduleConfig)
+                .orElse(Map.of());
+    }
+
+    private boolean readBooleanConfig(Map<String, Object> config, String key, boolean fallback) {
+        if (config == null || !config.containsKey(key)) {
+            return fallback;
+        }
+
+        Object value = config.get(key);
+        if (value instanceof Boolean bool) {
+            return bool;
+        }
+
+        if (value instanceof String text) {
+            return Boolean.parseBoolean(text.trim());
+        }
+
+        return fallback;
+    }
+
+    private String readStringConfig(Map<String, Object> config, String key) {
+        if (config == null || !config.containsKey(key)) {
+            return null;
+        }
+
+        Object value = config.get(key);
+        return value == null ? null : cleanText(value.toString());
+    }
+
+    private String resolveMobileAppDownloadUrl(Map<String, Object> config) {
+        String url = cleanText(readStringConfig(config, WHATSAPP_APP_DOWNLOAD_URL_KEY));
+        if (url == null) {
+            url = cleanText(mobileAppDownloadUrl);
+        }
         return url == null ? "https://play.google.com/store/apps/details?id=com.gods.barberia" : url;
     }
 
