@@ -1,26 +1,23 @@
-package com.gods.saas.domain.dto.response;
+package com.gods.saas.domain.dto.request;
 
-import lombok.Builder;
 import lombok.Data;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Data
-@Builder
-public class SuperAdminTenantResponse {
-    private Long tenantId;
+public class SuperAdminUpdateTenantRequest {
     private String businessName;
     private String ownerName;
     private String ownerEmail;
     private String ownerPhone;
-    private String code;
+    private String country;
     private String plan;
-    private String status;
-    private String rawStatus;
-    private Boolean tenantActive;
-    private Boolean trial;
-    private Long daysRemaining;
     private String billingCycle;
+    private String currency;
+    private BigDecimal price;
+    private String status;
     private LocalDateTime fechaInicio;
     private LocalDateTime fechaFin;
+    private String observations;
 }

@@ -2,6 +2,7 @@ package com.gods.saas.web.controller;
 
 import com.gods.saas.domain.dto.request.ChangePlancRequest;
 import com.gods.saas.domain.dto.request.SuperAdminCreateTenantRequest;
+import com.gods.saas.domain.dto.request.SuperAdminUpdateTenantRequest;
 import com.gods.saas.domain.dto.response.SuperAdminTenantResponse;
 import com.gods.saas.service.impl.impl.SuperAdminTenantService;
 import lombok.RequiredArgsConstructor;
@@ -34,6 +35,12 @@ public class SuperAdminTenantController {
         return ResponseEntity.ok(service.create(request));
     }
 
+    @PutMapping("/{tenantId}")
+    public ResponseEntity<SuperAdminTenantResponse> update(@PathVariable Long tenantId,
+                                                           @RequestBody SuperAdminUpdateTenantRequest request) {
+        return ResponseEntity.ok(service.update(tenantId, request));
+    }
+
     @PutMapping("/{tenantId}/activate")
     public ResponseEntity<Void> activate(@PathVariable Long tenantId) {
         service.activate(tenantId);
@@ -44,6 +51,12 @@ public class SuperAdminTenantController {
     public ResponseEntity<Void> suspend(@PathVariable Long tenantId) {
         service.suspend(tenantId);
         return ResponseEntity.ok().build();
+    }
+
+    @DeleteMapping("/{tenantId}")
+    public ResponseEntity<Void> deleteTenant(@PathVariable Long tenantId) {
+        service.deleteTenant(tenantId);
+        return ResponseEntity.noContent().build();
     }
 
     @PutMapping("/{tenantId}/plan")

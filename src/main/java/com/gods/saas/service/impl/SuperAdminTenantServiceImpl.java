@@ -2,6 +2,7 @@ package com.gods.saas.service.impl;
 
 import com.gods.saas.domain.dto.request.ChangePlancRequest;
 import com.gods.saas.domain.dto.request.SuperAdminCreateTenantRequest;
+import com.gods.saas.domain.dto.request.SuperAdminUpdateTenantRequest;
 import com.gods.saas.domain.dto.response.SuperAdminDashboardResponse;
 import com.gods.saas.domain.dto.response.SuperAdminTenantResponse;
 import com.gods.saas.domain.enums.BusinessType;
@@ -16,6 +17,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.temporal.ChronoUnit;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Optional;
@@ -26,6 +28,12 @@ import java.util.Optional;
 public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
 
     private static final String DEFAULT_TIMEZONE = "America/Lima";
+    private static final String STATUS_ACTIVE = "ACTIVE";
+    private static final String STATUS_TRIAL = "TRIAL";
+    private static final String STATUS_EXPIRED = "EXPIRED";
+    private static final String STATUS_SUSPENDED = "SUSPENDED";
+    private static final String STATUS_CANCELLED = "CANCELLED";
+    private static final String STATUS_NO_SUBSCRIPTION = "NO_SUBSCRIPTION";
 
     private final TenantSettingsRepository tenantSettingsRepository;
     private final TenantRepository tenantRepository;
@@ -161,6 +169,91 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
         return mapToResponse(tenant);
     }
 
+    @Override
+    public SuperAdminTenantResponse update(Long tenantId, SuperAdminUpdateTenantRequest request) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new EntityNotFoundException("Tenant no encontrado: " + tenantId));
+
+        LocalDateTime now = nowLima();
+
+        if (hasText(request.getBusinessName())) {
+            tenant.setNombre(request.getBusinessName().trim());
+        }
+        if (hasText(request.getOwnerName())) {
+            tenant.setOwnerName(request.getOwnerName().trim());
+        }
+        if (hasText(request.getCountry())) {
+            tenant.setPais(request.getCountry().trim());
+        }
+
+        AppUser owner = appUserRepository
+                .findFirstByTenantIdAndRolOrderByIdAsc(tenantId, "OWNER")
+                .orElse(null);
+
+        if (owner != null) {
+            if (hasText(request.getOwnerEmail())) {
+                String email = request.getOwnerEmail().trim().toLowerCase();
+                if (appUserRepository.existsByEmailAndTenant_IdAndIdNot(email, tenantId, owner.getId())) {
+                    throw new IllegalArgumentException("Ya existe otro usuario con ese email en este negocio: " + email);
+                }
+                owner.setEmail(email);
+            }
+            if (hasText(request.getOwnerName())) {
+                owner.setNombre(request.getOwnerName().trim());
+            }
+            if (request.getOwnerPhone() != null) {
+                owner.setPhone(request.getOwnerPhone().trim());
+            }
+            owner.setFechaActualizacion(now);
+            appUserRepository.save(owner);
+        }
+
+        Optional<Subscription> subscriptionOpt = findSubscription(tenantId);
+        subscriptionOpt.ifPresent(subscription -> {
+            if (hasText(request.getPlan())) {
+                String plan = safeUpper(request.getPlan(), subscription.getPlan());
+                subscription.setPlan(plan);
+                tenant.setPlan(plan);
+                applyPlanLimits(subscription, plan);
+            }
+            if (hasText(request.getBillingCycle())) {
+                subscription.setBillingCycle(safeUpper(request.getBillingCycle(), subscription.getBillingCycle()));
+            }
+            if (hasText(request.getCurrency())) {
+                subscription.setCurrency(safeUpper(request.getCurrency(), subscription.getCurrency()));
+            }
+            if (request.getPrice() != null) {
+                subscription.setPrecioMensual(request.getPrice().doubleValue());
+            }
+            if (hasText(request.getStatus())) {
+                String status = safeUpper(request.getStatus(), subscription.getEstado());
+                subscription.setEstado(status);
+                tenant.setEstadoSuscripcion(status);
+                tenant.setActive(!STATUS_SUSPENDED.equals(status) && !STATUS_CANCELLED.equals(status));
+                subscription.setTrial(STATUS_TRIAL.equals(status));
+            }
+            if (request.getFechaInicio() != null) {
+                subscription.setFechaInicio(request.getFechaInicio());
+            }
+            if (request.getFechaFin() != null) {
+                subscription.setFechaFin(request.getFechaFin());
+                subscription.setFechaRenovacion(request.getFechaFin());
+            }
+            if (hasText(request.getObservations())) {
+                subscription.setObservaciones(appendObservation(
+                        subscription.getObservaciones(),
+                        request.getObservations().trim()
+                ));
+            }
+            subscriptionRepository.save(subscription);
+        });
+
+        tenant.setFechaActualizacion(now);
+        tenantRepository.save(tenant);
+
+        return mapToResponse(tenant);
+    }
+
     private String resolveBusinessType(BusinessType businessType) {
         if (businessType == null) {
             return BusinessType.BARBERSHOP.name();
@@ -177,16 +270,25 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
         LocalDateTime now = nowLima();
 
         tenant.setActive(true);
+        tenant.setEstadoSuscripcion(STATUS_ACTIVE);
         tenant.setFechaActualizacion(now);
         tenantRepository.save(tenant);
 
-        Optional<Subscription> subOpt = subscriptionRepository.findById(tenantId);
+        Optional<Subscription> subOpt = findSubscription(tenantId);
         if (subOpt.isPresent()) {
             Subscription sub = subOpt.get();
 
-            if ("SUSPENDED".equalsIgnoreCase(sub.getEstado()) ||
-                    "EXPIRED".equalsIgnoreCase(sub.getEstado())) {
-                sub.setEstado("ACTIVE");
+            if (STATUS_SUSPENDED.equalsIgnoreCase(sub.getEstado()) ||
+                    STATUS_EXPIRED.equalsIgnoreCase(sub.getEstado()) ||
+                    STATUS_CANCELLED.equalsIgnoreCase(sub.getEstado())) {
+                sub.setEstado(STATUS_ACTIVE);
+                sub.setTrial(false);
+            }
+
+            if (sub.getFechaFin() == null || sub.getFechaFin().isBefore(now)) {
+                sub.setFechaInicio(now);
+                sub.setFechaRenovacion(calculateEndDate(now, sub.getBillingCycle(), 0));
+                sub.setFechaFin(calculateEndDate(now, sub.getBillingCycle(), 0));
             }
 
             subscriptionRepository.save(sub);
@@ -223,20 +325,45 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
         LocalDateTime now = nowLima();
 
         tenant.setActive(false);
+        tenant.setEstadoSuscripcion(STATUS_SUSPENDED);
         tenant.setFechaActualizacion(now);
         tenantRepository.save(tenant);
 
-        Optional<Subscription> subOpt = subscriptionRepository.findById(tenantId);
+        Optional<Subscription> subOpt = findSubscription(tenantId);
         if (subOpt.isPresent()) {
             Subscription sub = subOpt.get();
-            sub.setEstado("SUSPENDED");
+            sub.setEstado(STATUS_SUSPENDED);
             subscriptionRepository.save(sub);
         }
     }
 
     @Override
+    public void deleteTenant(Long tenantId) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new EntityNotFoundException("Tenant no encontrado: " + tenantId));
+
+        LocalDateTime now = nowLima();
+
+        tenant.setActive(false);
+        tenant.setEstadoSuscripcion(STATUS_CANCELLED);
+        tenant.setFechaActualizacion(now);
+        tenantRepository.save(tenant);
+
+        findSubscription(tenantId).ifPresent(subscription -> {
+            subscription.setEstado(STATUS_CANCELLED);
+            subscription.setTrial(false);
+            subscription.setFechaFin(now);
+            subscription.setObservaciones(appendObservation(
+                    subscription.getObservaciones(),
+                    "Cuenta cancelada por Super Admin"
+            ));
+            subscriptionRepository.save(subscription);
+        });
+    }
+
+    @Override
     public void changePlan(Long tenantId, ChangePlancRequest request) {
-        Subscription subscription = subscriptionRepository.findById(tenantId)
+        Subscription subscription = findSubscription(tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("SuscripciÃ³n no encontrada para tenant: " + tenantId));
 
         String newPlan = safeUpper(request.getPlan(), subscription.getPlan());
@@ -249,7 +376,7 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
         subscription.setPlan(newPlan);
         subscription.setBillingCycle(newBillingCycle);
         subscription.setCurrency(newCurrency);
-        subscription.setEstado("ACTIVE");
+        subscription.setEstado(STATUS_ACTIVE);
         subscription.setTrial(false);
 
         if (request.getPrice() != null) {
@@ -275,6 +402,7 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
         subscriptionRepository.save(subscription);
 
         tenant.setActive(true);
+        tenant.setEstadoSuscripcion(STATUS_ACTIVE);
         tenant.setFechaActualizacion(now);
         tenantRepository.save(tenant);
     }
@@ -283,10 +411,15 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
     @Transactional(readOnly = true)
     public SuperAdminDashboardResponse dashboard() {
         long totalTenants = tenantRepository.count();
-        long activeTenants = subscriptionRepository.countByEstado("ACTIVE");
-        long trialTenants = subscriptionRepository.countByEstado("TRIAL");
-        long expiredTenants = subscriptionRepository.countByEstado("EXPIRED");
-        long suspendedTenants = subscriptionRepository.countByEstado("SUSPENDED");
+        LocalDateTime now = nowLima();
+        List<SuperAdminTenantResponse> tenants = tenantRepository.findAll()
+                .stream()
+                .map(tenant -> mapToResponse(tenant, now))
+                .toList();
+        long activeTenants = countByStatus(tenants, STATUS_ACTIVE);
+        long trialTenants = countByStatus(tenants, STATUS_TRIAL);
+        long expiredTenants = countByStatus(tenants, STATUS_EXPIRED);
+        long suspendedTenants = countByStatus(tenants, STATUS_SUSPENDED);
         long pendingPayments = subscriptionPaymentRepository.countByStatus("PENDING_REVIEW");
 
         return SuperAdminDashboardResponse.builder()
@@ -300,23 +433,91 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
     }
 
     private SuperAdminTenantResponse mapToResponse(Tenant tenant) {
-        Subscription subscription = subscriptionRepository.findById(tenant.getId()).orElse(null);
+        return mapToResponse(tenant, nowLima());
+    }
+
+    private SuperAdminTenantResponse mapToResponse(Tenant tenant, LocalDateTime now) {
+        Subscription subscription = findSubscription(tenant.getId()).orElse(null);
 
         AppUser owner = appUserRepository
                 .findFirstByTenantIdAndRolOrderByIdAsc(tenant.getId(), "OWNER")
                 .orElse(null);
+
+        String effectiveStatus = resolveEffectiveStatus(tenant, subscription, now);
 
         return SuperAdminTenantResponse.builder()
                 .tenantId(tenant.getId())
                 .businessName(tenant.getNombre())
                 .ownerName(owner != null ? owner.getNombre() : null)
                 .ownerEmail(owner != null ? owner.getEmail() : null)
+                .ownerPhone(owner != null ? owner.getPhone() : null)
                 .plan(subscription != null ? subscription.getPlan() : null)
-                .status(subscription != null ? subscription.getEstado() : null)
+                .status(effectiveStatus)
+                .rawStatus(subscription != null ? subscription.getEstado() : null)
+                .tenantActive(Boolean.TRUE.equals(tenant.getActive()))
+                .trial(subscription != null ? subscription.isTrial() : null)
+                .daysRemaining(calculateDaysRemaining(subscription, now))
                 .billingCycle(subscription != null ? subscription.getBillingCycle() : null)
                 .fechaInicio(subscription != null ? subscription.getFechaInicio() : null)
                 .fechaFin(subscription != null ? subscription.getFechaFin() : null)
                 .build();
+    }
+
+    private Optional<Subscription> findSubscription(Long tenantId) {
+        return subscriptionRepository.findTopByTenantIdOrderBySubIdDesc(tenantId)
+                .or(() -> subscriptionRepository.findByTenantId(tenantId));
+    }
+
+    private long countByStatus(List<SuperAdminTenantResponse> tenants, String status) {
+        return tenants.stream()
+                .filter(item -> status.equalsIgnoreCase(item.getStatus()))
+                .count();
+    }
+
+    private String resolveEffectiveStatus(Tenant tenant, Subscription subscription, LocalDateTime now) {
+        if (subscription == null) {
+            return Boolean.TRUE.equals(tenant.getActive()) ? STATUS_NO_SUBSCRIPTION : STATUS_CANCELLED;
+        }
+
+        String rawStatus = safeUpper(subscription.getEstado(), STATUS_NO_SUBSCRIPTION);
+
+        if (STATUS_CANCELLED.equals(rawStatus)) {
+            return STATUS_CANCELLED;
+        }
+
+        if (STATUS_SUSPENDED.equals(rawStatus) || Boolean.FALSE.equals(tenant.getActive())) {
+            return STATUS_SUSPENDED;
+        }
+
+        if (subscription.getFechaFin() != null && subscription.getFechaFin().isBefore(now)) {
+            return STATUS_EXPIRED;
+        }
+
+        if (subscription.isTrial() || STATUS_TRIAL.equals(rawStatus)) {
+            return STATUS_TRIAL;
+        }
+
+        if (STATUS_ACTIVE.equals(rawStatus)) {
+            return STATUS_ACTIVE;
+        }
+
+        return rawStatus;
+    }
+
+    private Long calculateDaysRemaining(Subscription subscription, LocalDateTime now) {
+        if (subscription == null || subscription.getFechaFin() == null) {
+            return null;
+        }
+
+        return ChronoUnit.DAYS.between(now.toLocalDate(), subscription.getFechaFin().toLocalDate());
+    }
+
+    private String appendObservation(String current, String next) {
+        if (current == null || current.isBlank()) {
+            return next;
+        }
+
+        return current + " | " + next;
     }
 
     private void validateCreateRequest(SuperAdminCreateTenantRequest request) {
@@ -337,6 +538,10 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
 
     private String safeTrim(String value, String fallback) {
         return (value == null || value.isBlank()) ? fallback : value.trim();
+    }
+
+    private boolean hasText(String value) {
+        return value != null && !value.isBlank();
     }
 
     private String resolveCurrencyForCountry(String country, String requestedCurrency) {
