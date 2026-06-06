@@ -14,6 +14,7 @@ public class CreateDemoRequest {
     private String ownerName;
     private String ownerEmail;
     private String ownerPhone;
+    private String password;
 
     private String country;
     private String city;

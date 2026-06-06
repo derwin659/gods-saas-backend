@@ -76,6 +76,7 @@ public class TenantService {
                 .aiEnabled(false)
                 .loyaltyEnabled(true)
                 .promotionsEnabled(true)
+                .customRewardsEnabled(true)
                 .billingCycle("MONTHLY")
                 .currency(currency)
                 .observaciones("Trial inicial al crear tenant")

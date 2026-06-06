@@ -8,6 +8,7 @@ import java.time.LocalDateTime;
 @Data
 public class SuperAdminUpdateTenantRequest {
     private String businessName;
+    private String businessType;
     private String ownerName;
     private String ownerEmail;
     private String ownerPhone;

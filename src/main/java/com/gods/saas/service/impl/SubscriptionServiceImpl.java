@@ -130,6 +130,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 .aiEnabled(false)
                 .loyaltyEnabled(true)
                 .promotionsEnabled(true)
+                .customRewardsEnabled(true)
                 .billingCycle("MONTHLY")
                 .currency(resolveCurrencyForTenant(tenantId, "PEN"))
                 .observaciones("Trial inicial automÃ¡tico")
@@ -568,6 +569,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 sub.setAiEnabled(false);
                 sub.setLoyaltyEnabled(true);
                 sub.setPromotionsEnabled(true);
+                sub.setCustomRewardsEnabled(true);
             }
             case "PRO" -> {
                 sub.setPlan("PRO");
@@ -578,6 +580,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 sub.setAiEnabled(false);
                 sub.setLoyaltyEnabled(true);
                 sub.setPromotionsEnabled(true);
+                sub.setCustomRewardsEnabled(true);
             }
             case "GODS_AI" -> {
                 sub.setPlan("GODS_AI");
@@ -588,6 +591,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 sub.setAiEnabled(true);
                 sub.setLoyaltyEnabled(true);
                 sub.setPromotionsEnabled(true);
+                sub.setCustomRewardsEnabled(true);
             }
             default -> throw new BusinessException(
                     "PLAN_INVALID",

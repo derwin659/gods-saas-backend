@@ -132,8 +132,8 @@ public class DemoRequestServiceImpl implements DemoRequestService {
 
         Tenant tenant = createTenantFromDemoRequest(demoRequest, now);
         Branch branch = createMainBranch(tenant, demoRequest, now);
-        String temporaryPassword = generateTemporaryPassword();
-        AppUser owner = createOwnerUser(tenant, branch, demoRequest, now, temporaryPassword);
+        String ownerPassword = resolveOwnerPassword(request, googleProfile);
+        AppUser owner = createOwnerUser(tenant, branch, demoRequest, now, ownerPassword);
         if (googleProfile != null) {
             linkOwnerWithGoogle(owner, googleProfile, now);
         }
@@ -148,7 +148,7 @@ public class DemoRequestServiceImpl implements DemoRequestService {
 
         return mapToResponseWithAccess(
                 demoRequestRepository.save(demoRequest),
-                googleProfile == null ? temporaryPassword : "Ingresa con Google",
+                null,
                 googleProfile,
                 buildOwnerSession(owner, tenant, branch)
         );
@@ -454,6 +454,23 @@ public class DemoRequestServiceImpl implements DemoRequestService {
             return null;
         }
         return googleOAuthService.verifySignupToken(token.trim());
+    }
+
+    private String resolveOwnerPassword(
+            CreateDemoRequest request,
+            GoogleOAuthService.GoogleSignupProfile googleProfile
+    ) {
+        String password = trim(request.getPassword());
+
+        if (password.length() >= 6) {
+            return password;
+        }
+
+        if (googleProfile != null) {
+            return generateTemporaryPassword();
+        }
+
+        throw new IllegalArgumentException("La contraseña debe tener al menos 6 caracteres.");
     }
 
     private String generateTemporaryPassword() {

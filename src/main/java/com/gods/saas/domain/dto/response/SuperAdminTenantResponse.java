@@ -10,11 +10,15 @@ import java.time.LocalDateTime;
 public class SuperAdminTenantResponse {
     private Long tenantId;
     private String businessName;
+    private String businessType;
+    private String country;
     private String ownerName;
     private String ownerEmail;
     private String ownerPhone;
     private String code;
     private String plan;
+    private Double price;
+    private String currency;
     private String status;
     private String rawStatus;
     private Boolean tenantActive;

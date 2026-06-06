@@ -179,6 +179,9 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
         if (hasText(request.getBusinessName())) {
             tenant.setNombre(request.getBusinessName().trim());
         }
+        if (hasText(request.getBusinessType())) {
+            tenant.setBusinessType(request.getBusinessType().trim().toUpperCase());
+        }
         if (hasText(request.getOwnerName())) {
             tenant.setOwnerName(request.getOwnerName().trim());
         }
@@ -448,10 +451,14 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
         return SuperAdminTenantResponse.builder()
                 .tenantId(tenant.getId())
                 .businessName(tenant.getNombre())
+                .businessType(tenant.getBusinessType())
+                .country(tenant.getPais())
                 .ownerName(owner != null ? owner.getNombre() : null)
                 .ownerEmail(owner != null ? owner.getEmail() : null)
                 .ownerPhone(owner != null ? owner.getPhone() : null)
                 .plan(subscription != null ? subscription.getPlan() : null)
+                .price(subscription != null ? subscription.getPrecioMensual() : null)
+                .currency(subscription != null ? subscription.getCurrency() : null)
                 .status(effectiveStatus)
                 .rawStatus(subscription != null ? subscription.getEstado() : null)
                 .tenantActive(Boolean.TRUE.equals(tenant.getActive()))
@@ -619,8 +626,8 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
                 subscription.setMaxAdmins(1);
                 subscription.setAiEnabled(false);
                 subscription.setLoyaltyEnabled(true);
-                subscription.setPromotionsEnabled(false);
-                subscription.setCustomRewardsEnabled(false);
+                subscription.setPromotionsEnabled(true);
+                subscription.setCustomRewardsEnabled(true);
             }
         }
     }

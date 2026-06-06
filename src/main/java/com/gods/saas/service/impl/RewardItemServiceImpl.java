@@ -175,7 +175,8 @@ public class RewardItemServiceImpl implements RewardItemService {
                 .findTopByTenantIdOrderByFechaInicioDesc(tenantId)
                 .orElseThrow(() -> new RuntimeException("Suscripción no encontrada"));
 
-        if (subscription.getCustomRewardsEnabled() == null || !subscription.getCustomRewardsEnabled()) {
+        if (!"STARTER".equalsIgnoreCase(subscription.getPlan())
+                && (subscription.getCustomRewardsEnabled() == null || !subscription.getCustomRewardsEnabled())) {
             throw new RuntimeException("Tu plan actual no permite gestionar premios personalizados");
         }
     }
@@ -185,7 +186,8 @@ public class RewardItemServiceImpl implements RewardItemService {
                 .findTopByTenantIdOrderByFechaInicioDesc(tenantId)
                 .orElseThrow(() -> new RuntimeException("Suscripción no encontrada"));
 
-        if (subscription.getCustomRewardsEnabled() == null || !subscription.getCustomRewardsEnabled()) {
+        if (!"STARTER".equalsIgnoreCase(subscription.getPlan())
+                && (subscription.getCustomRewardsEnabled() == null || !subscription.getCustomRewardsEnabled())) {
             throw new RuntimeException("Tu plan actual no permite gestionar premios personalizados");
         }
 

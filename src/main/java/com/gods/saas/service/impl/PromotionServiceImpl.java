@@ -239,7 +239,7 @@ public class PromotionServiceImpl implements PromotionService {
                 .findTopByTenantIdOrderByFechaInicioDesc(tenantId)
                 .orElseThrow(() -> new RuntimeException("Suscripción no encontrada"));
 
-        if (!subscription.isPromotionsEnabled()) {
+        if (!"STARTER".equalsIgnoreCase(subscription.getPlan()) && !subscription.isPromotionsEnabled()) {
             throw new RuntimeException("Tu plan actual no permite gestionar promociones");
         }
     }
@@ -249,7 +249,7 @@ public class PromotionServiceImpl implements PromotionService {
                 .findTopByTenantIdOrderByFechaInicioDesc(tenantId)
                 .orElseThrow(() -> new RuntimeException("Suscripción no encontrada"));
 
-        if (!subscription.isPromotionsEnabled()) {
+        if (!"STARTER".equalsIgnoreCase(subscription.getPlan()) && !subscription.isPromotionsEnabled()) {
             throw new RuntimeException("Tu plan actual no permite gestionar promociones");
         }
 
