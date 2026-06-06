@@ -15,6 +15,7 @@ public class ServiceMiniResponse {
     private String nombre;
     private Integer duracionMinutos;
     private Double precio;
+    private Boolean precioVariable;
     private String imageUrl;
 
     public static ServiceMiniResponse fromEntity(ServiceEntity s) {
@@ -23,6 +24,7 @@ public class ServiceMiniResponse {
                 .nombre(s.getNombre())
                 .duracionMinutos(s.getDuracionMinutos())
                 .precio(s.getPrecio())
+                .precioVariable(Boolean.TRUE.equals(s.getPrecioVariable()))
                 .imageUrl(s.getImageUrl())
                 .build();
     }

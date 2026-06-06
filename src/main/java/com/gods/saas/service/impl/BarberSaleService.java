@@ -48,6 +48,7 @@ public class BarberSaleService {
                         .precio(service.getPrecio() == null
                                 ? BigDecimal.ZERO
                                 : BigDecimal.valueOf(service.getPrecio()).setScale(2, RoundingMode.HALF_UP))
+                        .precioVariable(Boolean.TRUE.equals(service.getPrecioVariable()))
                         .activo(service.getActivo())
                         .imageUrl(service.getImageUrl())
                         .build())

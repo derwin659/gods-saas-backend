@@ -33,6 +33,10 @@ public class ServiceEntity {
     @Column(nullable = false)
     private Double precio;
 
+    @Column(name = "precio_variable", nullable = false)
+    @Builder.Default
+    private Boolean precioVariable = false;
+
     @Column(length = 100)
     private String categoria;
 

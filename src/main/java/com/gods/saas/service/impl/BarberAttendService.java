@@ -69,6 +69,7 @@ public class BarberAttendService {
                         .descripcion(service.getDescripcion())
                         .duracionMin(service.getDuracionMinutos())
                         .precio(service.getPrecio())
+                        .precioVariable(Boolean.TRUE.equals(service.getPrecioVariable()))
                         .categoria(service.getCategoria())
                         .activo(Boolean.TRUE.equals(service.getActivo()))
                         .build())

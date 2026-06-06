@@ -7,6 +7,7 @@ public record ServiceResponse(
         String descripcion,
         Integer duracionMinutos,
         Double precio,
+        Boolean precioVariable,
         String categoria,
         Boolean activo,
         String imageUrl

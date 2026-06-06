@@ -16,6 +16,7 @@ public class BarberServiceResponse {
     private String descripcion;
     private Integer duracionMin;
     private Double precio;
+    private Boolean precioVariable;
     private String categoria;
     private Boolean activo;
 }

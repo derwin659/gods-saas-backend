@@ -69,6 +69,7 @@ public class OwnerServiceCrudServiceImpl implements OwnerServiceCrudService {
         service.setDescripcion(trimToNull(request.descripcion()));
         service.setDuracionMinutos(request.duracionMinutos());
         service.setPrecio(request.precio().doubleValue());
+        service.setPrecioVariable(Boolean.TRUE.equals(request.precioVariable()));
         service.setCategoria(trimToNull(request.categoria()));
         service.setActivo(request.activo() != null ? request.activo() : true);
 
@@ -99,6 +100,7 @@ public class OwnerServiceCrudServiceImpl implements OwnerServiceCrudService {
         service.setDescripcion(trimToNull(request.descripcion()));
         service.setDuracionMinutos(request.duracionMinutos());
         service.setPrecio(request.precio().doubleValue());
+        service.setPrecioVariable(Boolean.TRUE.equals(request.precioVariable()));
         service.setCategoria(trimToNull(request.categoria()));
         service.setActivo(request.activo() != null ? request.activo() : service.getActivo());
 
@@ -164,6 +166,7 @@ public class OwnerServiceCrudServiceImpl implements OwnerServiceCrudService {
                 service.getDescripcion(),
                 service.getDuracionMinutos(),
                 service.getPrecio(),
+                Boolean.TRUE.equals(service.getPrecioVariable()),
                 service.getCategoria(),
                 service.getActivo(),
                 service.getImageUrl()

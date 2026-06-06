@@ -21,6 +21,8 @@ public record ServiceRequest(
         @DecimalMin(value = "0.0", inclusive = true, message = "El precio no puede ser negativo")
         BigDecimal precio,
 
+        Boolean precioVariable,
+
         String categoria,
 
         Boolean activo
