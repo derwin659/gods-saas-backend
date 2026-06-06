@@ -96,9 +96,9 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         Subscription sub = getCurrentSubscriptionOrThrow(tenantId);
         validateUsableOrThrow(sub);
 
-        long currentAdmins = appUserRepository.countActiveByTenantIdAndRoles(
+        long currentAdmins = appUserRepository.countByTenantIdAndRolIgnoreCaseAndActivoTrue(
                 tenantId,
-                List.of("OWNER", "ADMIN")
+                "ADMIN"
         );
         Integer maxAdmins = sub.getMaxAdmins();
 
@@ -191,9 +191,9 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
         long usedBranches = branchRepository.countByTenant_Id(tenantId);
         long usedBarbers = appUserRepository.countByTenantIdAndRolIgnoreCaseAndActivoTrue(tenantId, "BARBER");
-        long usedAdmins = appUserRepository.countActiveByTenantIdAndRoles(
+        long usedAdmins = appUserRepository.countByTenantIdAndRolIgnoreCaseAndActivoTrue(
                 tenantId,
-                List.of("OWNER", "ADMIN")
+                "ADMIN"
         );
 
         boolean usable = isSubscriptionUsable(sub);

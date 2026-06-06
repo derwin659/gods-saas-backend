@@ -456,6 +456,7 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 .paymentMethodBalances(paymentMethodBalances)
                 .movementsIncome(totals.movementsIncome())
                 .movementsExpense(totals.movementsExpense())
+                .cashMovementsExpense(totals.cashMovementsExpense())
                 .movementsExpenseGeneral(totals.movementsExpenseGeneral())
                 .movementsAdvanceBarber(totals.movementsAdvanceBarber())
                 .movementsPaymentBarber(totals.movementsPaymentBarber())
@@ -585,6 +586,7 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 cashSalesTotal,
                 movementsIncome,
                 movementsExpense,
+                cashMovementsExpense,
                 movementsExpenseGeneral,
                 movementsAdvanceBarber,
                 movementsPaymentBarber,
@@ -730,6 +732,7 @@ public class CashRegisterServiceImpl implements CashRegisterService {
             BigDecimal cashSalesTotal,
             BigDecimal movementsIncome,
             BigDecimal movementsExpense,
+            BigDecimal cashMovementsExpense,
             BigDecimal movementsExpenseGeneral,
             BigDecimal movementsAdvanceBarber,
             BigDecimal movementsPaymentBarber,

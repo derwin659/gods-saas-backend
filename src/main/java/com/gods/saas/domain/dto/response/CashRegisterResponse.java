@@ -30,6 +30,7 @@ public class CashRegisterResponse {
     private BigDecimal cashSalesTotal;
     private BigDecimal movementsIncome;
     private BigDecimal movementsExpense;
+    private BigDecimal cashMovementsExpense;
     private BigDecimal movementsExpenseGeneral;
     private BigDecimal movementsAdvanceBarber;
     private BigDecimal movementsPaymentBarber;
