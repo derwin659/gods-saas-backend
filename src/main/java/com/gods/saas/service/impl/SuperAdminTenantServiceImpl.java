@@ -193,6 +193,10 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
                 .findFirstByTenantIdAndRolOrderByIdAsc(tenantId, "OWNER")
                 .orElse(null);
 
+        if (owner == null && hasText(request.getOwnerEmail())) {
+            owner = createMissingOwnerUser(tenant, request, now);
+        }
+
         if (owner != null) {
             if (hasText(request.getOwnerEmail())) {
                 String email = request.getOwnerEmail().trim().toLowerCase();
@@ -255,6 +259,44 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
         tenantRepository.save(tenant);
 
         return mapToResponse(tenant);
+    }
+
+    private AppUser createMissingOwnerUser(
+            Tenant tenant,
+            SuperAdminUpdateTenantRequest request,
+            LocalDateTime now
+    ) {
+        String email = request.getOwnerEmail().trim().toLowerCase();
+        if (appUserRepository.existsByEmailAndTenant_Id(email, tenant.getId())) {
+            throw new IllegalArgumentException("Ya existe un usuario con ese email en este negocio: " + email);
+        }
+
+        Branch branch = branchRepository.findByTenant_IdOrderByNombreAsc(tenant.getId())
+                .stream()
+                .findFirst()
+                .orElseThrow(() -> new EntityNotFoundException("No existe una sede para crear el owner del tenant: " + tenant.getId()));
+
+        AppUser owner = new AppUser();
+        owner.setTenant(tenant);
+        owner.setBranch(branch);
+        owner.setNombre(hasText(request.getOwnerName()) ? request.getOwnerName().trim() : tenant.getOwnerName());
+        owner.setEmail(email);
+        owner.setPhone(request.getOwnerPhone() != null ? request.getOwnerPhone().trim() : null);
+        owner.setRol("OWNER");
+        owner.setActivo(true);
+        owner.setPasswordHash(passwordEncoder.encode(java.util.UUID.randomUUID().toString()));
+        owner.setFechaCreacion(now);
+        owner.setFechaActualizacion(now);
+        owner = appUserRepository.save(owner);
+
+        UserTenantRole role = new UserTenantRole();
+        role.setUser(owner);
+        role.setTenant(tenant);
+        role.setRole(RoleType.OWNER);
+        role.setBranch(branch);
+        userTenantRoleRepository.save(role);
+
+        return owner;
     }
 
     private String resolveBusinessType(BusinessType businessType) {
@@ -453,7 +495,7 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
                 .businessName(tenant.getNombre())
                 .businessType(tenant.getBusinessType())
                 .country(tenant.getPais())
-                .ownerName(owner != null ? owner.getNombre() : null)
+                .ownerName(owner != null ? owner.getNombre() : tenant.getOwnerName())
                 .ownerEmail(owner != null ? owner.getEmail() : null)
                 .ownerPhone(owner != null ? owner.getPhone() : null)
                 .plan(subscription != null ? subscription.getPlan() : null)
