@@ -49,6 +49,9 @@ public class ClientBookingService {
     private final PromotionRepository promotionRepository;
 
     public BookingBootstrapResponse getBootstrap(Long tenantId) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new RuntimeException("Tenant no encontrado."));
+
         List<Branch> branches = branchRepository.findByTenant_IdAndActivoTrue(tenantId);
         List<ServiceEntity> services = serviceRepository.findByTenant_IdAndActivoTrue(tenantId);
         List<AppUser> barbers = appUserRepository.findByTenant_IdAndRolAndActivoTrue(tenantId, "BARBER");
@@ -67,6 +70,9 @@ public class ClientBookingService {
         Integer defaultPercent = getInteger(config, "bookingDepositDefaultPercent", null);
 
         return BookingBootstrapResponse.builder()
+                .tenantName(tenant.getNombre())
+                .tenantLogoUrl(tenant.getLogoUrl())
+                .tenantCoverImageUrl(firstBranchImage(branches))
                 .branches(branches.stream().map(BranchMiniResponse::fromEntity).toList())
                 .services(services.stream().map(ServiceMiniResponse::fromEntity).toList())
                 .barbers(barbers.stream().map(BarberMiniResponse::fromEntity).toList())
@@ -988,10 +994,21 @@ public class ClientBookingService {
                 .branchId(branchId)
                 .barberId(barberId)
                 .tenantName(tenant.getNombre())
+                .tenantLogoUrl(tenant.getLogoUrl())
                 .branchName(branch != null ? branch.getNombre() : null)
+                .branchImageUrl(branch != null ? branch.getImageUrl() : null)
                 .barberName(barber != null ? buildUserFullName(barber) : null)
                 .bookingLink(buildBookingLink(tenant.getCodigo(), branchId, barberId))
                 .build();
+    }
+
+    private String firstBranchImage(List<Branch> branches) {
+        if (branches == null) return null;
+        return branches.stream()
+                .map(Branch::getImageUrl)
+                .filter(value -> value != null && !value.isBlank())
+                .findFirst()
+                .orElse(null);
     }
 
     public BookingAvailabilityResponse getPublicAvailabilityByCode(

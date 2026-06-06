@@ -13,6 +13,10 @@ import java.util.List;
 @NoArgsConstructor
 @AllArgsConstructor
 public class BookingBootstrapResponse {
+    private String tenantName;
+    private String tenantLogoUrl;
+    private String tenantCoverImageUrl;
+
     private List<BranchMiniResponse> branches;
     private List<ServiceMiniResponse> services;
     private List<BarberMiniResponse> barbers;

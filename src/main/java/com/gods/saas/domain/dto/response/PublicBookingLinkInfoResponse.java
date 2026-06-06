@@ -17,7 +17,9 @@ public class PublicBookingLinkInfoResponse {
     private Long barberId;
 
     private String tenantName;
+    private String tenantLogoUrl;
     private String branchName;
+    private String branchImageUrl;
     private String barberName;
 
     private String bookingLink;
