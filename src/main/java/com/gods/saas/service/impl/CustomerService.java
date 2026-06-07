@@ -18,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
+import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
@@ -46,6 +47,7 @@ public class CustomerService {
     private final LoyaltyService loyaltyService;
     private final SaleRepository saleRepository;
     private final TenantTimeService tenantTimeService;
+    private final CloudinaryStorageService cloudinaryStorageService;
 
     @Transactional
     public Customer registrarCliente(VentaRapidaRequest req) {
@@ -155,6 +157,34 @@ public class CustomerService {
         }
 
         customer.setFechaActualizacion(LocalDateTime.now());
+        return customerRepository.save(customer);
+    }
+
+    @Transactional
+    public Customer actualizarMiPerfil(Long tenantId, Long customerId, ActualizarClienteRequest req) {
+        return actualizarCliente(tenantId, customerId, req);
+    }
+
+    @Transactional
+    public Customer uploadMyProfilePhoto(Long tenantId, Long customerId, MultipartFile file) {
+        Customer customer = customerRepository.findByIdAndTenant_IdAndActivoTrue(customerId, tenantId)
+                .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
+
+        if (customer.getPhotoPublicId() != null && !customer.getPhotoPublicId().isBlank()) {
+            try {
+                cloudinaryStorageService.deleteImage(customer.getPhotoPublicId());
+            } catch (Exception ignored) {
+                // Si Cloudinary no logra eliminar la imagen anterior, igual reemplazamos la referencia actual.
+            }
+        }
+
+        CloudinaryStorageService.UploadResult upload =
+                cloudinaryStorageService.uploadCustomerPhoto(tenantId, customerId, file);
+
+        customer.setPhotoUrl(upload.getSecureUrl());
+        customer.setPhotoPublicId(upload.getPublicId());
+        customer.setFechaActualizacion(LocalDateTime.now());
+
         return customerRepository.save(customer);
     }
 

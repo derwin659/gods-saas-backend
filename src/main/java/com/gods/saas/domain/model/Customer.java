@@ -63,6 +63,12 @@ public class Customer {
     @Column(name = "fecha_actualizacion")
     private LocalDateTime fechaActualizacion;
 
+    @Column(name = "photo_url", columnDefinition = "TEXT")
+    private String photoUrl;
+
+    @Column(name = "photo_public_id", columnDefinition = "TEXT")
+    private String photoPublicId;
+
     @Builder.Default
     @Column(name = "migrated", nullable = false)
     private Boolean migrated = false;

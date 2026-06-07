@@ -14,6 +14,7 @@ public class ClienteResponse {
     private Long tenantId;
     private String origenCliente;
     private Integer puntosDisponibles;
+    private String photoUrl;
 
     public static ClienteResponse fromEntity(Customer u) {
         ClienteResponse r = new ClienteResponse();
@@ -25,6 +26,7 @@ public class ClienteResponse {
         r.setTenantId(u.getTenant().getId());
         r.setOrigenCliente(u.getOrigenCliente());
         r.setPuntosDisponibles(u.getPuntosDisponibles() != null ? u.getPuntosDisponibles() : 0);
+        r.setPhotoUrl(u.getPhotoUrl());
         return r;
     }
 

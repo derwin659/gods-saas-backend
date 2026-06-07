@@ -12,6 +12,7 @@ import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 @CrossOrigin(origins = "http://localhost:5173")
 @RestController
@@ -47,6 +48,34 @@ public class CustomerController {
         Customer c = customerService.obtenerClientePorId(tenantId, customerId);
 
         return ResponseEntity.ok(ClienteResponse.fromEntity(c));
+    }
+
+    @PutMapping("/me")
+    public ResponseEntity<ClienteResponse> actualizarMiPerfil(
+            @RequestHeader("Authorization") String authHeader,
+            @RequestBody ActualizarClienteRequest request
+    ) {
+        String token = authHeader.replace("Bearer ", "");
+
+        Long tenantId = jwtUtil.getTenantIdFromToken(token);
+        Long customerId = jwtUtil.getCustomerIdFromToken(token);
+
+        Customer actualizado = customerService.actualizarMiPerfil(tenantId, customerId, request);
+        return ResponseEntity.ok(ClienteResponse.fromEntity(actualizado));
+    }
+
+    @PostMapping(value = "/me/photo", consumes = "multipart/form-data")
+    public ResponseEntity<ClienteResponse> subirMiFoto(
+            @RequestHeader("Authorization") String authHeader,
+            @RequestPart("file") MultipartFile file
+    ) {
+        String token = authHeader.replace("Bearer ", "");
+
+        Long tenantId = jwtUtil.getTenantIdFromToken(token);
+        Long customerId = jwtUtil.getCustomerIdFromToken(token);
+
+        Customer actualizado = customerService.uploadMyProfilePhoto(tenantId, customerId, file);
+        return ResponseEntity.ok(ClienteResponse.fromEntity(actualizado));
     }
 
     @PutMapping("/clientes/{id}")
