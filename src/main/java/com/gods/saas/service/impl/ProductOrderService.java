@@ -33,6 +33,13 @@ public class ProductOrderService {
     @Transactional(readOnly = true)
     public List<ProductResponse> publicProducts(String codigoNegocio, Long branchId) {
         Tenant tenant = findTenant(codigoNegocio);
+        return publicProductsByTenant(tenant.getId(), branchId);
+    }
+
+    @Transactional(readOnly = true)
+    public List<ProductResponse> publicProductsByTenant(Long tenantId, Long branchId) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new RuntimeException("Negocio no disponible"));
         Branch branch = resolveBranch(tenant.getId(), branchId);
 
         return productBranchStockRepository

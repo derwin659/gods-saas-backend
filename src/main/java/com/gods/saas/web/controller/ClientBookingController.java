@@ -4,7 +4,9 @@ import com.gods.saas.domain.dto.request.CreateAppointmentRequest;
 import com.gods.saas.domain.dto.response.BookingAvailabilityResponse;
 import com.gods.saas.domain.dto.response.BookingBootstrapResponse;
 import com.gods.saas.domain.dto.response.CreateAppointmentResponse;
+import com.gods.saas.domain.dto.response.ProductResponse;
 import com.gods.saas.service.impl.CloudinaryStorageService;
+import com.gods.saas.service.impl.ProductOrderService;
 import com.gods.saas.utils.JwtUtil;
 import com.gods.saas.service.impl.ClientBookingService;
 import lombok.RequiredArgsConstructor;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.Map;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/clients/booking")
@@ -21,6 +24,7 @@ import java.util.Map;
 public class ClientBookingController {
 
     private final ClientBookingService clientBookingService;
+    private final ProductOrderService productOrderService;
     private final CloudinaryStorageService cloudinaryStorageService;
     private final JwtUtil jwtUtil;
 
@@ -32,6 +36,17 @@ public class ClientBookingController {
         Long tenantId = jwtUtil.getTenantIdFromToken(token);
 
         return ResponseEntity.ok(clientBookingService.getBootstrap(tenantId));
+    }
+
+    @GetMapping("/products")
+    public ResponseEntity<List<ProductResponse>> products(
+            @RequestHeader("Authorization") String authHeader,
+            @RequestParam(required = false) Long branchId
+    ) {
+        String token = authHeader.replace("Bearer ", "");
+        Long tenantId = jwtUtil.getTenantIdFromToken(token);
+
+        return ResponseEntity.ok(productOrderService.publicProductsByTenant(tenantId, branchId));
     }
 
     @GetMapping("/availability")
