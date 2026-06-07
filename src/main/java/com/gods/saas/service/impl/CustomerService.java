@@ -45,6 +45,7 @@ public class CustomerService {
     private final RewardRedemptionRepository rewardRedemptionRepository;
     private final LoyaltyService loyaltyService;
     private final SaleRepository saleRepository;
+    private final TenantTimeService tenantTimeService;
 
     @Transactional
     public Customer registrarCliente(VentaRapidaRequest req) {
@@ -487,8 +488,8 @@ public class CustomerService {
         return appointmentRepository.findNextAppointment(
                         tenantId,
                         customerId,
-                        LocalDate.now(),
-                        LocalTime.now()
+                        tenantTimeService.today(tenantId),
+                        tenantTimeService.currentTime(tenantId)
                 )
                 .map(p -> ClientHomeResponse.NextAppointmentResponse.builder()
                         .appointmentId(p.getAppointmentId())
@@ -524,8 +525,8 @@ public class CustomerService {
                         .appointmentId(v.getAppointmentId())
                         .fecha(v.getFecha() != null ? v.getFecha().toString() : null)
                         .servicio(v.getServicio())
-                        .puntos(0)
-                        .total(0.0)
+                        .puntos(v.getPuntos() != null ? v.getPuntos() : 0)
+                        .total(v.getTotal() != null ? v.getTotal() : 0.0)
                         .build())
                 .collect(Collectors.toList());
     }

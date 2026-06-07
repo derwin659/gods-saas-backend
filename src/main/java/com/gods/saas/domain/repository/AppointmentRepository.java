@@ -231,6 +231,7 @@ select
         'Sin asignar'
     ) as barbero,
     coalesce(max(u.photo_url), '') as barberPhotoUrl,
+    coalesce(max(lm.points_earned), 0)::int as puntos,
     coalesce(sum(si.subtotal), 0) as total
 from sale s
 left join sale_item si
@@ -239,6 +240,20 @@ left join service se
        on se.service_id = si.service_id
 left join app_user u
        on u.user_id = coalesce(si.barber_user_id, s.user_id)
+left join (
+    select
+        tenant_id,
+        customer_id,
+        referencia_id,
+        sum(coalesce(puntos, 0)) as points_earned
+    from loyalty_movement
+    where upper(coalesce(tipo, '')) = 'EARN'
+      and upper(coalesce(origen, '')) = 'SALE'
+    group by tenant_id, customer_id, referencia_id
+) lm
+       on lm.tenant_id = s.tenant_id
+      and lm.customer_id = s.customer_id
+      and lm.referencia_id = s.sale_id
 where s.tenant_id = :tenantId
   and s.customer_id = :customerId
 group by s.sale_id, s.fecha_creacion
