@@ -431,7 +431,8 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
                         then true
                     else false
                 end as is_courtesy,
-                coalesce(sum(coalesce(si.subtotal, 0)), 0) as barber_item_subtotal
+                coalesce(sum(coalesce(si.subtotal, 0)), 0) as barber_item_subtotal,
+                coalesce(sum(coalesce(si.cantidad, 1)), 0) as barber_item_count
             from sale s
             join sale_item si on si.sale_id = s.sale_id
             join app_user u on u.user_id = si.barber_user_id
@@ -456,15 +457,15 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
                     )
                 end
             ), 0) as totalSales,
-            count(distinct bsr.sale_id) as salesCount,
-            count(distinct case
-                when bsr.is_courtesy then null
-                else bsr.sale_id
-            end) as paidSalesCount,
-            count(distinct case
-                when bsr.is_courtesy then bsr.sale_id
-                else null
-            end) as courtesySalesCount,
+            coalesce(sum(bsr.barber_item_count), 0) as salesCount,
+            coalesce(sum(case
+                when bsr.is_courtesy then 0
+                else bsr.barber_item_count
+            end), 0) as paidSalesCount,
+            coalesce(sum(case
+                when bsr.is_courtesy then bsr.barber_item_count
+                else 0
+            end), 0) as courtesySalesCount,
             coalesce(sum(
                 case
                     when bsr.is_courtesy then bsr.barber_item_subtotal
@@ -597,37 +598,83 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
     );
 
     @Query(value = """
+        with sale_meta as (
+            select
+                s.sale_id,
+                coalesce(s.total, 0) as sale_total,
+                coalesce(sum(coalesce(six.subtotal, 0)), 0) as total_item_subtotal,
+                count(distinct six.barber_user_id) as barbers_count
+            from sale s
+            join sale_item six on six.sale_id = s.sale_id
+            where s.tenant_id = :tenantId
+              and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
+              and (:branchId is null or s.branch_id = :branchId)
+              and six.barber_user_id is not null
+              and COALESCE(s.sale_date, s.fecha_creacion) >= :start
+              and COALESCE(s.sale_date, s.fecha_creacion) < :end
+            group by s.sale_id, s.total
+        ),
+        barber_sale_rows as (
+            select
+                s.sale_id,
+                coalesce(
+                    nullif(trim(concat(coalesce(c.nombres, ''), ' ', coalesce(c.apellidos, ''))), ''),
+                    'Cliente'
+                ) as customerName,
+                coalesce(
+                    string_agg(
+                        distinct coalesce(se.nombre, p.nombre, 'Item'),
+                        ', '
+                    ),
+                    ''
+                ) as serviceNames,
+                coalesce(sum(si.subtotal), 0) as barber_item_subtotal,
+                coalesce(s.metodo_pago, '') as paymentMethod,
+                COALESCE(s.sale_date, s.fecha_creacion) as createdAt
+            from sale s
+            left join customer c on c.customer_id = s.customer_id
+            join sale_item si on si.sale_id = s.sale_id
+            left join service se on se.service_id = si.service_id
+            left join product p on p.product_id = si.product_id
+            where s.tenant_id = :tenantId
+              and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
+              and (:branchId is null or s.branch_id = :branchId)
+              and si.barber_user_id = :barberId
+              and COALESCE(s.sale_date, s.fecha_creacion) >= :start
+              and COALESCE(s.sale_date, s.fecha_creacion) < :end
+            group by s.sale_id, c.nombres, c.apellidos, s.metodo_pago, s.sale_date, s.fecha_creacion
+        )
         select
-            s.sale_id as saleId,
-            coalesce(
-                nullif(trim(concat(coalesce(c.nombres, ''), ' ', coalesce(c.apellidos, ''))), ''),
-                'Cliente'
-            ) as customerName,
-            coalesce(
-                string_agg(
-                    distinct coalesce(se.nombre, p.nombre, 'Item'),
-                    ', '
+            bsr.sale_id as saleId,
+            bsr.customerName as customerName,
+            bsr.serviceNames as serviceNames,
+            case
+                when sm.total_item_subtotal <= 0 then 0
+                when sm.barbers_count <= 1 then sm.sale_total
+                else least(
+                    bsr.barber_item_subtotal,
+                    sm.sale_total * bsr.barber_item_subtotal / nullif(sm.total_item_subtotal, 0)
+                )
+            end as total,
+            bsr.barber_item_subtotal as subtotal,
+            greatest(
+                bsr.barber_item_subtotal - (
+                    case
+                        when sm.total_item_subtotal <= 0 then 0
+                        when sm.barbers_count <= 1 then sm.sale_total
+                        else least(
+                            bsr.barber_item_subtotal,
+                            sm.sale_total * bsr.barber_item_subtotal / nullif(sm.total_item_subtotal, 0)
+                        )
+                    end
                 ),
-                ''
-            ) as serviceNames,
-            coalesce(s.total, 0) as total,
-            coalesce(sum(si.subtotal), 0) as subtotal,
-            coalesce(s.discount, 0) as discount,
-            coalesce(s.metodo_pago, '') as paymentMethod,
-            COALESCE(s.sale_date, s.fecha_creacion) as createdAt
-        from sale s
-        left join customer c on c.customer_id = s.customer_id
-        left join sale_item si on si.sale_id = s.sale_id
-        left join service se on se.service_id = si.service_id
-        left join product p on p.product_id = si.product_id
-        where s.tenant_id = :tenantId
-          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
-          and (:branchId is null or s.branch_id = :branchId)
-          and si.barber_user_id = :barberId
-          and COALESCE(s.sale_date, s.fecha_creacion) >= :start
-          and COALESCE(s.sale_date, s.fecha_creacion) < :end
-        group by s.sale_id, c.nombres, c.apellidos, s.total, s.subtotal, s.discount, s.metodo_pago, s.sale_date, s.fecha_creacion
-        order by COALESCE(s.sale_date, s.fecha_creacion) desc
+                0
+            ) as discount,
+            bsr.paymentMethod as paymentMethod,
+            bsr.createdAt as createdAt
+        from barber_sale_rows bsr
+        join sale_meta sm on sm.sale_id = bsr.sale_id
+        order by bsr.createdAt desc
         """, nativeQuery = true)
     List<BarberSaleDetailProjection> getBarberSaleDetails(
             @Param("tenantId") Long tenantId,
