@@ -26,6 +26,7 @@ import java.time.ZoneId;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.LinkedHashSet;
 import java.util.stream.Collectors;
 
 @Service
@@ -964,20 +965,23 @@ public class CashSaleServiceImpl implements CashSaleService {
     }
 
     private String resolveBarberName(Sale sale) {
-        if (sale.getUser() != null
-                && sale.getUser().getNombre() != null
-                && !sale.getUser().getNombre().trim().isEmpty()) {
-            return sale.getUser().getNombre().trim();
-        }
-
         if (sale.getItems() != null) {
-            return sale.getItems().stream()
+            LinkedHashSet<String> itemBarbers = sale.getItems().stream()
                     .filter(item -> item.getBarberUser() != null)
                     .map(item -> item.getBarberUser().getNombre())
                     .filter(name -> name != null && !name.trim().isEmpty())
                     .map(String::trim)
-                    .findFirst()
-                    .orElse(null);
+                    .collect(Collectors.toCollection(LinkedHashSet::new));
+
+            if (!itemBarbers.isEmpty()) {
+                return String.join(", ", itemBarbers);
+            }
+        }
+
+        if (sale.getUser() != null
+                && sale.getUser().getNombre() != null
+                && !sale.getUser().getNombre().trim().isEmpty()) {
+            return sale.getUser().getNombre().trim();
         }
 
         return null;
