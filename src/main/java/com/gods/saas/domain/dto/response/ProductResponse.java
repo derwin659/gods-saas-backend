@@ -25,4 +25,7 @@ public class ProductResponse {
     private Boolean activo;
     private Boolean permiteVentaSinStock;
     private Boolean stockBajo;
+    private Boolean publicVisible;
+    private Boolean publicFeatured;
+    private Boolean publicAvailable;
 }

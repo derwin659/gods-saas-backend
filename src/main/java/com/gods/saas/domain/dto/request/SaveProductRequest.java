@@ -27,4 +27,6 @@ public class SaveProductRequest {
     private String categoria;
     private Boolean activo;
     private Boolean permiteVentaSinStock;
+    private Boolean publicVisible;
+    private Boolean publicFeatured;
 }

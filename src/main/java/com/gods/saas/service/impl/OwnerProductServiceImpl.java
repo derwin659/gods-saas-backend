@@ -314,6 +314,18 @@ public class OwnerProductServiceImpl implements OwnerProductService {
         } else if (product.getPermiteVentaSinStock() == null) {
             product.setPermiteVentaSinStock(false);
         }
+
+        if (request.getPublicVisible() != null) {
+            product.setPublicVisible(request.getPublicVisible());
+        } else if (product.getPublicVisible() == null) {
+            product.setPublicVisible(false);
+        }
+
+        if (request.getPublicFeatured() != null) {
+            product.setPublicFeatured(request.getPublicFeatured());
+        } else if (product.getPublicFeatured() == null) {
+            product.setPublicFeatured(false);
+        }
     }
 
     private void validateRequest(SaveProductRequest request, boolean creating) {
@@ -381,6 +393,11 @@ public class OwnerProductServiceImpl implements OwnerProductService {
                 .activo(active)
                 .permiteVentaSinStock(Boolean.TRUE.equals(product.getPermiteVentaSinStock()))
                 .stockBajo(stockActual <= stockMinimo)
+                .publicVisible(Boolean.TRUE.equals(product.getPublicVisible()))
+                .publicFeatured(Boolean.TRUE.equals(product.getPublicFeatured()))
+                .publicAvailable(active
+                        && Boolean.TRUE.equals(product.getPublicVisible())
+                        && (Boolean.TRUE.equals(product.getPermiteVentaSinStock()) || stockActual > 0))
                 .build();
     }
 

@@ -83,6 +83,14 @@ public class Product {
     @Column(name = "image_public_id", length = 255)
     private String imagePublicId;
 
+    @Column(name = "public_visible", nullable = false, columnDefinition = "boolean default false")
+    @Builder.Default
+    private Boolean publicVisible = false;
+
+    @Column(name = "public_featured", nullable = false, columnDefinition = "boolean default false")
+    @Builder.Default
+    private Boolean publicFeatured = false;
+
     @Builder.Default
     private Boolean activo = true;
 
@@ -112,6 +120,12 @@ public class Product {
         }
         if (activo == null) {
             activo = true;
+        }
+        if (publicVisible == null) {
+            publicVisible = false;
+        }
+        if (publicFeatured == null) {
+            publicFeatured = false;
         }
 
         // Compatibilidad bidireccional entre "precio" y "precioVenta"
