@@ -1,9 +1,11 @@
 package com.gods.saas.web.controller;
 
 import com.gods.saas.domain.dto.request.CreateAppointmentRequest;
+import com.gods.saas.domain.dto.request.CreatePublicProductOrderRequest;
 import com.gods.saas.domain.dto.response.BookingAvailabilityResponse;
 import com.gods.saas.domain.dto.response.BookingBootstrapResponse;
 import com.gods.saas.domain.dto.response.CreateAppointmentResponse;
+import com.gods.saas.domain.dto.response.ProductOrderResponse;
 import com.gods.saas.domain.dto.response.ProductResponse;
 import com.gods.saas.service.impl.CloudinaryStorageService;
 import com.gods.saas.service.impl.ProductOrderService;
@@ -47,6 +49,18 @@ public class ClientBookingController {
         Long tenantId = jwtUtil.getTenantIdFromToken(token);
 
         return ResponseEntity.ok(productOrderService.publicProductsByTenant(tenantId, branchId));
+    }
+
+    @PostMapping("/product-orders")
+    public ResponseEntity<ProductOrderResponse> createProductOrder(
+            @RequestHeader("Authorization") String authHeader,
+            @RequestBody CreatePublicProductOrderRequest request
+    ) {
+        String token = authHeader.replace("Bearer ", "");
+        Long tenantId = jwtUtil.getTenantIdFromToken(token);
+        Long customerId = jwtUtil.getCustomerIdFromToken(token);
+
+        return ResponseEntity.ok(productOrderService.createClientOrder(tenantId, customerId, request));
     }
 
     @GetMapping("/availability")

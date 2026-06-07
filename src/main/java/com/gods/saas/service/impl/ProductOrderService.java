@@ -28,6 +28,7 @@ public class ProductOrderService {
     private final ProductRepository productRepository;
     private final ProductBranchStockRepository productBranchStockRepository;
     private final ProductOrderRepository productOrderRepository;
+    private final CustomerRepository customerRepository;
     private final CashSaleService cashSaleService;
 
     @Transactional(readOnly = true)
@@ -54,6 +55,23 @@ public class ProductOrderService {
     public ProductOrderResponse createPublicOrder(String codigoNegocio, CreatePublicProductOrderRequest request) {
         Tenant tenant = findTenant(codigoNegocio);
         Branch branch = resolveBranch(tenant.getId(), request.getBranchId());
+        return createOrder(tenant, branch, request);
+    }
+
+    public ProductOrderResponse createClientOrder(Long tenantId, Long customerId, CreatePublicProductOrderRequest request) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new RuntimeException("Negocio no disponible"));
+        Customer customer = customerRepository.findByIdAndTenant_IdAndActivoTrue(customerId, tenantId)
+                .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
+        Branch branch = resolveBranch(tenant.getId(), request.getBranchId());
+
+        request.setCustomerName(buildCustomerName(customer));
+        request.setCustomerPhone(customer.getTelefono());
+
+        return createOrder(tenant, branch, request);
+    }
+
+    private ProductOrderResponse createOrder(Tenant tenant, Branch branch, CreatePublicProductOrderRequest request) {
         Product product = productRepository.findByIdAndTenant_Id(request.getProductId(), tenant.getId())
                 .orElseThrow(() -> new RuntimeException("Producto no encontrado"));
         ProductBranchStock stock = productBranchStockRepository
@@ -96,6 +114,14 @@ public class ProductOrderService {
                 .build();
 
         return toResponse(productOrderRepository.save(order));
+    }
+
+    private String buildCustomerName(Customer customer) {
+        if (customer == null) return null;
+        String nombres = clean(customer.getNombres());
+        String apellidos = clean(customer.getApellidos());
+        String full = ((nombres == null ? "" : nombres) + " " + (apellidos == null ? "" : apellidos)).trim();
+        return full.isBlank() ? "Cliente" : full;
     }
 
     @Transactional(readOnly = true)
