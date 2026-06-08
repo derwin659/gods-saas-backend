@@ -38,6 +38,7 @@ public class OwnerBookingLinksService {
 
         String cleanCode = codigoNegocio.trim();
         String businessLink = PUBLIC_WEB_BASE_URL + "/" + cleanCode;
+        String walkInLink = businessLink + "?mode=walkin";
 
         List<Branch> branches = branchRepository.findByTenant_IdAndActivoTrue(tenant.getId());
 
@@ -46,6 +47,7 @@ public class OwnerBookingLinksService {
                         .branchId(branch.getId())
                         .branchName(branch.getNombre())
                         .bookingLink(businessLink + "?branchId=" + branch.getId())
+                        .walkInLink(businessLink + "?branchId=" + branch.getId() + "&mode=walkin")
                         .build())
                 .toList();
 
@@ -54,6 +56,7 @@ public class OwnerBookingLinksService {
                 .tenantName(tenant.getNombre())
                 .codigoNegocio(cleanCode)
                 .businessLink(businessLink)
+                .walkInLink(walkInLink)
                 .branches(branchLinks)
                 .build();
     }

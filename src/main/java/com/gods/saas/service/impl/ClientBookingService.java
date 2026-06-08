@@ -20,6 +20,8 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.math.BigDecimal;
+import java.text.Normalizer;
+import java.util.Locale;
 
 import java.util.Map;
 
@@ -60,6 +62,10 @@ public class ClientBookingService {
                 tenantPaymentMethodRepository.findByTenant_IdAndActiveTrueOrderBySortOrderAscDisplayNameAsc(tenantId);
 
         TenantSettings settings = tenantSettingsRepository.findByTenantId(tenantId).orElse(null);
+        String countryCode = countryCodeFor(tenant.getPais());
+        String currency = settings != null && settings.getCurrency() != null && !settings.getCurrency().isBlank()
+                ? settings.getCurrency().trim().toUpperCase(Locale.ROOT)
+                : currencyForCountry(countryCode);
 
         Map<String, Object> config = settings != null && settings.getScheduleConfig() != null
                 ? settings.getScheduleConfig()
@@ -73,6 +79,10 @@ public class ClientBookingService {
                 .tenantName(tenant.getNombre())
                 .tenantLogoUrl(tenant.getLogoUrl())
                 .tenantCoverImageUrl(firstBranchImage(branches))
+                .country(tenant.getPais())
+                .countryCode(countryCode)
+                .currency(currency)
+                .currencySymbol(resolveCurrencySymbol(currency))
                 .branches(branches.stream().map(BranchMiniResponse::fromEntity).toList())
                 .services(services.stream().map(ServiceMiniResponse::fromEntity).toList())
                 .barbers(barbers.stream().map(BarberMiniResponse::fromEntity).toList())
@@ -1209,5 +1219,64 @@ public class ClientBookingService {
         } catch (Exception e) {
             return defaultValue;
         }
+    }
+
+    private String countryCodeFor(String value) {
+        String normalized = normalizeCountry(value);
+        return switch (normalized) {
+            case "PERU", "PE" -> "PE";
+            case "VENEZUELA", "VE" -> "VE";
+            case "ESTADOSUNIDOS", "UNITEDSTATES", "USA", "US" -> "US";
+            case "COLOMBIA", "CO" -> "CO";
+            case "MEXICO", "MX" -> "MX";
+            case "CHILE", "CL" -> "CL";
+            case "ARGENTINA", "AR" -> "AR";
+            case "BOLIVIA", "BO" -> "BO";
+            case "BRASIL", "BRAZIL", "BR" -> "BR";
+            case "URUGUAY", "UY" -> "UY";
+            case "PARAGUAY", "PY" -> "PY";
+            case "COSTARICA", "CR" -> "CR";
+            case "REPUBLICADOMINICANA", "DOMINICANREPUBLIC", "DO" -> "DO";
+            case "GUATEMALA", "GT" -> "GT";
+            case "ESPANA", "SPAIN", "EUROPA", "EUROPE", "EU" -> "EU";
+            default -> "PE";
+        };
+    }
+
+    private String currencyForCountry(String countryCode) {
+        return switch (countryCode == null ? "" : countryCode.trim().toUpperCase(Locale.ROOT)) {
+            case "US", "UY", "PY", "CR", "DO", "GT" -> "USD";
+            case "VE" -> "VES";
+            case "CO" -> "COP";
+            case "MX" -> "MXN";
+            case "CL" -> "CLP";
+            case "AR" -> "ARS";
+            case "BO" -> "USD";
+            case "BR" -> "BRL";
+            case "EU" -> "EUR";
+            default -> "PEN";
+        };
+    }
+
+    private String resolveCurrencySymbol(String currency) {
+        return switch (currency == null ? "" : currency.trim().toUpperCase(Locale.ROOT)) {
+            case "USD", "COP", "MXN", "CLP", "ARS", "UYU" -> "$";
+            case "VES", "BOB" -> "Bs";
+            case "BRL" -> "R$";
+            case "EUR" -> "EUR";
+            case "PYG" -> "Gs";
+            case "CRC" -> "CRC";
+            case "DOP" -> "RD$";
+            case "GTQ" -> "Q";
+            default -> "S/";
+        };
+    }
+
+    private String normalizeCountry(String value) {
+        if (value == null) return "";
+        return Normalizer.normalize(value, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .replaceAll("[^A-Za-z]", "")
+                .toUpperCase(Locale.ROOT);
     }
 }

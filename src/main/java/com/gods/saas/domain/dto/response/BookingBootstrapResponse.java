@@ -16,6 +16,10 @@ public class BookingBootstrapResponse {
     private String tenantName;
     private String tenantLogoUrl;
     private String tenantCoverImageUrl;
+    private String country;
+    private String countryCode;
+    private String currency;
+    private String currencySymbol;
 
     private List<BranchMiniResponse> branches;
     private List<ServiceMiniResponse> services;

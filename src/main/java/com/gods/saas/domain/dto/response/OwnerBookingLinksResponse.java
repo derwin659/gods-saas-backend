@@ -17,6 +17,7 @@ public class OwnerBookingLinksResponse {
     private String tenantName;
     private String codigoNegocio;
     private String businessLink;
+    private String walkInLink;
     private List<BranchBookingLink> branches;
 
     @Data
@@ -27,5 +28,6 @@ public class OwnerBookingLinksResponse {
         private Long branchId;
         private String branchName;
         private String bookingLink;
+        private String walkInLink;
     }
 }
