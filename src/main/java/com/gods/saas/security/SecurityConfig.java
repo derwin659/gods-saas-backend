@@ -125,6 +125,7 @@ public class SecurityConfig {
 
                         .requestMatchers("/api/owner/cash-registers/**").hasAnyRole("OWNER", "ADMIN")
                         .requestMatchers("/api/owner/cash-sales/**").hasAnyRole("OWNER", "ADMIN")
+                        .requestMatchers("/api/owner/local-consumption-orders/**").hasAnyRole("OWNER", "ADMIN")
                         .requestMatchers("/api/owner/marketing-campaigns/**").hasAnyRole("OWNER", "ADMIN")
                         .requestMatchers("/api/owner/product-orders/**").hasAnyRole("OWNER", "ADMIN")
                         .requestMatchers("/api/owner/products/**").hasAnyRole("OWNER", "ADMIN")

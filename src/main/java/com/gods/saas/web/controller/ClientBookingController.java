@@ -1,13 +1,16 @@
 package com.gods.saas.web.controller;
 
 import com.gods.saas.domain.dto.request.CreateAppointmentRequest;
+import com.gods.saas.domain.dto.request.CreateLocalConsumptionOrderRequest;
 import com.gods.saas.domain.dto.request.CreatePublicProductOrderRequest;
 import com.gods.saas.domain.dto.response.BookingAvailabilityResponse;
 import com.gods.saas.domain.dto.response.BookingBootstrapResponse;
 import com.gods.saas.domain.dto.response.CreateAppointmentResponse;
+import com.gods.saas.domain.dto.response.LocalConsumptionOrderResponse;
 import com.gods.saas.domain.dto.response.ProductOrderResponse;
 import com.gods.saas.domain.dto.response.ProductResponse;
 import com.gods.saas.service.impl.CloudinaryStorageService;
+import com.gods.saas.service.impl.LocalConsumptionOrderService;
 import com.gods.saas.service.impl.ProductOrderService;
 import com.gods.saas.utils.JwtUtil;
 import com.gods.saas.service.impl.ClientBookingService;
@@ -27,6 +30,7 @@ public class ClientBookingController {
 
     private final ClientBookingService clientBookingService;
     private final ProductOrderService productOrderService;
+    private final LocalConsumptionOrderService localConsumptionOrderService;
     private final CloudinaryStorageService cloudinaryStorageService;
     private final JwtUtil jwtUtil;
 
@@ -61,6 +65,20 @@ public class ClientBookingController {
         Long customerId = jwtUtil.getCustomerIdFromToken(token);
 
         return ResponseEntity.ok(productOrderService.createClientOrder(tenantId, customerId, request));
+    }
+
+    @PostMapping("/local-consumption-orders")
+    public ResponseEntity<LocalConsumptionOrderResponse> createLocalConsumptionOrder(
+            @RequestHeader("Authorization") String authHeader,
+            @RequestBody CreateLocalConsumptionOrderRequest request
+    ) {
+        String token = authHeader.replace("Bearer ", "");
+        Long tenantId = jwtUtil.getTenantIdFromToken(token);
+        Long customerId = jwtUtil.getCustomerIdFromToken(token);
+
+        return ResponseEntity.ok(
+                localConsumptionOrderService.createClientOrder(tenantId, customerId, request)
+        );
     }
 
     @GetMapping("/availability")
