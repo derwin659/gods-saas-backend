@@ -19,10 +19,11 @@ public interface NotificationService {
             LocalTime oldHoraFin
     );
 
-
     void notifyBookingReminder(Appointment appointment, NotificationType reminderType);
 
     void notifyPointsEarned(Customer customer, Integer points, Long saleId);
+
+    void notifySaleReceipt(Sale sale, String message);
 
     void notifyPromotionCreated(Promotion promotion, boolean sendNotification);
 

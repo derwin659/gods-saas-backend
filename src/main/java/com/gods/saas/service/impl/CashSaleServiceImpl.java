@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import com.gods.saas.service.impl.impl.NotificationService;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -39,6 +40,7 @@ public class CashSaleServiceImpl implements CashSaleService {
     private static final String WHATSAPP_INCLUDE_APP_DOWNLOAD_LINK_KEY = "whatsappIncludeAppDownloadLink";
     private static final String WHATSAPP_INCLUDE_BOOKING_LINK_KEY = "whatsappIncludeBookingLink";
     private static final String WHATSAPP_APP_DOWNLOAD_URL_KEY = "whatsappAppDownloadUrl";
+    private final NotificationService notificationService;
 
     @Value("${app.mobile.download-url:https://play.google.com/store/apps/details?id=com.gods.barberia}")
     private String mobileAppDownloadUrl;
@@ -131,7 +133,6 @@ public class CashSaleServiceImpl implements CashSaleService {
         saleRequest.setItems(
                 request.getItems().stream().map(this::toSaleItemRequest).toList()
         );
-
         SaleResponse response = saleService.crearVenta(saleRequest);
         Sale savedSale = saleRepository.findByIdAndTenant_Id(response.getSaleId(), tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("Venta creada no encontrada"));
@@ -139,10 +140,20 @@ public class CashSaleServiceImpl implements CashSaleService {
         savedSale.setSaleDate(effectiveSaleDate);
         savedSale = saleRepository.save(savedSale);
 
-
         if (appointment != null) {
             appointment.setEstado("COMPLETADO");
             appointmentRepository.save(appointment);
+        }
+
+        if (!"PENDING_VALIDATION".equals(resolveValidationStatus(savedSale))) {
+            String whatsappMessage = buildPostSaleWhatsappMessage(
+                    savedSale,
+                    response.getPuntosGanados() == null ? 0 : response.getPuntosGanados()
+            );
+
+            if (whatsappMessage != null && !whatsappMessage.trim().isEmpty()) {
+                notificationService.notifySaleReceipt(savedSale, whatsappMessage);
+            }
         }
 
         return mapResponse(savedSale, response.getPuntosGanados());
@@ -430,13 +441,30 @@ public class CashSaleServiceImpl implements CashSaleService {
         }
 
         LocalDateTime saleDate = request.getSaleDate();
+        LocalDate tenantToday = now.toLocalDate();
+        LocalDate selectedDate = saleDate.toLocalDate();
+
+        /*
+         * Corrección timezone móvil/web:
+         * Android y algunos navegadores pueden enviar la fecha de "hoy" con una hora
+         * futura o con desfase por zona horaria. Si el día seleccionado es hoy para
+         * el tenant, no rechazamos la venta por hora futura; usamos la hora actual
+         * del tenant para guardar una fecha válida del mismo día.
+         *
+         * Ejemplo: tenant Venezuela (America/Caracas) selecciona hoy, pero el móvil
+         * envía 2026-06-10T23:59:00 cuando aún son las 10:00. Antes fallaba como
+         * fecha futura. Ahora se guarda con la hora actual del tenant.
+         */
+        if (selectedDate.equals(tenantToday)) {
+            return now;
+        }
 
         if (saleDate.isAfter(now.plusMinutes(5))) {
             throw new IllegalArgumentException("La fecha de venta no puede ser futura.");
         }
 
-        LocalDate minAllowedDate = now.toLocalDate().minusDays(30);
-        if (saleDate.toLocalDate().isBefore(minAllowedDate)) {
+        LocalDate minAllowedDate = tenantToday.minusDays(30);
+        if (selectedDate.isBefore(minAllowedDate)) {
             throw new IllegalArgumentException("Solo puedes registrar ventas de hasta 30 días atrás.");
         }
 
@@ -453,7 +481,7 @@ public class CashSaleServiceImpl implements CashSaleService {
         if (hasTenantRole(userId, tenantId, RoleType.ADMIN)) {
             return "ADMIN";
         }
-        
+
 
         if (hasTenantRole(userId, tenantId, RoleType.OWNER)) {
             return "OWNER";

@@ -280,18 +280,26 @@ public class SaleServiceImpl implements SaleService {
             );
         }
 
-        boolean hasHaircutService = items.stream()
-                .map(SaleItem::getService)
-                .filter(Objects::nonNull)
-                .anyMatch(this::isHaircutService);
+        boolean hasServiceItem = items.stream()
+                .anyMatch(item -> item.getService() != null);
 
-        boolean hasCutData =
-                hasText(request.getCutType()) ||
-                        hasText(request.getCutDetail()) ||
-                        hasText(request.getCutObservations());
+        // Antes se bloqueaba la venta si el servicio estaba en categoria CORTE
+        // y el frontend no enviaba cutType/cutDetail. Eso fallaba con servicios
+        // con nombres personalizados como "Servicio Premium".
+        // Ahora el sistema acepta cualquier nombre de servicio y genera una
+        // descripcion por defecto para el historial del cliente.
+        String resolvedCutType = clean(request.getCutType());
+        String resolvedCutDetail = clean(request.getCutDetail());
+        String resolvedCutObservations = clean(request.getCutObservations());
 
-        if (customer != null && hasHaircutService && !hasCutData) {
-            throw new RuntimeException("Debes registrar el corte realizado.");
+        if (customer != null && hasServiceItem) {
+            if (!hasText(resolvedCutType)) {
+                resolvedCutType = buildServiceSummaryForHistory(items);
+            }
+
+            if (!hasText(resolvedCutDetail)) {
+                resolvedCutDetail = "Venta registrada desde caja";
+            }
         }
 
         if (user == null && uniqueBarberUserIdFromItems != null && !multipleBarbersInItems) {
@@ -352,9 +360,9 @@ public class SaleServiceImpl implements SaleService {
 
         customerCutHistoryService.registerFromSale(
                 savedSale,
-                clean(request.getCutType()),
-                clean(request.getCutDetail()),
-                clean(request.getCutObservations())
+                resolvedCutType,
+                resolvedCutDetail,
+                resolvedCutObservations
         );
 
         for (int i = 0; i < savedSale.getItems().size(); i++) {
@@ -999,6 +1007,27 @@ public class SaleServiceImpl implements SaleService {
                 || nombre.contains("BUZZ")
                 || nombre.contains("CROP")
                 || nombre.contains("MULLET");
+    }
+
+    private String buildServiceSummaryForHistory(List<SaleItem> items) {
+        if (items == null || items.isEmpty()) {
+            return "Servicio registrado";
+        }
+
+        List<String> serviceNames = items.stream()
+                .map(SaleItem::getService)
+                .filter(Objects::nonNull)
+                .map(ServiceEntity::getNombre)
+                .map(this::clean)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
+        if (serviceNames.isEmpty()) {
+            return "Servicio registrado";
+        }
+
+        return String.join(", ", serviceNames);
     }
 
     private BigDecimal resolveDepositApplied(Appointment appointment, BigDecimal total) {

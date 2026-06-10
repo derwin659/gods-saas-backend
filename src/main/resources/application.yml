@@ -58,5 +58,8 @@ runpod:
   health-poll-interval-millis: ${RUNPOD_HEALTH_POLL_INTERVAL_MILLIS:5000}
   health-timeout-seconds: ${RUNPOD_HEALTH_TIMEOUT_SECONDS:600}
 
-
-
+# application.yml
+whatsapp:
+  meta:
+    access-token: ${WHATSAPP_META_ACCESS_TOKEN:}
+    phone-number-id: ${WHATSAPP_META_PHONE_NUMBER_ID:}

@@ -2,6 +2,11 @@ firebase:
   enabled: true
   service-account-path: C:/supergods/firebase/firebase-service-account.json
 
+# application.yml
+whatsapp:
+  meta:
+    access-token: ${WHATSAPP_META_ACCESS_TOKEN:}
+    phone-number-id: ${WHATSAPP_META_PHONE_NUMBER_ID:}
 
 spring:
   datasource:

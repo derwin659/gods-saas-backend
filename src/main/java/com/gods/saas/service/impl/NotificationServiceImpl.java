@@ -584,4 +584,28 @@ public class NotificationServiceImpl implements NotificationService {
 
         return full.isBlank() ? "Usuario" : full;
     }
+
+    @Override
+    public void notifySaleReceipt(Sale sale, String message) {
+        if (sale == null || sale.getTenant() == null || sale.getCustomer() == null) {
+            return;
+        }
+
+        if (message == null || message.trim().isEmpty()) {
+            return;
+        }
+
+        Notification n = saveCustomerNotification(
+                sale.getTenant(),
+                sale.getBranch(),
+                sale.getCustomer(),
+                NotificationType.SALE_RECEIPT,
+                "Comprobante de venta",
+                message,
+                "SALE",
+                sale.getId()
+        );
+
+        registerDefaultChannels(n, true);
+    }
 }

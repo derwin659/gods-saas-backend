@@ -64,3 +64,10 @@ cloudinary:
   cloud-name: ${CLOUDINARY_CLOUD_NAME}
   api-key: ${CLOUDINARY_API_KEY}
   api-secret: ${CLOUDINARY_API_SECRET}
+
+
+# application.yml
+whatsapp:
+  meta:
+    access-token: ${WHATSAPP_META_ACCESS_TOKEN:}
+    phone-number-id: ${WHATSAPP_META_PHONE_NUMBER_ID:}
