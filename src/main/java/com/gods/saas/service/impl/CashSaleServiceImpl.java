@@ -19,6 +19,7 @@ import com.gods.saas.service.impl.impl.NotificationService;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.text.Normalizer;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
@@ -29,6 +30,9 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.LinkedHashSet;
 import java.util.stream.Collectors;
+import com.google.i18n.phonenumbers.NumberParseException;
+import com.google.i18n.phonenumbers.PhoneNumberUtil;
+import com.google.i18n.phonenumbers.Phonenumber;
 
 @Service
 @RequiredArgsConstructor
@@ -40,6 +44,7 @@ public class CashSaleServiceImpl implements CashSaleService {
     private static final String WHATSAPP_INCLUDE_APP_DOWNLOAD_LINK_KEY = "whatsappIncludeAppDownloadLink";
     private static final String WHATSAPP_INCLUDE_BOOKING_LINK_KEY = "whatsappIncludeBookingLink";
     private static final String WHATSAPP_APP_DOWNLOAD_URL_KEY = "whatsappAppDownloadUrl";
+    private static final PhoneNumberUtil PHONE_NUMBER_UTIL = PhoneNumberUtil.getInstance();
     private final NotificationService notificationService;
 
     @Value("${app.mobile.download-url:https://play.google.com/store/apps/details?id=com.gods.barberia}")
@@ -721,6 +726,39 @@ public class CashSaleServiceImpl implements CashSaleService {
     }
 
     private String normalizeWhatsappPhone(String rawPhone, Tenant tenant) {
+        String cleanPhone = rawPhone == null ? "" : rawPhone.trim();
+        if (cleanPhone.isBlank()) {
+            return null;
+        }
+
+        String region = resolveTenantPhoneRegion(tenant);
+
+        try {
+            String parseInput = cleanPhone;
+            String digitsOnly = cleanPhone.replaceAll("[^0-9]", "");
+
+            if (cleanPhone.startsWith("00") && digitsOnly.length() > 2) {
+                parseInput = "+" + digitsOnly.substring(2);
+            }
+
+            Phonenumber.PhoneNumber parsed = PHONE_NUMBER_UTIL.parse(
+                    parseInput,
+                    parseInput.startsWith("+") ? null : region
+            );
+
+            if (PHONE_NUMBER_UTIL.isValidNumber(parsed)) {
+                return PHONE_NUMBER_UTIL
+                        .format(parsed, PhoneNumberUtil.PhoneNumberFormat.E164)
+                        .replace("+", "");
+            }
+        } catch (NumberParseException ignored) {
+            // Fallback manual abajo para no romper el flujo de venta/WhatsApp.
+        }
+
+        return normalizeWhatsappPhoneFallback(cleanPhone, region);
+    }
+
+    private String normalizeWhatsappPhoneFallback(String rawPhone, String region) {
         String digits = rawPhone == null ? "" : rawPhone.replaceAll("[^0-9]", "");
         if (digits.isBlank()) {
             return null;
@@ -730,12 +768,12 @@ public class CashSaleServiceImpl implements CashSaleService {
             digits = digits.substring(2);
         }
 
+        // Si ya parece venir con codigo internacional, lo respetamos.
         if (digits.length() >= 11) {
             return digits;
         }
 
-        String countryCode = tenant == null ? null : cleanText(tenant.getPais());
-        String prefix = whatsappCountryPrefix(countryCode);
+        String prefix = phonePrefixByRegion(region);
         if (prefix == null) {
             return digits;
         }
@@ -744,30 +782,250 @@ public class CashSaleServiceImpl implements CashSaleService {
             return digits;
         }
 
+        // Muchos paises escriben el movil local con 0 inicial: VE 0412..., UK 07..., etc.
+        // Si libphonenumber no pudo parsear, quitamos ese trunk solo como fallback.
+        if (digits.startsWith("0") && digits.length() > 1) {
+            digits = digits.substring(1);
+        }
+
         return prefix + digits;
     }
 
-    private String whatsappCountryPrefix(String countryCode) {
-        if (countryCode == null || countryCode.isBlank()) {
+    private String resolveTenantPhoneRegion(Tenant tenant) {
+        String country = tenant == null ? null : cleanText(tenant.getPais());
+
+        if (country == null && tenant != null && tenant.getId() != null) {
+            country = tenantSettingsRepository.findByTenant_Id(tenant.getId())
+                    .map(settings -> {
+                        Map<String, Object> config = settings.getScheduleConfig();
+                        Object raw = firstNonNullConfig(
+                                config,
+                                "phoneCountry",
+                                "phoneCountryCode",
+                                "countryCode",
+                                "country",
+                                "pais"
+                        );
+
+                        String fromConfig = raw == null ? null : cleanText(raw.toString());
+                        if (fromConfig != null) return fromConfig;
+
+                        String fromTimezone = regionFromTimezone(settings.getTimezone());
+                        if (fromTimezone != null) return fromTimezone;
+
+                        return regionFromCurrency(settings.getCurrency());
+                    })
+                    .orElse(null);
+        }
+
+        return countryToRegion(country);
+    }
+
+    private String regionFromTimezone(String timezone) {
+        String zone = cleanText(timezone);
+        if (zone == null) return null;
+
+        return switch (zone) {
+            case "America/Lima" -> "PE";
+            case "America/Caracas" -> "VE";
+            case "America/Bogota" -> "CO";
+            case "America/Guayaquil" -> "EC";
+            case "America/Santiago" -> "CL";
+            case "America/Argentina/Buenos_Aires" -> "AR";
+            case "America/La_Paz" -> "BO";
+            case "America/Sao_Paulo" -> "BR";
+            case "America/Montevideo" -> "UY";
+            case "America/Asuncion" -> "PY";
+            case "America/Panama" -> "PA";
+            case "America/Costa_Rica" -> "CR";
+            case "America/Managua" -> "NI";
+            case "America/Tegucigalpa" -> "HN";
+            case "America/El_Salvador" -> "SV";
+            case "America/Guatemala" -> "GT";
+            case "America/Belize" -> "BZ";
+            case "America/Mexico_City" -> "MX";
+            case "America/New_York", "America/Chicago", "America/Denver", "America/Los_Angeles" -> "US";
+            case "Europe/Madrid" -> "ES";
+            case "Europe/Lisbon" -> "PT";
+            case "Europe/Paris" -> "FR";
+            case "Europe/Rome" -> "IT";
+            case "Europe/Berlin" -> "DE";
+            case "Europe/London" -> "GB";
+            default -> null;
+        };
+    }
+
+    private String regionFromCurrency(String currency) {
+        String code = normalizeCountryText(currency);
+        if (code == null) return null;
+
+        return switch (code) {
+            case "PEN" -> "PE";
+            case "VES" -> "VE";
+            case "COP" -> "CO";
+            case "USD" -> "US";
+            case "MXN" -> "MX";
+            case "CLP" -> "CL";
+            case "ARS" -> "AR";
+            case "BOB" -> "BO";
+            case "BRL" -> "BR";
+            case "UYU" -> "UY";
+            case "PYG" -> "PY";
+            case "EUR" -> null; // Europa usa EUR en varios paises: preferir pais/timezone.
+            default -> null;
+        };
+    }
+
+    private Object firstNonNullConfig(Map<String, Object> config, String... keys) {
+        if (config == null || keys == null) {
             return null;
         }
 
-        return switch (countryCode.trim().toUpperCase(Locale.ROOT)) {
-            case "PE", "PERU" -> "51";
-            case "CO", "COLOMBIA" -> "57";
-            case "MX", "MEXICO" -> "52";
-            case "CL", "CHILE" -> "56";
-            case "AR", "ARGENTINA" -> "54";
-            case "BO", "BOLIVIA" -> "591";
-            case "BR", "BRASIL", "BRAZIL" -> "55";
-            case "UY", "URUGUAY" -> "598";
-            case "PY", "PARAGUAY" -> "595";
-            case "CR", "COSTA RICA" -> "506";
-            case "DO", "REPUBLICA DOMINICANA", "DOMINICAN REPUBLIC" -> "1";
-            case "GT", "GUATEMALA" -> "502";
-            case "US", "USA", "UNITED STATES" -> "1";
+        for (String key : keys) {
+            if (key != null && config.containsKey(key) && config.get(key) != null) {
+                return config.get(key);
+            }
+        }
+
+        return null;
+    }
+
+    private String phonePrefixByRegion(String region) {
+        String cleanRegion = countryToRegion(region);
+        if (cleanRegion == null) {
+            return null;
+        }
+
+        int prefix = PHONE_NUMBER_UTIL.getCountryCodeForRegion(cleanRegion);
+        return prefix > 0 ? String.valueOf(prefix) : null;
+    }
+
+    private String countryToRegion(String country) {
+        String code = normalizeCountryText(country);
+        if (code == null) {
+            return null;
+        }
+
+        if (code.length() == 2 && isValidIsoRegion(code)) {
+            return code;
+        }
+
+        return switch (code) {
+            // Sudamerica
+            case "PERU" -> "PE";
+            case "VENEZUELA", "VEN", "REPUBLICA BOLIVARIANA DE VENEZUELA" -> "VE";
+            case "COLOMBIA" -> "CO";
+            case "ECUADOR" -> "EC";
+            case "CHILE" -> "CL";
+            case "ARGENTINA" -> "AR";
+            case "BOLIVIA" -> "BO";
+            case "BRASIL", "BRAZIL" -> "BR";
+            case "URUGUAY" -> "UY";
+            case "PARAGUAY" -> "PY";
+            case "GUYANA" -> "GY";
+            case "SURINAME", "SURINAM" -> "SR";
+            case "GUAYANA FRANCESA", "FRENCH GUIANA" -> "GF";
+
+            // Centroamerica, Norteamerica y Caribe frecuente
+            case "PANAMA" -> "PA";
+            case "COSTA RICA" -> "CR";
+            case "NICARAGUA" -> "NI";
+            case "HONDURAS" -> "HN";
+            case "EL SALVADOR", "SALVADOR" -> "SV";
+            case "GUATEMALA" -> "GT";
+            case "BELICE", "BELIZE" -> "BZ";
+            case "MEXICO" -> "MX";
+            case "ESTADOS UNIDOS", "UNITED STATES", "USA", "US", "EEUU", "EE UU" -> "US";
+            case "CANADA" -> "CA";
+            case "REPUBLICA DOMINICANA", "DOMINICAN REPUBLIC" -> "DO";
+            case "PUERTO RICO" -> "PR";
+            case "CUBA" -> "CU";
+            case "JAMAICA" -> "JM";
+            case "HAITI" -> "HT";
+            case "TRINIDAD Y TOBAGO", "TRINIDAD AND TOBAGO" -> "TT";
+
+            // Europa: si guardas ISO2 funciona para todos. Estos aliases cubren nombres comunes.
+            case "ESPANA", "SPAIN" -> "ES";
+            case "PORTUGAL" -> "PT";
+            case "FRANCIA", "FRANCE" -> "FR";
+            case "ITALIA", "ITALY" -> "IT";
+            case "ALEMANIA", "GERMANY", "DEUTSCHLAND" -> "DE";
+            case "REINO UNIDO", "UNITED KINGDOM", "UK", "INGLATERRA", "ENGLAND", "GRAN BRETANA", "GREAT BRITAIN" -> "GB";
+            case "IRLANDA", "IRELAND" -> "IE";
+            case "PAISES BAJOS", "HOLANDA", "NETHERLANDS" -> "NL";
+            case "BELGICA", "BELGIUM" -> "BE";
+            case "SUIZA", "SWITZERLAND" -> "CH";
+            case "AUSTRIA" -> "AT";
+            case "DINAMARCA", "DENMARK" -> "DK";
+            case "SUECIA", "SWEDEN" -> "SE";
+            case "NORUEGA", "NORWAY" -> "NO";
+            case "FINLANDIA", "FINLAND" -> "FI";
+            case "ISLANDIA", "ICELAND" -> "IS";
+            case "POLONIA", "POLAND" -> "PL";
+            case "CHEQUIA", "REPUBLICA CHECA", "CZECH REPUBLIC", "CZECHIA" -> "CZ";
+            case "ESLOVAQUIA", "SLOVAKIA" -> "SK";
+            case "HUNGRIA", "HUNGARY" -> "HU";
+            case "RUMANIA", "ROMANIA" -> "RO";
+            case "BULGARIA" -> "BG";
+            case "GRECIA", "GREECE" -> "GR";
+            case "CROACIA", "CROATIA" -> "HR";
+            case "ESLOVENIA", "SLOVENIA" -> "SI";
+            case "SERBIA" -> "RS";
+            case "MONTENEGRO" -> "ME";
+            case "BOSNIA", "BOSNIA Y HERZEGOVINA", "BOSNIA AND HERZEGOVINA" -> "BA";
+            case "ALBANIA" -> "AL";
+            case "MACEDONIA", "NORTH MACEDONIA", "MACEDONIA DEL NORTE" -> "MK";
+            case "MALTA" -> "MT";
+            case "LUXEMBURGO", "LUXEMBOURG" -> "LU";
+            case "LIECHTENSTEIN" -> "LI";
+            case "MONACO" -> "MC";
+            case "ANDORRA" -> "AD";
+            case "SAN MARINO" -> "SM";
+            case "VATICANO", "VATICAN", "HOLY SEE" -> "VA";
+            case "ESTONIA" -> "EE";
+            case "LETONIA", "LATVIA" -> "LV";
+            case "LITUANIA", "LITHUANIA" -> "LT";
+            case "UCRANIA", "UKRAINE" -> "UA";
+            case "MOLDAVIA", "MOLDOVA" -> "MD";
+            case "BIELORRUSIA", "BELARUS" -> "BY";
+            case "RUSIA", "RUSSIA" -> "RU";
+            case "TURQUIA", "TURKEY", "TURKIYE" -> "TR";
+            case "CHIPRE", "CYPRUS" -> "CY";
+            case "GEORGIA" -> "GE";
+            case "ARMENIA" -> "AM";
+            case "AZERBAIYAN", "AZERBAIJAN" -> "AZ";
             default -> null;
         };
+    }
+
+    private String normalizeCountryText(String value) {
+        String clean = cleanText(value);
+        if (clean == null) {
+            return null;
+        }
+
+        String normalized = Normalizer.normalize(clean, Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "")
+                .trim()
+                .toUpperCase(Locale.ROOT)
+                .replaceAll("[^A-Z0-9 ]", " ")
+                .replaceAll("\\s+", " ");
+
+        return normalized.isBlank() ? null : normalized;
+    }
+
+    private boolean isValidIsoRegion(String region) {
+        if (region == null || region.length() != 2) {
+            return false;
+        }
+
+        for (String iso : Locale.getISOCountries()) {
+            if (iso.equals(region)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private String buildBookingUrl(Sale sale) {
