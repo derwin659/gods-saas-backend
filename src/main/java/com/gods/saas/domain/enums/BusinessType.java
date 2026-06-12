@@ -8,5 +8,6 @@ public enum BusinessType {
     NAILS,
     BROWS_LASHES,
     HAIR_SALON,
+    WORKSHOP,
     OTHER
 }
