@@ -68,6 +68,8 @@ public class BarberCommissionService {
                     .barberName(buildFullName(barber))
                     .from(from)
                     .to(to)
+                    .salaryMode(false)
+                    .paymentMode("COMMISSION")
                     .totalVentas(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
                     .totalComision(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP))
                     .porcentajeComision(
@@ -323,6 +325,8 @@ public class BarberCommissionService {
                 .barberName(buildFullName(barber))
                 .from(from)
                 .to(to)
+                .salaryMode(salaryMode)
+                .paymentMode(salaryMode ? "SALARY" : "COMMISSION")
                 .totalVentas(totalVentas)
                 .totalComision(totalComision)
                 .porcentajeComision(

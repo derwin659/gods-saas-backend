@@ -19,6 +19,8 @@ public class BarberCommissionResponse {
 
     private LocalDate from;
     private LocalDate to;
+    private Boolean salaryMode;
+    private String paymentMode;
 
     // Compatibilidad con Flutter anterior
     private BigDecimal totalVentas;
