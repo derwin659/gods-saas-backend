@@ -51,6 +51,7 @@ public class LocalConsumptionOrderController {
     public LocalConsumptionOrderResponse complete(
             @RequestAttribute("tenantId") Long tenantId,
             @RequestAttribute("branchId") Long sessionBranchId,
+            @RequestAttribute("userId") Long userId,
             @PathVariable Long orderId,
             @RequestParam(required = false) Long branchId,
             @RequestBody(required = false) UpdateLocalConsumptionOrderRequest request
@@ -60,8 +61,10 @@ public class LocalConsumptionOrderController {
         return localConsumptionOrderService.complete(
                 tenantId,
                 effectiveBranchId,
+                userId,
                 orderId,
-                request != null ? request.getSaleId() : null
+                request != null ? request.getSaleId() : null,
+                request != null ? request.getPaymentMethod() : null
         );
     }
 }

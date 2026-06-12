@@ -6,4 +6,5 @@ import lombok.Data;
 public class UpdateLocalConsumptionOrderRequest {
     private String note;
     private Long saleId;
+    private String paymentMethod;
 }

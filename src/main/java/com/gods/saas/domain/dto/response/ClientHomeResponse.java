@@ -14,6 +14,8 @@ public class ClientHomeResponse {
     private TenantMini tenant;
     private ClienteResponse customer;
     private PointsSummary points;
+    private String currency;
+    private String currencySymbol;
 
     // para crecer luego
     private NextAppointmentResponse nextAppointment; // null por ahora

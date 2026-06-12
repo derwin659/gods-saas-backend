@@ -40,7 +40,12 @@ public class OwnerAgendaController {
                 ? LocalDate.now()
                 : LocalDate.parse(fecha);
 
-        return ownerAgendaService.getAgendaDelDia(session.tenantId(), branchIdFinal, fechaConsulta);
+        boolean canViewPhone = adminPermissionService.hasCurrentUserPermission("CUSTOMERS_VIEW_PHONE");
+
+        return ownerAgendaService.getAgendaDelDia(session.tenantId(), branchIdFinal, fechaConsulta)
+                .stream()
+                .map(item -> protectPhone(item, canViewPhone))
+                .toList();
     }
 
     @GetMapping("/availability")
@@ -81,11 +86,13 @@ public class OwnerAgendaController {
                 session.branchId()
         );
 
-        return ownerAgendaAppointmentService.createAppointment(
+        boolean canViewPhone = adminPermissionService.hasCurrentUserPermission("CUSTOMERS_VIEW_PHONE");
+
+        return protectPhone(ownerAgendaAppointmentService.createAppointment(
                 session.tenantId(),
                 branchIdFinal,
                 request
-        );
+        ), canViewPhone);
     }
 
     @PutMapping("/appointments/{appointmentId}")
@@ -100,12 +107,14 @@ public class OwnerAgendaController {
         SessionData session = readSession(authHeader);
         Long branchIdFinal = branchId != null ? branchId : session.branchId();
 
-        return ownerAgendaAppointmentService.updateAppointment(
+        boolean canViewPhone = adminPermissionService.hasCurrentUserPermission("CUSTOMERS_VIEW_PHONE");
+
+        return protectPhone(ownerAgendaAppointmentService.updateAppointment(
                 session.tenantId(),
                 branchIdFinal,
                 appointmentId,
                 request
-        );
+        ), canViewPhone);
     }
 
     @PostMapping("/appointments/{appointmentId}/deposit/validate")
@@ -123,14 +132,16 @@ public class OwnerAgendaController {
         boolean approved = getBoolean(request, "approved", false);
         String note = getString(request, "note");
 
-        return ownerAgendaAppointmentService.validateDeposit(
+        boolean canViewPhone = adminPermissionService.hasCurrentUserPermission("CUSTOMERS_VIEW_PHONE");
+
+        return protectPhone(ownerAgendaAppointmentService.validateDeposit(
                 session.tenantId(),
                 branchIdFinal,
                 appointmentId,
                 session.userId(),
                 approved,
                 note
-        );
+        ), canViewPhone);
     }
 
     @DeleteMapping("/appointments/{appointmentId}")
@@ -144,11 +155,13 @@ public class OwnerAgendaController {
         SessionData session = readSession(authHeader);
         Long branchIdFinal = branchId != null ? branchId : session.branchId();
 
-        return ownerAgendaAppointmentService.cancelAppointment(
+        boolean canViewPhone = adminPermissionService.hasCurrentUserPermission("CUSTOMERS_VIEW_PHONE");
+
+        return protectPhone(ownerAgendaAppointmentService.cancelAppointment(
                 session.tenantId(),
                 branchIdFinal,
                 appointmentId
-        );
+        ), canViewPhone);
     }
 
     private SessionData readSession(String authHeader) {
@@ -196,6 +209,28 @@ public class OwnerAgendaController {
 
         String value = request.get(key).toString().trim();
         return value.isEmpty() ? null : value;
+    }
+
+    private OwnerAgendaResponse protectPhone(OwnerAgendaResponse response, boolean canViewPhone) {
+        if (canViewPhone || response == null) {
+            return response;
+        }
+
+        response.setTelefono(maskPhone(response.getTelefono()));
+        return response;
+    }
+
+    private String maskPhone(String phone) {
+        if (phone == null || phone.isBlank()) {
+            return "";
+        }
+
+        String digits = phone.replaceAll("[^0-9]", "");
+        if (digits.length() <= 4) {
+            return "****";
+        }
+
+        return "****" + digits.substring(digits.length() - 4);
     }
 
     private record SessionData(Long tenantId, Long branchId, Long userId) {

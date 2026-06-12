@@ -1,9 +1,13 @@
 package com.gods.saas.service.impl;
 
 import com.gods.saas.domain.dto.request.CreateLocalConsumptionOrderRequest;
+import com.gods.saas.domain.dto.request.CreateCashSaleItemRequest;
+import com.gods.saas.domain.dto.request.CreateCashSaleRequest;
 import com.gods.saas.domain.dto.response.LocalConsumptionOrderResponse;
+import com.gods.saas.domain.dto.response.SaleResponse;
 import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.*;
+import com.gods.saas.service.impl.impl.CashSaleService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -25,6 +29,7 @@ public class LocalConsumptionOrderService {
     private final ProductBranchStockRepository productBranchStockRepository;
     private final AppUserRepository appUserRepository;
     private final LocalConsumptionOrderRepository orderRepository;
+    private final CashSaleService cashSaleService;
 
     public LocalConsumptionOrderResponse createClientOrder(Long tenantId, Long customerId, CreateLocalConsumptionOrderRequest request) {
         Tenant tenant = tenantRepository.findById(tenantId)
@@ -90,12 +95,62 @@ public class LocalConsumptionOrderService {
         return toResponse(orderRepository.save(order));
     }
 
-    public LocalConsumptionOrderResponse complete(Long tenantId, Long branchId, Long orderId, Long saleId) {
+    public LocalConsumptionOrderResponse complete(Long tenantId, Long branchId, Long userId, Long orderId, Long saleId, String paymentMethod) {
         LocalConsumptionOrder order = findOwnerOrder(tenantId, branchId, orderId);
+
+        if ("REJECTED".equals(order.getStatus())) {
+            throw new RuntimeException("No puedes completar una solicitud rechazada");
+        }
+        if ("COMPLETED".equals(order.getStatus())) {
+            return toResponse(order);
+        }
+
+        Long resolvedSaleId = saleId;
+        if (resolvedSaleId == null) {
+            SaleResponse sale = cashSaleService.createCashSale(
+                    tenantId,
+                    branchId,
+                    userId,
+                    buildCashSaleRequest(order, paymentMethod)
+            );
+            resolvedSaleId = sale.getSaleId();
+        }
+
         order.setStatus("COMPLETED");
-        order.setSaleId(saleId);
+        order.setSaleId(resolvedSaleId);
         order.setHandledAt(LocalDateTime.now());
         return toResponse(orderRepository.save(order));
+    }
+
+    private CreateCashSaleRequest buildCashSaleRequest(LocalConsumptionOrder order, String paymentMethod) {
+        CreateCashSaleRequest request = new CreateCashSaleRequest();
+        request.setCustomerId(order.getCustomer() != null ? order.getCustomer().getId() : null);
+        request.setMetodoPago(resolvePaymentMethod(paymentMethod));
+        request.setCashReceived(order.getTotal());
+        request.setDiscount(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
+        request.setCreatedByRole("OWNER");
+        request.setItems(order.getItems().stream().map(this::toCashSaleItem).toList());
+        return request;
+    }
+
+    private String resolvePaymentMethod(String paymentMethod) {
+        String clean = clean(paymentMethod);
+        return clean == null ? "EFECTIVO" : clean.toUpperCase();
+    }
+
+    private CreateCashSaleItemRequest toCashSaleItem(LocalConsumptionOrderItem orderItem) {
+        CreateCashSaleItemRequest item = new CreateCashSaleItemRequest();
+        if ("PRODUCT".equalsIgnoreCase(orderItem.getItemType()) && orderItem.getProduct() != null) {
+            item.setProductId(orderItem.getProduct().getId());
+        } else if (orderItem.getService() != null) {
+            item.setServiceId(orderItem.getService().getId());
+        }
+        if (orderItem.getBarberUser() != null) {
+            item.setBarberUserId(orderItem.getBarberUser().getId());
+        }
+        item.setCantidad(orderItem.getQuantity() == null || orderItem.getQuantity() < 1 ? 1 : orderItem.getQuantity());
+        item.setPrecioUnitario(orderItem.getUnitPrice());
+        return item;
     }
 
     private LocalConsumptionOrderItem buildItem(Long tenantId, Long branchId, CreateLocalConsumptionOrderRequest.Item rawItem) {

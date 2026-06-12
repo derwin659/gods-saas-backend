@@ -48,6 +48,7 @@ public class CustomerService {
     private final SaleRepository saleRepository;
     private final TenantTimeService tenantTimeService;
     private final CloudinaryStorageService cloudinaryStorageService;
+    private final TenantSettingsRepository tenantSettingsRepository;
 
     @Transactional
     public Customer registrarCliente(VentaRapidaRequest req) {
@@ -488,6 +489,9 @@ public class CustomerService {
 
         int faltan = Math.max(meta - disponibles, 0);
         double progreso = meta <= 0 ? 0.0 : Math.min((double) disponibles / meta, 1.0);
+        String currency = tenantSettingsRepository.findByTenantId(tenantId)
+                .map(settings -> normalizeCurrency(settings.getCurrency()))
+                .orElse("PEN");
 
         ClientHomeResponse.NextAppointmentResponse nextAppointment = buildNextAppointment(tenantId, customerId);
         List<ClientHomeResponse.LastVisitResponse> lastVisits = buildLastVisits(tenantId, customerId);
@@ -501,6 +505,8 @@ public class CustomerService {
                         .ciudad(tenant.getCiudad())
                         .build())
                 .customer(ClienteResponse.fromEntity(customer))
+                .currency(currency)
+                .currencySymbol(resolveCurrencySymbol(currency))
                 .points(ClientHomeResponse.PointsSummary.builder()
                         .disponibles(disponibles)
                         .acumulados(acumulados)
@@ -512,6 +518,27 @@ public class CustomerService {
                 .lastVisits(lastVisits)
                 .benefits(benefits)
                 .build();
+    }
+
+    private String normalizeCurrency(String currency) {
+        if (currency == null || currency.isBlank()) {
+            return "PEN";
+        }
+        return currency.trim().toUpperCase();
+    }
+
+    private String resolveCurrencySymbol(String currency) {
+        return switch (normalizeCurrency(currency)) {
+            case "USD" -> "$";
+            case "VES", "VED" -> "Bs.";
+            case "COP" -> "$";
+            case "CLP" -> "$";
+            case "ARS" -> "$";
+            case "MXN" -> "$";
+            case "EUR" -> "€";
+            case "PEN" -> "S/";
+            default -> normalizeCurrency(currency);
+        };
     }
 
     private ClientHomeResponse.NextAppointmentResponse buildNextAppointment(Long tenantId, Long customerId) {

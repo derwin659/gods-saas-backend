@@ -24,7 +24,8 @@ public enum AdminPermissionKey {
     REPORTS_BARBER_PAYMENTS,
 
     AGENDA_ACCESS,
-    CUSTOMERS_ACCESS;
+    CUSTOMERS_ACCESS,
+    CUSTOMERS_VIEW_PHONE;
 
     public static boolean isValid(String key) {
         if (key == null || key.isBlank()) return false;

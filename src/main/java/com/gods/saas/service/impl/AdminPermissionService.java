@@ -221,6 +221,12 @@ public class AdminPermissionService {
         );
     }
 
+    public boolean hasCurrentUserPermission(String permissionKey) {
+        Long tenantId = TenantContext.getTenantId();
+        Long userId = getAuthenticatedUserId();
+        return hasPermission(tenantId, userId, permissionKey);
+    }
+
     public void checkPermission(String permissionKey) {
         Long tenantId = TenantContext.getTenantId();
         Long userId = getAuthenticatedUserId();

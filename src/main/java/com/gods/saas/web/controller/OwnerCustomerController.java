@@ -38,6 +38,7 @@ public class OwnerCustomerController {
         adminPermissionService.checkPermission("CUSTOMERS_ACCESS");
 
         Long tenantId = extractTenantId(authHeader);
+        boolean canViewPhone = adminPermissionService.hasCurrentUserPermission("CUSTOMERS_VIEW_PHONE");
 
         List<ClienteResponse> response = customerService
                 .listarClientesOwner(tenantId, q, limit)
@@ -46,6 +47,7 @@ public class OwnerCustomerController {
                         customer,
                         customerService.obtenerPuntosDisponiblesReales(tenantId, customer.getId())
                 ))
+                .map(item -> protectPhone(item, canViewPhone))
                 .toList();
 
         return ResponseEntity.ok(response);
@@ -61,9 +63,13 @@ public class OwnerCustomerController {
         adminPermissionService.checkPermission("CUSTOMERS_ACCESS");
 
         Long tenantId = extractTenantId(authHeader);
+        boolean canViewPhone = adminPermissionService.hasCurrentUserPermission("CUSTOMERS_VIEW_PHONE");
 
         return ResponseEntity.ok(
                 customerService.listarClientesInactivosOwner(tenantId, days)
+                        .stream()
+                        .map(item -> protectPhone(item, canViewPhone))
+                        .toList()
         );
     }
 
@@ -84,7 +90,8 @@ public class OwnerCustomerController {
                 customer.getId()
         );
 
-        return ResponseEntity.ok(ClienteResponse.fromEntity(customer, puntosReales));
+        boolean canViewPhone = adminPermissionService.hasCurrentUserPermission("CUSTOMERS_VIEW_PHONE");
+        return ResponseEntity.ok(protectPhone(ClienteResponse.fromEntity(customer, puntosReales), canViewPhone));
     }
 
     @Operation(summary = "Obtener puntos reales del cliente para owner/admin")
@@ -126,7 +133,8 @@ public class OwnerCustomerController {
         Long tenantId = extractTenantId(authHeader);
         Customer customer = customerService.registrarCliente(tenantId, request);
 
-        return ResponseEntity.ok(ClienteResponse.fromEntity(customer));
+        boolean canViewPhone = adminPermissionService.hasCurrentUserPermission("CUSTOMERS_VIEW_PHONE");
+        return ResponseEntity.ok(protectPhone(ClienteResponse.fromEntity(customer), canViewPhone));
     }
 
     @Operation(summary = "Actualizar cliente desde owner/admin")
@@ -142,7 +150,8 @@ public class OwnerCustomerController {
         Long tenantId = extractTenantId(authHeader);
         Customer customer = customerService.actualizarCliente(tenantId, customerId, request);
 
-        return ResponseEntity.ok(ClienteResponse.fromEntity(customer));
+        boolean canViewPhone = adminPermissionService.hasCurrentUserPermission("CUSTOMERS_VIEW_PHONE");
+        return ResponseEntity.ok(protectPhone(ClienteResponse.fromEntity(customer), canViewPhone));
     }
 
     @Operation(summary = "Eliminar lógicamente cliente desde owner/admin")
@@ -169,6 +178,41 @@ public class OwnerCustomerController {
     private Long extractTenantId(String authHeader) {
         String token = authHeader.replace("Bearer ", "");
         return jwtUtil.getTenantIdFromToken(token);
+    }
+
+    private ClienteResponse protectPhone(ClienteResponse response, boolean canViewPhone) {
+        if (canViewPhone || response == null) {
+            return response;
+        }
+
+        response.setPhone(maskPhone(response.getPhone()));
+        return response;
+    }
+
+    private InactiveCustomerResponse protectPhone(InactiveCustomerResponse response, boolean canViewPhone) {
+        if (canViewPhone || response == null) {
+            return response;
+        }
+
+        return InactiveCustomerResponse.builder()
+                .customerId(response.getCustomerId())
+                .nombre(response.getNombre())
+                .telefono(maskPhone(response.getTelefono()))
+                .ultimaVisita(response.getUltimaVisita())
+                .build();
+    }
+
+    private String maskPhone(String phone) {
+        if (phone == null || phone.isBlank()) {
+            return "";
+        }
+
+        String digits = phone.replaceAll("[^0-9]", "");
+        if (digits.length() <= 4) {
+            return "****";
+        }
+
+        return "****" + digits.substring(digits.length() - 4);
     }
 
 
