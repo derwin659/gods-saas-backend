@@ -44,6 +44,7 @@ public class BarberProductController {
                 .stockActual(stockActual)
                 .stockMinimo(stockMinimo)
                 .categoria(product.getCategoria())
+                .imageUrl(product.getImageUrl())
                 .activo(Boolean.TRUE.equals(product.getActivo()))
                 .permiteVentaSinStock(Boolean.TRUE.equals(product.getPermiteVentaSinStock()))
                 .stockBajo(stockActual <= stockMinimo)

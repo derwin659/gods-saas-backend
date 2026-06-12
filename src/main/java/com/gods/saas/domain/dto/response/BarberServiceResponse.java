@@ -18,5 +18,6 @@ public class BarberServiceResponse {
     private Double precio;
     private Boolean precioVariable;
     private String categoria;
+    private String imageUrl;
     private Boolean activo;
 }
