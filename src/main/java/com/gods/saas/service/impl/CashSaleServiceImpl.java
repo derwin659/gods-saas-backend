@@ -1125,6 +1125,10 @@ public class CashSaleServiceImpl implements CashSaleService {
             return 0;
         }
 
+        if (isCourtesySale(sale)) {
+            return 0;
+        }
+
         BigDecimal servicePointsBase = calculateServicePointsBase(sale);
         if (servicePointsBase.compareTo(BigDecimal.ZERO) <= 0) {
             return 0;
@@ -1184,6 +1188,10 @@ public class CashSaleServiceImpl implements CashSaleService {
             return 0;
         }
 
+        if (isCourtesySale(sale)) {
+            return 0;
+        }
+
         BigDecimal servicePointsBase = calculateServicePointsBase(sale);
         if (servicePointsBase.compareTo(BigDecimal.ZERO) <= 0) {
             return 0;
@@ -1213,6 +1221,17 @@ public class CashSaleServiceImpl implements CashSaleService {
 
     private boolean isApprovedSale(Sale sale) {
         return "APPROVED".equals(resolveValidationStatus(sale));
+    }
+
+    private boolean isCourtesySale(Sale sale) {
+        if (sale == null) {
+            return false;
+        }
+        String code = normalizeMethod(sale.getMetodoPago());
+        return "FREE".equals(code)
+                || "GRATIS".equals(code)
+                || "CORTESIA".equals(code)
+                || "CORTESÍA".equals(code);
     }
 
     private String resolveValidationStatus(Sale sale) {

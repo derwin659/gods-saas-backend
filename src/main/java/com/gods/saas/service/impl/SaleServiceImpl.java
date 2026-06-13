@@ -673,6 +673,10 @@ public class SaleServiceImpl implements SaleService {
             return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
         }
 
+        if (isCourtesySale(savedSale)) {
+            return BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
+        }
+
         return savedSale.getItems().stream()
                 .filter(item -> item.getService() != null)
                 .map(SaleItem::getSubtotal)
@@ -917,6 +921,17 @@ public class SaleServiceImpl implements SaleService {
             return "APPROVED";
         }
         return sale.getPaymentValidationStatus();
+    }
+
+    private boolean isCourtesySale(Sale sale) {
+        if (sale == null) {
+            return false;
+        }
+        String code = normalizarMetodoPago(sale.getMetodoPago());
+        return "FREE".equals(code)
+                || "GRATIS".equals(code)
+                || "CORTESIA".equals(code)
+                || "CORTESÍA".equals(code);
     }
 
     private String normalizarMetodoPago(String metodoPago) {
