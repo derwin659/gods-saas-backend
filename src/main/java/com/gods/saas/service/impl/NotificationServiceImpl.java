@@ -607,5 +607,41 @@ public class NotificationServiceImpl implements NotificationService {
         );
 
         registerDefaultChannels(n, true);
+        notifyOwnersSaleReceiptPending(sale);
+    }
+
+    private void notifyOwnersSaleReceiptPending(Sale sale) {
+        if (sale == null || sale.getTenant() == null || sale.getTenant().getId() == null) {
+            return;
+        }
+
+        String customerName = sale.getCustomer() != null
+                ? safeFullName(sale.getCustomer().getNombres(), sale.getCustomer().getApellidos())
+                : "Cliente";
+
+        List<AppUser> owners = userTenantRoleRepository.findActiveUsersByTenantBranchAndRole(
+                sale.getTenant().getId(),
+                null,
+                RoleType.OWNER
+        );
+
+        for (AppUser owner : owners) {
+            if (owner == null || owner.getId() == null) {
+                continue;
+            }
+
+            Notification ownerNotification = saveUserNotification(
+                    sale.getTenant(),
+                    sale.getBranch(),
+                    owner,
+                    NotificationType.SALE_RECEIPT,
+                    "WhatsApp post-venta pendiente",
+                    "Hay un mensaje post-venta pendiente para " + customerName + ".",
+                    "SALE",
+                    sale.getId()
+            );
+
+            registerDefaultChannels(ownerNotification, false);
+        }
     }
 }

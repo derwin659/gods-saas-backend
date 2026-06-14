@@ -5,6 +5,7 @@ import com.gods.saas.domain.dto.response.WhatsappSettingsResponse;
 import com.gods.saas.domain.model.TenantSettings;
 import com.gods.saas.domain.repository.TenantSettingsRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,10 +36,26 @@ public class OwnerWhatsappSettingsService {
 
     private final TenantSettingsRepository tenantSettingsRepository;
 
+    @Value("${whatsapp.twilio.enabled:false}")
+    private boolean twilioEnabled;
+
+    @Value("${whatsapp.twilio.from-number:}")
+    private String twilioFromNumber;
+
+    @Value("${whatsapp.twilio.messaging-service-sid:}")
+    private String twilioMessagingServiceSid;
+
     @Transactional(readOnly = true)
     public WhatsappSettingsResponse getSettings(Long tenantId) {
         TenantSettings settings = resolveSettings(tenantId);
         Map<String, Object> config = settings.getScheduleConfig();
+        String provider = readString(config, PROVIDER_KEY, DEFAULT_PROVIDER);
+        String connectionStatus = readString(config, CONNECTION_STATUS_KEY, DEFAULT_CONNECTION_STATUS);
+        String senderPhone = readString(config, SENDER_PHONE_KEY, "");
+
+        if ("TWILIO".equalsIgnoreCase(provider) && senderPhone.isBlank()) {
+            senderPhone = safeText(twilioFromNumber);
+        }
 
         return WhatsappSettingsResponse.builder()
                 .postSaleMessageEnabled(readBoolean(config, POST_SALE_MESSAGE_ENABLED_KEY, true))
@@ -48,11 +65,11 @@ public class OwnerWhatsappSettingsService {
                 .appointmentReminder24hEnabled(readBoolean(config, REMINDER_24H_ENABLED_KEY, false))
                 .inactiveCustomerFollowUpEnabled(readBoolean(config, INACTIVE_CUSTOMER_FOLLOW_UP_ENABLED_KEY, false))
                 .appDownloadUrl(readString(config, APP_DOWNLOAD_URL_KEY, DEFAULT_APP_DOWNLOAD_URL))
-                .provider(readString(config, PROVIDER_KEY, DEFAULT_PROVIDER))
-                .connectionStatus(readString(config, CONNECTION_STATUS_KEY, DEFAULT_CONNECTION_STATUS))
-                .senderPhone(readString(config, SENDER_PHONE_KEY, ""))
+                .provider(provider)
+                .connectionStatus(connectionStatus)
+                .senderPhone(senderPhone)
                 .senderLabel(readString(config, SENDER_LABEL_KEY, ""))
-                .connected("CONNECTED".equalsIgnoreCase(readString(config, CONNECTION_STATUS_KEY, DEFAULT_CONNECTION_STATUS)))
+                .connected(isConnected(provider, connectionStatus, senderPhone))
                 .build();
     }
 
@@ -188,5 +205,24 @@ public class OwnerWhatsappSettingsService {
 
         String text = value.toString().trim();
         return text.isEmpty() ? fallback : text;
+    }
+
+    private boolean isConnected(String provider, String connectionStatus, String senderPhone) {
+        if (!"CONNECTED".equalsIgnoreCase(connectionStatus)) {
+            return false;
+        }
+
+        if (!"TWILIO".equalsIgnoreCase(provider)) {
+            return true;
+        }
+
+        return twilioEnabled
+                && (!safeText(senderPhone).isBlank()
+                || !safeText(twilioFromNumber).isBlank()
+                || !safeText(twilioMessagingServiceSid).isBlank());
+    }
+
+    private String safeText(String value) {
+        return value == null ? "" : value.trim();
     }
 }

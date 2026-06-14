@@ -37,7 +37,6 @@ public class ClientBookingService {
 
     private static final LocalTime DEFAULT_OPENING_TIME = LocalTime.of(8, 0);
     private static final LocalTime DEFAULT_CLOSING_TIME = LocalTime.of(21, 0);
-    private static final int SLOT_INTERVAL_MINUTES = 60;
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("America/Lima");
 
     private final BranchRepository branchRepository;
@@ -100,8 +99,19 @@ public class ClientBookingService {
             String date,
             Long barberId
     ) {
-        log.info("BOOKING AVAILABILITY START => tenantId={}, branchId={}, serviceId={}, date={}, barberId={}",
-                tenantId, branchId, serviceId, date, barberId);
+        return getAvailability(tenantId, branchId, serviceId, null, date, barberId);
+    }
+
+    public BookingAvailabilityResponse getAvailability(
+            Long tenantId,
+            Long branchId,
+            Long serviceId,
+            List<Long> serviceIds,
+            String date,
+            Long barberId
+    ) {
+        log.info("BOOKING AVAILABILITY START => tenantId={}, branchId={}, serviceId={}, serviceIds={}, date={}, barberId={}",
+                tenantId, branchId, serviceId, serviceIds, date, barberId);
 
         LocalDate fecha = LocalDate.parse(date);
         validateBookingDate(fecha);
@@ -119,21 +129,10 @@ public class ClientBookingService {
             throw new RuntimeException("La sucursal no pertenece al tenant");
         }
 
-        ServiceEntity service = serviceRepository.findById(serviceId)
-                .orElseThrow(() -> new RuntimeException("Servicio no encontrado"));
-
-        log.info("SERVICE FOUND => serviceId={}, tenantId={}, duracionMinutos={}",
-                service.getId(),
-                service.getTenant() != null ? service.getTenant().getId() : null,
-                service.getDuracionMinutos());
-
-        if (!service.getTenant().getId().equals(tenantId)) {
-            log.warn("SERVICE TENANT MISMATCH => expectedTenantId={}, serviceTenantId={}",
-                    tenantId, service.getTenant().getId());
-            throw new RuntimeException("El servicio no pertenece al tenant");
-        }
-
-        int duracion = getServiceDuration(service);
+        List<ServiceEntity> selectedServices = resolveBookingServices(tenantId, serviceId, serviceIds);
+        ServiceEntity service = selectedServices.get(0);
+        int duracion = getTotalServiceDuration(selectedServices);
+        int slotInterval = resolveSlotIntervalMinutes(duracion);
         List<String> slots = new ArrayList<>();
 
         log.info("SERVICE DURATION RESOLVED => {} minutos", duracion);
@@ -170,7 +169,7 @@ public class ClientBookingService {
 
             LocalTime apertura = availability.getStartTime();
             LocalTime cierre = availability.getEndTime();
-            LocalTime current = normalizeStartTime(fecha, apertura);
+            LocalTime current = normalizeStartTime(fecha, apertura, slotInterval);
 
             log.info("BARBER SCHEDULE WINDOW => barberId={}, apertura={}, cierre={}, normalizedStart={}",
                     barberId, apertura, cierre, current);
@@ -190,7 +189,7 @@ public class ClientBookingService {
                     slots.add(candidateStart.toString());
                 }
 
-                current = current.plusMinutes(SLOT_INTERVAL_MINUTES);
+                current = current.plusMinutes(slotInterval);
             }
         } else {
             List<AppUser> barberos = getActiveBranchBarbers(tenantId, branchId);
@@ -232,7 +231,7 @@ public class ClientBookingService {
                     .max(LocalTime::compareTo)
                     .orElse(DEFAULT_CLOSING_TIME);
 
-            LocalTime current = normalizeStartTime(fecha, apertura);
+            LocalTime current = normalizeStartTime(fecha, apertura, slotInterval);
 
             log.info("GLOBAL SCHEDULE WINDOW => fecha={}, apertura={}, cierre={}, normalizedStart={}",
                     fecha, apertura, cierre, current);
@@ -253,7 +252,7 @@ public class ClientBookingService {
                     slots.add(candidateStart.toString());
                 }
 
-                current = current.plusMinutes(SLOT_INTERVAL_MINUTES);
+                current = current.plusMinutes(slotInterval);
             }
         }
 
@@ -282,8 +281,12 @@ public class ClientBookingService {
             throw new RuntimeException("La sucursal no pertenece al tenant");
         }
 
-        ServiceEntity service = serviceRepository.findById(req.getServiceId())
-                .orElseThrow(() -> new RuntimeException("Servicio no encontrado"));
+        List<ServiceEntity> selectedServices = resolveBookingServices(
+                tenantId,
+                req.getServiceId(),
+                req.getServiceIds()
+        );
+        ServiceEntity service = selectedServices.get(0);
 
         if (service.getTenant() == null || !service.getTenant().getId().equals(tenantId)) {
             throw new RuntimeException("El servicio no pertenece al tenant");
@@ -299,7 +302,7 @@ public class ClientBookingService {
         validateBookingDate(fecha);
         validateTimeNotPast(fecha, horaInicio);
 
-        int duracion = getServiceDuration(service);
+        int duracion = getTotalServiceDuration(selectedServices);
         LocalTime horaFin = horaInicio.plusMinutes(duracion);
 
         AppUser barber;
@@ -329,8 +332,7 @@ public class ClientBookingService {
             );
         }
 
-        BigDecimal originalAmount = BigDecimal.valueOf(service.getPrecio())
-                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal originalAmount = getTotalServiceAmount(selectedServices);
 
         Promotion appliedPromotion = resolvePromotionOrNull(
                 tenantId,
@@ -414,7 +416,7 @@ public class ClientBookingService {
                 .horaInicio(horaInicio)
                 .horaFin(horaFin)
                 .estado(appointmentStatus)
-                .notas(null)
+                .notas(buildMultiServiceNotes(selectedServices))
 
                 // Promoción / precio final
                 .promotion(appliedPromotion)
@@ -814,6 +816,75 @@ public class ClientBookingService {
                 : 30;
     }
 
+    private List<ServiceEntity> resolveBookingServices(
+            Long tenantId,
+            Long primaryServiceId,
+            List<Long> requestedServiceIds
+    ) {
+        List<Long> ids = new ArrayList<>();
+
+        if (requestedServiceIds != null) {
+            for (Long id : requestedServiceIds) {
+                if (id != null && !ids.contains(id)) ids.add(id);
+            }
+        }
+
+        if (ids.isEmpty() && primaryServiceId != null) {
+            ids.add(primaryServiceId);
+        } else if (primaryServiceId != null && !ids.contains(primaryServiceId)) {
+            ids.add(0, primaryServiceId);
+        }
+
+        if (ids.isEmpty()) {
+            throw new RuntimeException("Selecciona al menos un servicio");
+        }
+
+        List<ServiceEntity> services = new ArrayList<>();
+        for (Long id : ids) {
+            ServiceEntity service = serviceRepository.findById(id)
+                    .orElseThrow(() -> new RuntimeException("Servicio no encontrado"));
+
+            if (service.getTenant() == null || !service.getTenant().getId().equals(tenantId)) {
+                throw new RuntimeException("El servicio no pertenece al tenant");
+            }
+
+            if (service.getPrecio() == null || service.getPrecio() <= 0) {
+                throw new RuntimeException("El servicio no tiene un precio valido configurado");
+            }
+
+            services.add(service);
+        }
+
+        return services;
+    }
+
+    private int getTotalServiceDuration(List<ServiceEntity> services) {
+        int total = services.stream()
+                .mapToInt(this::getServiceDuration)
+                .sum();
+
+        return total > 0 ? total : 30;
+    }
+
+    private BigDecimal getTotalServiceAmount(List<ServiceEntity> services) {
+        return services.stream()
+                .map(service -> BigDecimal.valueOf(service.getPrecio()))
+                .reduce(BigDecimal.ZERO, BigDecimal::add)
+                .setScale(2, RoundingMode.HALF_UP);
+    }
+
+    private String buildMultiServiceNotes(List<ServiceEntity> services) {
+        if (services == null || services.size() <= 1) return null;
+
+        String names = services.stream()
+                .map(ServiceEntity::getNombre)
+                .filter(name -> name != null && !name.isBlank())
+                .reduce((left, right) -> left + ", " + right)
+                .orElse("");
+
+        return "Servicios reservados: " + names;
+    }
+
     private void validateBookingDate(LocalDate fecha) {
         LocalDate today = LocalDate.now(BUSINESS_ZONE);
 
@@ -831,7 +902,13 @@ public class ClientBookingService {
         }
     }
 
-    private LocalTime normalizeStartTime(LocalDate fecha, LocalTime apertura) {
+    private int resolveSlotIntervalMinutes(int durationMinutes) {
+        if (durationMinutes <= 15) return 15;
+        if (durationMinutes <= 60) return 30;
+        return 60;
+    }
+
+    private LocalTime normalizeStartTime(LocalDate fecha, LocalTime apertura, int slotIntervalMinutes) {
         LocalDate today = LocalDate.now(BUSINESS_ZONE);
 
         if (!fecha.equals(today)) {
@@ -839,7 +916,7 @@ public class ClientBookingService {
         }
 
         LocalTime now = LocalTime.now(BUSINESS_ZONE);
-        LocalTime rounded = roundUpToNextSlot(now);
+        LocalTime rounded = roundUpToNextSlot(now, slotIntervalMinutes);
 
         log.info("NORMALIZE START TIME => fecha={}, today={}, nowLima={}, rounded={}, apertura={}",
                 fecha, today, now, rounded, apertura);
@@ -851,10 +928,10 @@ public class ClientBookingService {
         return rounded;
     }
 
-    private LocalTime roundUpToNextSlot(LocalTime time) {
+    private LocalTime roundUpToNextSlot(LocalTime time, int slotIntervalMinutes) {
         int minute = time.getMinute();
-        int remainder = minute % SLOT_INTERVAL_MINUTES;
-        int minutesToAdd = remainder == 0 ? SLOT_INTERVAL_MINUTES : SLOT_INTERVAL_MINUTES - remainder;
+        int remainder = minute % slotIntervalMinutes;
+        int minutesToAdd = remainder == 0 ? slotIntervalMinutes : slotIntervalMinutes - remainder;
 
         return time.withSecond(0).withNano(0).plusMinutes(minutesToAdd);
     }
@@ -1025,6 +1102,7 @@ public class ClientBookingService {
             String codigoNegocio,
             Long branchId,
             Long serviceId,
+            List<Long> serviceIds,
             String date,
             Long barberId
     ) {
@@ -1034,6 +1112,7 @@ public class ClientBookingService {
                 tenant.getId(),
                 branchId,
                 serviceId,
+                serviceIds,
                 date,
                 barberId
         );
@@ -1051,6 +1130,7 @@ public class ClientBookingService {
         CreateAppointmentRequest internalRequest = new CreateAppointmentRequest();
         internalRequest.setBranchId(request.getBranchId());
         internalRequest.setServiceId(request.getServiceId());
+        internalRequest.setServiceIds(request.getServiceIds());
         internalRequest.setBarberId(request.getBarberId());
         internalRequest.setDate(request.getDate());
         internalRequest.setHoraInicio(request.getHoraInicio());

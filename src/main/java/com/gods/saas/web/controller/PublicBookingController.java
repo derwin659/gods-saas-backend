@@ -10,6 +10,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/api/public/booking")
 @RequiredArgsConstructor
@@ -46,6 +48,7 @@ public class PublicBookingController {
             @RequestParam Long branchId,
             @RequestParam Long serviceId,
             @RequestParam String date,
+            @RequestParam(required = false) List<Long> serviceIds,
             @RequestParam(required = false) Long barberId
     ) {
         return ResponseEntity.ok(
@@ -53,6 +56,7 @@ public class PublicBookingController {
                         codigoNegocio,
                         branchId,
                         serviceId,
+                        serviceIds,
                         date,
                         barberId
                 )

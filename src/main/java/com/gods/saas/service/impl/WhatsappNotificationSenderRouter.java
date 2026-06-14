@@ -19,6 +19,7 @@ public class WhatsappNotificationSenderRouter implements WhatsappNotificationSen
     private final TenantSettingsRepository tenantSettingsRepository;
     private final WhatsappNotificationSenderMockImpl mockSender;
     private final WhatsappNotificationSenderMetaCloudImpl metaCloudSender;
+    private final WhatsappNotificationSenderTwilioImpl twilioSender;
 
     @Override
     public String send(Notification notification) {
@@ -53,6 +54,14 @@ public class WhatsappNotificationSenderRouter implements WhatsappNotificationSen
             }
 
             return metaCloudSender.send(notification);
+        }
+
+        if ("TWILIO".equals(provider)) {
+            if (!"CONNECTED".equals(connectionStatus)) {
+                throw new RuntimeException("WhatsApp Twilio no esta conectado.");
+            }
+
+            return twilioSender.send(notification);
         }
 
         throw new RuntimeException("Proveedor de WhatsApp no soportado: " + provider);

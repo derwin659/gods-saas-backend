@@ -25,7 +25,6 @@ public class OwnerAgendaAppointmentService {
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("America/Lima");
     private static final LocalTime DEFAULT_OPENING_TIME = LocalTime.of(8, 0);
     private static final LocalTime DEFAULT_CLOSING_TIME = LocalTime.of(21, 0);
-    private static final int SLOT_INTERVAL_MINUTES = 60;
 
     private final AppointmentRepository appointmentRepository;
     private final BranchRepository branchRepository;
@@ -267,6 +266,7 @@ public class OwnerAgendaAppointmentService {
         AppUser barber = getBarber(tenantId, branchId, barberUserId);
 
         int duration = getServiceDuration(service);
+        int slotInterval = resolveSlotIntervalMinutes(duration);
 
         BarberAvailability availability = getWorkingAvailabilityOrNull(tenantId, branchId, barber.getId(), fecha);
 
@@ -278,7 +278,7 @@ public class OwnerAgendaAppointmentService {
                 ? availability.getEndTime()
                 : DEFAULT_CLOSING_TIME;
 
-        LocalTime current = normalizeStartTime(fecha, opening);
+        LocalTime current = normalizeStartTime(fecha, opening, slotInterval);
         List<OwnerAppointmentSlotResponse> slots = new ArrayList<>();
 
         while (!current.plusMinutes(duration).isAfter(closing)) {
@@ -295,7 +295,7 @@ public class OwnerAgendaAppointmentService {
                     .appointmentId(status.appointmentId())
                     .build());
 
-            current = current.plusMinutes(SLOT_INTERVAL_MINUTES);
+            current = current.plusMinutes(slotInterval);
         }
 
         return OwnerAppointmentAvailabilityResponse.builder()
@@ -487,7 +487,13 @@ public class OwnerAgendaAppointmentService {
                 .orElse(null);
     }
 
-    private LocalTime normalizeStartTime(LocalDate fecha, LocalTime opening) {
+    private int resolveSlotIntervalMinutes(int durationMinutes) {
+        if (durationMinutes <= 15) return 15;
+        if (durationMinutes <= 60) return 30;
+        return 60;
+    }
+
+    private LocalTime normalizeStartTime(LocalDate fecha, LocalTime opening, int slotIntervalMinutes) {
         LocalDate today = LocalDate.now(BUSINESS_ZONE);
         if (!fecha.equals(today)) return opening;
 
@@ -495,13 +501,13 @@ public class OwnerAgendaAppointmentService {
         if (now.isBefore(opening)) return opening;
 
         int minute = now.getMinute();
-        int nextQuarter = ((minute / SLOT_INTERVAL_MINUTES) + 1) * SLOT_INTERVAL_MINUTES;
+        int nextSlot = ((minute / slotIntervalMinutes) + 1) * slotIntervalMinutes;
 
         LocalTime rounded = now.withSecond(0).withNano(0);
-        if (nextQuarter >= 60) {
+        if (nextSlot >= 60) {
             rounded = rounded.plusHours(1).withMinute(0);
         } else {
-            rounded = rounded.withMinute(nextQuarter);
+            rounded = rounded.withMinute(nextSlot);
         }
 
         return rounded.isAfter(opening) ? rounded : opening;

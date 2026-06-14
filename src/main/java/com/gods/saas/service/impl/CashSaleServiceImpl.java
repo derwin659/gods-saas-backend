@@ -582,7 +582,9 @@ public class CashSaleServiceImpl implements CashSaleService {
         String customerWhatsappMessage = pendingValidation
                 ? null
                 : buildPostSaleWhatsappMessage(sale, pointsValue);
-        String customerWhatsappUrl = buildCustomerWhatsappUrl(sale, customerWhatsappMessage);
+        String customerWhatsappUrl = shouldExposeManualWhatsappUrl(sale)
+                ? buildCustomerWhatsappUrl(sale, customerWhatsappMessage)
+                : null;
 
         return SaleResponse.builder()
                 .saleId(sale.getId())
@@ -723,6 +725,21 @@ public class CashSaleServiceImpl implements CashSaleService {
 
         return "https://wa.me/" + phone + "?text="
                 + URLEncoder.encode(message, StandardCharsets.UTF_8);
+    }
+
+    private boolean shouldExposeManualWhatsappUrl(Sale sale) {
+        Map<String, Object> whatsappConfig = resolveWhatsappConfig(sale != null ? sale.getTenant() : null);
+        String provider = readStringConfig(whatsappConfig, OwnerWhatsappSettingsService.PROVIDER_KEY, "MANUAL")
+                .trim()
+                .toUpperCase(Locale.ROOT);
+        String connectionStatus = readStringConfig(
+                whatsappConfig,
+                OwnerWhatsappSettingsService.CONNECTION_STATUS_KEY,
+                "NOT_CONNECTED"
+        ).trim().toUpperCase(Locale.ROOT);
+
+        return !("TWILIO".equals(provider) || "META_CLOUD".equals(provider))
+                || !"CONNECTED".equals(connectionStatus);
     }
 
     private String normalizeWhatsappPhone(String rawPhone, Tenant tenant) {
@@ -1075,6 +1092,11 @@ public class CashSaleServiceImpl implements CashSaleService {
 
         Object value = config.get(key);
         return value == null ? null : cleanText(value.toString());
+    }
+
+    private String readStringConfig(Map<String, Object> config, String key, String fallback) {
+        String value = readStringConfig(config, key);
+        return value == null ? fallback : value;
     }
 
     private String resolveMobileAppDownloadUrl(Map<String, Object> config) {

@@ -87,6 +87,7 @@ public class ClientBookingController {
             @RequestParam Long branchId,
             @RequestParam Long serviceId,
             @RequestParam String date,
+            @RequestParam(required = false) List<Long> serviceIds,
             @RequestParam(required = false) Long barberId
     ) {
         String token = authHeader.replace("Bearer ", "");
@@ -94,7 +95,7 @@ public class ClientBookingController {
 
         return ResponseEntity.ok(
                 clientBookingService.getAvailability(
-                        tenantId, branchId, serviceId, date, barberId
+                        tenantId, branchId, serviceId, serviceIds, date, barberId
                 )
         );
     }
