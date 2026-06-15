@@ -157,7 +157,11 @@ public class CashSaleServiceImpl implements CashSaleService {
             );
 
             if (whatsappMessage != null && !whatsappMessage.trim().isEmpty()) {
-                notificationService.notifySaleReceipt(savedSale, whatsappMessage);
+                notificationService.notifySaleReceipt(
+                        savedSale,
+                        whatsappMessage,
+                        shouldNotifyOwnersPendingWhatsapp(savedSale)
+                );
             }
         }
 
@@ -560,6 +564,18 @@ public class CashSaleServiceImpl implements CashSaleService {
         return "BARBER".equals(cleanRole)
                 || "PROFESSIONAL".equals(cleanRole)
                 || "PROFESIONAL".equals(cleanRole);
+    }
+
+    private boolean shouldNotifyOwnersPendingWhatsapp(Sale sale) {
+        if (sale == null || sale.getCustomer() == null) {
+            return false;
+        }
+
+        String role = sale.getCreatedByRole() == null
+                ? ""
+                : sale.getCreatedByRole().trim().toUpperCase(Locale.ROOT);
+
+        return "ADMIN".equals(role) || "CASHIER".equals(role) || "CAJERO".equals(role);
     }
 
     private LocalDateTime resolveBusinessDate(Sale sale) {

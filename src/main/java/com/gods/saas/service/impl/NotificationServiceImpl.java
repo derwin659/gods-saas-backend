@@ -586,7 +586,7 @@ public class NotificationServiceImpl implements NotificationService {
     }
 
     @Override
-    public void notifySaleReceipt(Sale sale, String message) {
+    public void notifySaleReceipt(Sale sale, String message, boolean notifyOwnersPendingWhatsapp) {
         if (sale == null || sale.getTenant() == null || sale.getCustomer() == null) {
             return;
         }
@@ -607,7 +607,9 @@ public class NotificationServiceImpl implements NotificationService {
         );
 
         registerDefaultChannels(n, true);
-        notifyOwnersSaleReceiptPending(sale);
+        if (notifyOwnersPendingWhatsapp) {
+            notifyOwnersSaleReceiptPending(sale);
+        }
     }
 
     private void notifyOwnersSaleReceiptPending(Sale sale) {

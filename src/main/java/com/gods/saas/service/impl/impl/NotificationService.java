@@ -23,7 +23,7 @@ public interface NotificationService {
 
     void notifyPointsEarned(Customer customer, Integer points, Long saleId);
 
-    void notifySaleReceipt(Sale sale, String message);
+    void notifySaleReceipt(Sale sale, String message, boolean notifyOwnersPendingWhatsapp);
 
     void notifyPromotionCreated(Promotion promotion, boolean sendNotification);
 
