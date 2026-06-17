@@ -144,9 +144,9 @@ public class NotificationDispatchServiceImpl implements NotificationDispatchServ
 
         Long tenantId = notification.getTenant().getId();
 
-        if (!isProOrGodsAi(tenantId)) {
+        if (!isGrowthOrHigher(tenantId)) {
             delivery.setStatus(NotificationDeliveryStatus.SKIPPED);
-            delivery.setErrorMessage("WhatsApp premium disponible solo para plan PRO o GODS_AI");
+            delivery.setErrorMessage("WhatsApp premium disponible desde plan GROWTH");
             notificationDeliveryRepository.save(delivery);
 
             log.info(
@@ -178,13 +178,13 @@ public class NotificationDispatchServiceImpl implements NotificationDispatchServ
         }
 
         if (PREMIUM_PUSH_TYPES.contains(type)) {
-            return isProOrGodsAi(tenantId);
+            return isGrowthOrHigher(tenantId);
         }
 
-        return isProOrGodsAi(tenantId);
+        return isGrowthOrHigher(tenantId);
     }
 
-    private boolean isProOrGodsAi(Long tenantId) {
+    private boolean isGrowthOrHigher(Long tenantId) {
         Subscription subscription = subscriptionRepository
                 .findTopByTenantIdOrderByFechaInicioDesc(tenantId)
                 .orElse(null);
@@ -193,11 +193,11 @@ public class NotificationDispatchServiceImpl implements NotificationDispatchServ
             return false;
         }
 
-        String plan = subscription.getPlan().trim().toUpperCase(Locale.ROOT);
+        String publicPlan = SubscriptionPlanCatalog.publicPlan(subscription.getPlan());
 
-        return "PRO".equals(plan)
-                || "GODS_AI".equals(plan)
-                || "GODS AI".equals(plan);
+        return "GROWTH".equals(publicPlan)
+                || "PRO".equals(publicPlan)
+                || "ENTERPRISE".equals(publicPlan);
     }
 
     private void markAsFailed(NotificationDelivery delivery, Exception e) {

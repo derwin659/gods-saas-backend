@@ -68,7 +68,7 @@ public class SuperAdminPaymentServiceImpl implements SuperAdminPaymentService {
                         "SuscripciÃ³n no encontrada para tenant: " + tenant.getId()
                 ));
 
-        String requestedPlan = upperOrFallback(payment.getRequestedPlan(), subscription.getPlan());
+        String requestedPlan = SubscriptionPlanCatalog.normalize(upperOrFallback(payment.getRequestedPlan(), subscription.getPlan()));
         String requestedBillingCycle = upperOrFallback(
                 payment.getRequestedBillingCycle(),
                 subscription.getBillingCycle()
@@ -187,35 +187,11 @@ public class SuperAdminPaymentServiceImpl implements SuperAdminPaymentService {
     }
 
     private void applyPlanLimits(Subscription subscription, String plan) {
-        switch (upperOrFallback(plan, "STARTER")) {
-            case "PRO" -> {
-                subscription.setMaxBranches(3);
-                subscription.setMaxBarbers(15);
-                subscription.setMaxAdmins(3);
-                subscription.setAiEnabled(false);
-                subscription.setLoyaltyEnabled(true);
-                subscription.setPromotionsEnabled(true);
-                subscription.setCustomRewardsEnabled(true);
-            }
-            case "GODS_AI" -> {
-                subscription.setMaxBranches(10);
-                subscription.setMaxBarbers(50);
-                subscription.setMaxAdmins(10);
-                subscription.setAiEnabled(true);
-                subscription.setLoyaltyEnabled(true);
-                subscription.setPromotionsEnabled(true);
-                subscription.setCustomRewardsEnabled(true);
-            }
-            default -> {
-                subscription.setMaxBranches(1);
-                subscription.setMaxBarbers(5);
-                subscription.setMaxAdmins(1);
-                subscription.setAiEnabled(false);
-                subscription.setLoyaltyEnabled(true);
-                subscription.setPromotionsEnabled(true);
-                subscription.setCustomRewardsEnabled(true);
-            }
-        }
+        SubscriptionPlanCatalog.applyTo(
+                subscription,
+                plan,
+                subscription.getPrecioMensual() == null ? 0D : subscription.getPrecioMensual()
+        );
     }
 
     private LocalDateTime nowLima() {

@@ -19,7 +19,7 @@ import java.util.Locale;
 @RequiredArgsConstructor
 public class SubscriptionPlanPricingService {
 
-    private static final List<String> PLAN_CODES = List.of("STARTER", "PRO", "GODS_AI");
+    private static final List<String> PLAN_CODES = SubscriptionPlanCatalog.PUBLIC_PLAN_CODES;
 
     private final JdbcTemplate jdbcTemplate;
     private final TenantRepository tenantRepository;
@@ -129,79 +129,7 @@ public class SubscriptionPlanPricingService {
     }
 
     private BigDecimal fallbackMonthlyPrice(String planCode, String currency) {
-        String c = cleanUpper(currency);
-        return switch (c) {
-            case "USD", "VES" -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(39);
-                case "GODS_AI" -> BigDecimal.valueOf(79);
-                default -> BigDecimal.valueOf(19);
-            };
-            case "EUR" -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(35);
-                case "GODS_AI" -> BigDecimal.valueOf(69);
-                default -> BigDecimal.valueOf(17);
-            };
-            case "COP" -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(159000);
-                case "GODS_AI" -> BigDecimal.valueOf(319000);
-                default -> BigDecimal.valueOf(79000);
-            };
-            case "MXN" -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(759);
-                case "GODS_AI" -> BigDecimal.valueOf(1529);
-                default -> BigDecimal.valueOf(369);
-            };
-            case "CLP" -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(38900);
-                case "GODS_AI" -> BigDecimal.valueOf(78900);
-                default -> BigDecimal.valueOf(18900);
-            };
-            case "ARS" -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(44900);
-                case "GODS_AI" -> BigDecimal.valueOf(89900);
-                default -> BigDecimal.valueOf(22000);
-            };
-            case "BOB" -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(269);
-                case "GODS_AI" -> BigDecimal.valueOf(549);
-                default -> BigDecimal.valueOf(129);
-            };
-            case "BRL" -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(199);
-                case "GODS_AI" -> BigDecimal.valueOf(399);
-                default -> BigDecimal.valueOf(99);
-            };
-            case "UYU" -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(1559);
-                case "GODS_AI" -> BigDecimal.valueOf(3159);
-                default -> BigDecimal.valueOf(759);
-            };
-            case "PYG" -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(299000);
-                case "GODS_AI" -> BigDecimal.valueOf(599000);
-                default -> BigDecimal.valueOf(145000);
-            };
-            case "CRC" -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(19900);
-                case "GODS_AI" -> BigDecimal.valueOf(39900);
-                default -> BigDecimal.valueOf(9900);
-            };
-            case "DOP" -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(2299);
-                case "GODS_AI" -> BigDecimal.valueOf(4599);
-                default -> BigDecimal.valueOf(1099);
-            };
-            case "GTQ" -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(299);
-                case "GODS_AI" -> BigDecimal.valueOf(609);
-                default -> BigDecimal.valueOf(149);
-            };
-            default -> switch (planCode) {
-                case "PRO" -> BigDecimal.valueOf(79);
-                case "GODS_AI" -> BigDecimal.valueOf(149);
-                default -> BigDecimal.valueOf(39);
-            };
-        };
+        return SubscriptionPlanCatalog.fallbackMonthlyPrice(planCode, currency);
     }
 
     public String countryCodeFor(String value) {
@@ -246,11 +174,8 @@ public class SubscriptionPlanPricingService {
     }
 
     private String normalizePlan(String plan) {
-        String value = cleanUpper(plan);
-        return switch (value) {
-            case "PRO", "GODS_AI" -> value;
-            default -> "STARTER";
-        };
+        String value = SubscriptionPlanCatalog.publicPlan(plan);
+        return PLAN_CODES.contains(value) ? value : SubscriptionPlanCatalog.STARTER;
     }
 
     private String cleanUpper(String value) {

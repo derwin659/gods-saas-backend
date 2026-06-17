@@ -388,11 +388,7 @@ public class PaddleWebhookService {
     }
 
     private String normalizePlan(String plan) {
-        String normalizedPlan = cleanUpper(plan);
-        return switch (normalizedPlan) {
-            case "STARTER", "PRO", "GODS_AI" -> normalizedPlan;
-            default -> "STARTER";
-        };
+        return SubscriptionPlanCatalog.publicPlan(plan);
     }
 
     private String normalizeBillingCycle(String billingCycle) {
@@ -412,37 +408,6 @@ public class PaddleWebhookService {
     }
 
     private void applyPlanConfig(Subscription sub, String normalizedPlan, double monthlyPrice) {
-        switch (normalizedPlan) {
-            case "PRO" -> {
-                sub.setPlan("PRO");
-                sub.setPrecioMensual(monthlyPrice);
-                sub.setMaxBranches(3);
-                sub.setMaxBarbers(15);
-                sub.setMaxAdmins(3);
-                sub.setAiEnabled(false);
-                sub.setLoyaltyEnabled(true);
-                sub.setPromotionsEnabled(true);
-            }
-            case "GODS_AI" -> {
-                sub.setPlan("GODS_AI");
-                sub.setPrecioMensual(monthlyPrice);
-                sub.setMaxBranches(10);
-                sub.setMaxBarbers(50);
-                sub.setMaxAdmins(10);
-                sub.setAiEnabled(true);
-                sub.setLoyaltyEnabled(true);
-                sub.setPromotionsEnabled(true);
-            }
-            default -> {
-                sub.setPlan("STARTER");
-                sub.setPrecioMensual(monthlyPrice);
-                sub.setMaxBranches(1);
-                sub.setMaxBarbers(5);
-                sub.setMaxAdmins(1);
-                sub.setAiEnabled(false);
-                sub.setLoyaltyEnabled(true);
-                sub.setPromotionsEnabled(true);
-            }
-        }
+        SubscriptionPlanCatalog.applyTo(sub, normalizedPlan, monthlyPrice);
     }
 }

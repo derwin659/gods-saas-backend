@@ -482,6 +482,26 @@ public class CashSaleServiceImpl implements CashSaleService {
 
 
     private String resolveCashSaleCreatorRole(Long tenantId, Long userId, CreateCashSaleRequest request) {
+        String requestedRole = request != null && request.getCreatedByRole() != null
+                ? request.getCreatedByRole().trim().toUpperCase()
+                : "";
+
+        if ("ADMIN".equals(requestedRole)) {
+            return "ADMIN";
+        }
+
+        if ("CASHIER".equals(requestedRole) || "CAJERO".equals(requestedRole)) {
+            return "CASHIER";
+        }
+
+        if ("OWNER".equals(requestedRole)) {
+            return "OWNER";
+        }
+
+        if (isBarberRole(requestedRole)) {
+            return "BARBER";
+        }
+
         // Fuente de verdad: user_tenant_roles.
         if (hasTenantRole(userId, tenantId, RoleType.BARBER)) {
             return "BARBER";
@@ -507,22 +527,6 @@ public class CashSaleServiceImpl implements CashSaleService {
 
         if (isBarberRole(userRole)) {
             return "BARBER";
-        }
-
-        String requestedRole = request != null && request.getCreatedByRole() != null
-                ? request.getCreatedByRole().trim().toUpperCase()
-                : "";
-
-        if (isBarberRole(requestedRole)) {
-            return "BARBER";
-        }
-
-        if ("ADMIN".equals(requestedRole)) {
-            return "ADMIN";
-        }
-
-        if ("CASHIER".equals(requestedRole) || "CAJERO".equals(requestedRole)) {
-            return "CASHIER";
         }
 
         return "OWNER";

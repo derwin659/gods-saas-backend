@@ -73,7 +73,7 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
 
         LocalDateTime now = nowLima();
 
-        String plan = safeUpper(request.getPlan(), "STARTER");
+        String plan = SubscriptionPlanCatalog.normalize(safeUpper(request.getPlan(), "STARTER"));
         String billingCycle = safeUpper(request.getBillingCycle(), "MONTHLY");
         String country = safeTrim(request.getCountry(), "Peru");
         String currency = resolveCurrencyForCountry(country, request.getCurrency());
@@ -150,9 +150,11 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
 
         applyPlanLimits(subscription, plan);
 
-        if (subscription.getMaxBranches() == null) subscription.setMaxBranches(0);
-        if (subscription.getMaxBarbers() == null) subscription.setMaxBarbers(0);
-        if (subscription.getMaxAdmins() == null) subscription.setMaxAdmins(1);
+        if (!SubscriptionPlanCatalog.ENTERPRISE.equals(subscription.getPlan())) {
+            if (subscription.getMaxBranches() == null) subscription.setMaxBranches(0);
+            if (subscription.getMaxBarbers() == null) subscription.setMaxBarbers(0);
+            if (subscription.getMaxAdmins() == null) subscription.setMaxAdmins(1);
+        }
 
         subscriptionRepository.save(subscription);
 
@@ -218,7 +220,7 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
         Optional<Subscription> subscriptionOpt = findSubscription(tenantId);
         subscriptionOpt.ifPresent(subscription -> {
             if (hasText(request.getPlan())) {
-                String plan = safeUpper(request.getPlan(), subscription.getPlan());
+                String plan = SubscriptionPlanCatalog.normalize(safeUpper(request.getPlan(), subscription.getPlan()));
                 subscription.setPlan(plan);
                 tenant.setPlan(plan);
                 applyPlanLimits(subscription, plan);
@@ -411,7 +413,7 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
         Subscription subscription = findSubscription(tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("SuscripciÃ³n no encontrada para tenant: " + tenantId));
 
-        String newPlan = safeUpper(request.getPlan(), subscription.getPlan());
+        String newPlan = SubscriptionPlanCatalog.normalize(safeUpper(request.getPlan(), subscription.getPlan()));
         String newBillingCycle = safeUpper(request.getBillingCycle(), subscription.getBillingCycle());
         String newCurrency = safeUpper(request.getCurrency(), subscription.getCurrency());
 
@@ -643,35 +645,11 @@ public class SuperAdminTenantServiceImpl implements SuperAdminTenantService {
     }
 
     private void applyPlanLimits(Subscription subscription, String plan) {
-        switch (safeUpper(plan, "STARTER")) {
-            case "PRO" -> {
-                subscription.setMaxBranches(3);
-                subscription.setMaxBarbers(15);
-                subscription.setMaxAdmins(3);
-                subscription.setAiEnabled(false);
-                subscription.setLoyaltyEnabled(true);
-                subscription.setPromotionsEnabled(true);
-                subscription.setCustomRewardsEnabled(true);
-            }
-            case "GODS_AI" -> {
-                subscription.setMaxBranches(10);
-                subscription.setMaxBarbers(50);
-                subscription.setMaxAdmins(10);
-                subscription.setAiEnabled(true);
-                subscription.setLoyaltyEnabled(true);
-                subscription.setPromotionsEnabled(true);
-                subscription.setCustomRewardsEnabled(true);
-            }
-            default -> {
-                subscription.setMaxBranches(1);
-                subscription.setMaxBarbers(5);
-                subscription.setMaxAdmins(1);
-                subscription.setAiEnabled(false);
-                subscription.setLoyaltyEnabled(true);
-                subscription.setPromotionsEnabled(true);
-                subscription.setCustomRewardsEnabled(true);
-            }
-        }
+        SubscriptionPlanCatalog.applyTo(
+                subscription,
+                plan,
+                subscription.getPrecioMensual() == null ? 0D : subscription.getPrecioMensual()
+        );
     }
 
     private LocalDateTime nowLima() {

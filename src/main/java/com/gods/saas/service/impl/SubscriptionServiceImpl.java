@@ -203,11 +203,13 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 .subId(sub.getSubId())
                 .tenantId(sub.getTenantId())
                 .plan(sub.getPlan())
+                .publicPlan(SubscriptionPlanCatalog.publicPlan(sub.getPlan()))
                 .estado(sub.getEstado())
                 .trial(sub.isTrial())
                 .precioMensual(sub.getPrecioMensual())
                 .billingCycle(sub.getBillingCycle())
                 .currency(sub.getCurrency())
+                .billingChannel(SubscriptionPlanCatalog.isLegacy(sub.getPlan()) ? "MANUAL_YAPE" : "WEB")
                 .planPrices(pricingService.listMonthlyPricesForTenant(tenantId))
                 .fechaInicio(sub.getFechaInicio())
                 .fechaRenovacion(sub.getFechaRenovacion())
@@ -221,8 +223,12 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 .maxAdmins(sub.getMaxAdmins())
                 .usedAdmins(Math.toIntExact(usedAdmins))
                 .aiEnabled(sub.isAiEnabled())
+                .aiLevel(sub.isAiEnabled() ? "PRO" : "BASIC")
+                .aiVisualCreditsBalance(0)
                 .loyaltyEnabled(sub.isLoyaltyEnabled())
                 .promotionsEnabled(sub.isPromotionsEnabled())
+                .maxMonthlyBookings(SubscriptionPlanCatalog.FREE.equals(SubscriptionPlanCatalog.normalize(sub.getPlan())) ? 10 : null)
+                .usedMonthlyBookings(0)
                 .canOperate(usable)
                 .expired(expired)
                 .build();
@@ -501,14 +507,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     }
 
     private String normalizePlan(String plan) {
-        String normalizedPlan = normalizeText(plan);
-        return switch (normalizedPlan) {
-            case "STARTER", "PRO", "GODS_AI" -> normalizedPlan;
-            default -> throw new BusinessException(
-                    "PLAN_INVALID",
-                    "Plan no vÃ¡lido. Usa STARTER, PRO o GODS_AI"
-            );
-        };
+        return SubscriptionPlanCatalog.normalize(plan);
     }
 
     private String normalizeBillingCycle(String billingCycle) {
@@ -559,45 +558,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     }
 
     private void applyPlanConfig(Subscription sub, String normalizedPlan, double monthlyPrice) {
-        switch (normalizedPlan) {
-            case "STARTER" -> {
-                sub.setPlan("STARTER");
-                sub.setPrecioMensual(monthlyPrice);
-                sub.setMaxBranches(1);
-                sub.setMaxBarbers(5);
-                sub.setMaxAdmins(1);
-                sub.setAiEnabled(false);
-                sub.setLoyaltyEnabled(true);
-                sub.setPromotionsEnabled(true);
-                sub.setCustomRewardsEnabled(true);
-            }
-            case "PRO" -> {
-                sub.setPlan("PRO");
-                sub.setPrecioMensual(monthlyPrice);
-                sub.setMaxBranches(3);
-                sub.setMaxBarbers(15);
-                sub.setMaxAdmins(3);
-                sub.setAiEnabled(false);
-                sub.setLoyaltyEnabled(true);
-                sub.setPromotionsEnabled(true);
-                sub.setCustomRewardsEnabled(true);
-            }
-            case "GODS_AI" -> {
-                sub.setPlan("GODS_AI");
-                sub.setPrecioMensual(monthlyPrice);
-                sub.setMaxBranches(10);
-                sub.setMaxBarbers(50);
-                sub.setMaxAdmins(10);
-                sub.setAiEnabled(true);
-                sub.setLoyaltyEnabled(true);
-                sub.setPromotionsEnabled(true);
-                sub.setCustomRewardsEnabled(true);
-            }
-            default -> throw new BusinessException(
-                    "PLAN_INVALID",
-                    "Plan no vÃ¡lido. Usa STARTER, PRO o GODS_AI"
-            );
-        }
+        SubscriptionPlanCatalog.applyTo(sub, normalizedPlan, monthlyPrice);
     }
 
     private String requiredText(String value, String message) {

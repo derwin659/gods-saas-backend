@@ -35,7 +35,7 @@ public class MarketingCampaignProcessorService {
         List<Tenant> tenants = tenantRepository.findAll();
 
         for (Tenant tenant : tenants) {
-            if (!isProOrGodsAi(tenant.getId())) {
+            if (!isGrowthOrHigher(tenant.getId())) {
                 continue;
             }
 
@@ -178,7 +178,7 @@ public class MarketingCampaignProcessorService {
         };
     }
 
-    private boolean isProOrGodsAi(Long tenantId) {
+    private boolean isGrowthOrHigher(Long tenantId) {
         Subscription subscription = subscriptionRepository
                 .findTopByTenantIdOrderByFechaInicioDesc(tenantId)
                 .orElse(null);
@@ -187,10 +187,10 @@ public class MarketingCampaignProcessorService {
             return false;
         }
 
-        String plan = subscription.getPlan().trim().toUpperCase(Locale.ROOT);
+        String publicPlan = SubscriptionPlanCatalog.publicPlan(subscription.getPlan());
 
-        return "PRO".equals(plan)
-                || "GODS_AI".equals(plan)
-                || "GODS AI".equals(plan);
+        return "GROWTH".equals(publicPlan)
+                || "PRO".equals(publicPlan)
+                || "ENTERPRISE".equals(publicPlan);
     }
 }

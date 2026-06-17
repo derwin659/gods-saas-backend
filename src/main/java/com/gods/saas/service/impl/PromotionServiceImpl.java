@@ -239,7 +239,9 @@ public class PromotionServiceImpl implements PromotionService {
                 .findTopByTenantIdOrderByFechaInicioDesc(tenantId)
                 .orElseThrow(() -> new RuntimeException("Suscripción no encontrada"));
 
-        if (!"STARTER".equalsIgnoreCase(subscription.getPlan()) && !subscription.isPromotionsEnabled()) {
+        String publicPlan = SubscriptionPlanCatalog.publicPlan(subscription.getPlan());
+
+        if (!SubscriptionPlanCatalog.STARTER.equals(publicPlan) && !subscription.isPromotionsEnabled()) {
             throw new RuntimeException("Tu plan actual no permite gestionar promociones");
         }
     }
@@ -249,11 +251,13 @@ public class PromotionServiceImpl implements PromotionService {
                 .findTopByTenantIdOrderByFechaInicioDesc(tenantId)
                 .orElseThrow(() -> new RuntimeException("Suscripción no encontrada"));
 
-        if (!"STARTER".equalsIgnoreCase(subscription.getPlan()) && !subscription.isPromotionsEnabled()) {
+        String publicPlan = SubscriptionPlanCatalog.publicPlan(subscription.getPlan());
+
+        if (!SubscriptionPlanCatalog.STARTER.equals(publicPlan) && !subscription.isPromotionsEnabled()) {
             throw new RuntimeException("Tu plan actual no permite gestionar promociones");
         }
 
-        if ("STARTER".equalsIgnoreCase(subscription.getPlan())) {
+        if (SubscriptionPlanCatalog.STARTER.equals(publicPlan)) {
             long totalPromotions = promotionRepository.countByTenant_Id(tenantId);
             if (totalPromotions >= 5) {
                 throw new RuntimeException("El plan STARTER permite hasta 5 promociones");

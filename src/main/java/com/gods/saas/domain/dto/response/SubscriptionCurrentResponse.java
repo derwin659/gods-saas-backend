@@ -16,6 +16,7 @@ public class SubscriptionCurrentResponse {
     private Long tenantId;
 
     private String plan;
+    private String publicPlan;
     private String estado;
     private boolean trial;
 
@@ -41,8 +42,13 @@ public class SubscriptionCurrentResponse {
     private Integer usedAdmins;
 
     private boolean aiEnabled;
+    private String aiLevel;
+    private Integer aiVisualCreditsBalance;
     private boolean loyaltyEnabled;
     private boolean promotionsEnabled;
+    private String billingChannel;
+    private Integer maxMonthlyBookings;
+    private Integer usedMonthlyBookings;
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;

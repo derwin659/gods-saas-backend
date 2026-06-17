@@ -13,7 +13,7 @@ public class SuperAdminCreateTenantRequest {
     private String ownerPhone;
     private String country;
 
-    private String plan;          // STARTER, PRO, GODS_AI
+    private String plan;          // FREE, BASIC, STARTER, GROWTH, PRO, ENTERPRISE, *_LEGACY
     private String billingCycle;  // MONTHLY, SEMIANNUAL, YEARLY
     private Integer trialDays;
     private String currency;      // USD, PEN
