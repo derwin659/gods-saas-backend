@@ -1,8 +1,10 @@
 package com.gods.saas.web.controller;
 
 import com.gods.saas.domain.dto.request.ChangePlanRequest;
+import com.gods.saas.domain.dto.request.AppStorePurchaseVerifyRequest;
 import com.gods.saas.domain.dto.request.ReportPaymentRequest;
 import com.gods.saas.domain.dto.request.SubscriptionCheckoutRequest;
+import com.gods.saas.domain.dto.response.AppStoreProductResponse;
 import com.gods.saas.domain.dto.response.SubscriptionCheckoutResponse;
 import com.gods.saas.domain.dto.response.SubscriptionCurrentResponse;
 import com.gods.saas.domain.dto.response.SubscriptionPlanPriceResponse;
@@ -53,6 +55,20 @@ public class SubscriptionController {
     public List<SubscriptionPlanPriceResponse> getPlanPrices(HttpServletRequest request) {
         Long tenantId = extractTenantId(request);
         return subscriptionService.getPlanPrices(tenantId);
+    }
+
+    @GetMapping("/app-store/products")
+    public List<AppStoreProductResponse> getAppStoreProducts() {
+        return subscriptionService.getAppStoreProducts();
+    }
+
+    @PostMapping("/app-store/verify")
+    public SubscriptionCurrentResponse verifyAppStorePurchase(
+            @RequestBody AppStorePurchaseVerifyRequest request,
+            HttpServletRequest httpRequest
+    ) {
+        Long tenantId = extractTenantId(httpRequest);
+        return subscriptionService.verifyAppStorePurchase(tenantId, request);
     }
 
     @PostMapping("/checkout")

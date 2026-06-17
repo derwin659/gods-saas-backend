@@ -1,10 +1,13 @@
 package com.gods.saas.service.impl;
 
+import com.gods.saas.domain.dto.request.AppStorePurchaseVerifyRequest;
 import com.gods.saas.domain.dto.request.ReportPaymentRequest;
 import com.gods.saas.domain.dto.request.SubscriptionCheckoutRequest;
+import com.gods.saas.domain.dto.response.AppStoreProductResponse;
 import com.gods.saas.domain.dto.response.SubscriptionCheckoutResponse;
 import com.gods.saas.domain.dto.response.SubscriptionCurrentResponse;
 import com.gods.saas.domain.dto.response.SubscriptionPlanPriceResponse;
+import com.gods.saas.domain.model.AppStorePurchase;
 import com.gods.saas.domain.model.Subscription;
 import com.gods.saas.domain.model.SubscriptionPayment;
 import com.gods.saas.domain.model.Tenant;
@@ -40,6 +43,8 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     private final SubscriptionPaymentRepository paymentRepository;
     private final BranchRepository branchRepository;
     private final AppUserRepository appUserRepository;
+    private final AppStorePurchaseRepository appStorePurchaseRepository;
+    private final AppStoreReceiptVerifier appStoreReceiptVerifier;
     private final Environment environment;
 
     @Override
@@ -209,7 +214,7 @@ public class SubscriptionServiceImpl implements SubscriptionService {
                 .precioMensual(sub.getPrecioMensual())
                 .billingCycle(sub.getBillingCycle())
                 .currency(sub.getCurrency())
-                .billingChannel(SubscriptionPlanCatalog.isLegacy(sub.getPlan()) ? "MANUAL_YAPE" : "WEB")
+                .billingChannel(resolveBillingChannel(sub))
                 .planPrices(pricingService.listMonthlyPricesForTenant(tenantId))
                 .fechaInicio(sub.getFechaInicio())
                 .fechaRenovacion(sub.getFechaRenovacion())
@@ -237,6 +242,92 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     @Override
     public List<SubscriptionPlanPriceResponse> getPlanPrices(Long tenantId) {
         return pricingService.listMonthlyPricesForTenant(tenantId);
+    }
+
+    @Override
+    public List<AppStoreProductResponse> getAppStoreProducts() {
+        return List.of(
+                AppStoreProductResponse.builder()
+                        .plan(SubscriptionPlanCatalog.BASIC)
+                        .productId(SubscriptionPlanCatalog.APP_STORE_BASIC_MONTHLY)
+                        .billingCycle("MONTHLY")
+                        .build(),
+                AppStoreProductResponse.builder()
+                        .plan(SubscriptionPlanCatalog.STARTER)
+                        .productId(SubscriptionPlanCatalog.APP_STORE_STARTER_MONTHLY)
+                        .billingCycle("MONTHLY")
+                        .build(),
+                AppStoreProductResponse.builder()
+                        .plan(SubscriptionPlanCatalog.GROWTH)
+                        .productId(SubscriptionPlanCatalog.APP_STORE_GROWTH_MONTHLY)
+                        .billingCycle("MONTHLY")
+                        .build(),
+                AppStoreProductResponse.builder()
+                        .plan(SubscriptionPlanCatalog.PRO)
+                        .productId(SubscriptionPlanCatalog.APP_STORE_PRO_MONTHLY)
+                        .billingCycle("MONTHLY")
+                        .build()
+        );
+    }
+
+    @Override
+    public SubscriptionCurrentResponse verifyAppStorePurchase(Long tenantId, AppStorePurchaseVerifyRequest request) {
+        if (request == null) {
+            throw new BusinessException("APP_STORE_REQUEST_REQUIRED", "Datos de compra App Store obligatorios");
+        }
+
+        String productId = requiredText(request.getProductId(), "Producto App Store obligatorio");
+        String plan = SubscriptionPlanCatalog.planFromAppStoreProductId(productId);
+        AppStoreReceiptVerifier.VerifiedReceipt verified =
+                appStoreReceiptVerifier.verify(productId, request.getReceiptData());
+
+        Subscription sub = getCurrentSubscriptionOrThrow(tenantId);
+        LocalDateTime now = nowForTenant(tenantId);
+        LocalDateTime expiresAt = verified.getExpiresAt() != null
+                ? verified.getExpiresAt()
+                : now.plusDays(30);
+        String currency = resolveCurrencyForTenant(tenantId, "PEN");
+        double monthlyPrice = pricingService.resolveMonthlyPriceForTenant(tenantId, plan, currency).doubleValue();
+
+        applyPlanConfig(sub, plan, monthlyPrice);
+        sub.setEstado(STATUS_ACTIVE);
+        sub.setTrial(false);
+        sub.setBillingCycle("MONTHLY");
+        sub.setCurrency(currency);
+        sub.setFechaInicio(now);
+        sub.setFechaRenovacion(expiresAt);
+        sub.setFechaFin(expiresAt);
+        sub.setDiasGracia(0);
+        sub.setAppStoreProductId(productId);
+        sub.setAppStoreTransactionId(firstNonBlank(verified.getTransactionId(), request.getTransactionId()));
+        sub.setAppStoreOriginalTransactionId(firstNonBlank(verified.getOriginalTransactionId(), request.getOriginalTransactionId()));
+        sub.setAppStoreEnvironment(verified.getEnvironment());
+        sub.setAppStoreExpiresAt(expiresAt);
+        sub.setObservaciones("Suscripcion activada por App Store. Producto: " + productId);
+        sub.setUpdatedAt(now);
+
+        Subscription saved = subscriptionRepository.save(sub);
+
+        AppStorePurchase purchase = AppStorePurchase.builder()
+                .tenantId(tenantId)
+                .subscriptionId(saved.getSubId())
+                .plan(plan)
+                .productId(productId)
+                .transactionId(firstNonBlank(verified.getTransactionId(), request.getTransactionId()))
+                .originalTransactionId(firstNonBlank(verified.getOriginalTransactionId(), request.getOriginalTransactionId()))
+                .appAccountToken(trimToNull(request.getAppAccountToken()))
+                .environment(verified.getEnvironment())
+                .status(STATUS_ACTIVE)
+                .purchasedAt(verified.getPurchasedAt())
+                .expiresAt(expiresAt)
+                .receiptData(request.getReceiptData())
+                .appleResponse(verified.getRawResponse())
+                .createdAt(now)
+                .updatedAt(now)
+                .build();
+        appStorePurchaseRepository.save(purchase);
+
+        return getCurrentSubscriptionResponse(tenantId);
     }
 
     @Override
@@ -559,6 +650,21 @@ public class SubscriptionServiceImpl implements SubscriptionService {
 
     private void applyPlanConfig(Subscription sub, String normalizedPlan, double monthlyPrice) {
         SubscriptionPlanCatalog.applyTo(sub, normalizedPlan, monthlyPrice);
+    }
+
+    private String resolveBillingChannel(Subscription sub) {
+        if (sub == null) return "WEB";
+        if (trimToNull(sub.getAppStoreProductId()) != null) return "APP_STORE";
+        if (trimToNull(sub.getPaddleSubscriptionId()) != null) return "PADDLE";
+        if (SubscriptionPlanCatalog.isLegacy(sub.getPlan())) return "MANUAL_YAPE";
+        return "WEB";
+    }
+
+    private String firstNonBlank(String first, String second) {
+        String cleanFirst = trimToNull(first);
+        if (cleanFirst != null) return cleanFirst;
+        String cleanSecond = trimToNull(second);
+        return cleanSecond == null ? "" : cleanSecond;
     }
 
     private String requiredText(String value, String message) {

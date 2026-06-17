@@ -19,6 +19,11 @@ public final class SubscriptionPlanCatalog {
     public static final String PRO_LEGACY = "PRO_LEGACY";
     public static final String GODS_AI = "GODS_AI";
 
+    public static final String APP_STORE_BASIC_MONTHLY = "gods_basic_monthly";
+    public static final String APP_STORE_STARTER_MONTHLY = "gods_starter_monthly";
+    public static final String APP_STORE_GROWTH_MONTHLY = "gods_growth_monthly";
+    public static final String APP_STORE_PRO_MONTHLY = "gods_pro_monthly";
+
     public static final List<String> PUBLIC_PLAN_CODES = List.of(
             FREE,
             BASIC,
@@ -80,10 +85,10 @@ public final class SubscriptionPlanCatalog {
             case "USD", "VES" -> switch (p) {
                 case FREE -> BigDecimal.ZERO;
                 case BASIC -> BigDecimal.valueOf(12);
-                case GROWTH -> BigDecimal.valueOf(42);
-                case PRO -> BigDecimal.valueOf(68);
-                case ENTERPRISE -> BigDecimal.valueOf(118);
-                default -> BigDecimal.valueOf(24);
+                case GROWTH -> BigDecimal.valueOf(39);
+                case PRO -> BigDecimal.valueOf(69);
+                case ENTERPRISE -> BigDecimal.valueOf(119);
+                default -> BigDecimal.valueOf(19);
             };
             case "EUR" -> switch (p) {
                 case FREE -> BigDecimal.ZERO;
@@ -96,19 +101,33 @@ public final class SubscriptionPlanCatalog {
             case "PEN" -> switch (p) {
                 case FREE -> BigDecimal.ZERO;
                 case BASIC -> BigDecimal.valueOf(39.90);
-                case GROWTH -> BigDecimal.valueOf(139.90);
-                case PRO -> BigDecimal.valueOf(229.90);
-                case ENTERPRISE -> BigDecimal.valueOf(399.90);
-                default -> BigDecimal.valueOf(79.90);
+                case GROWTH -> BigDecimal.valueOf(129.90);
+                case PRO -> BigDecimal.valueOf(199.90);
+                case ENTERPRISE -> BigDecimal.valueOf(349.90);
+                default -> BigDecimal.valueOf(69.90);
             };
             default -> switch (p) {
                 case FREE -> BigDecimal.ZERO;
                 case BASIC -> BigDecimal.valueOf(39.90);
-                case GROWTH -> BigDecimal.valueOf(139.90);
-                case PRO -> BigDecimal.valueOf(229.90);
-                case ENTERPRISE -> BigDecimal.valueOf(399.90);
-                default -> BigDecimal.valueOf(79.90);
+                case GROWTH -> BigDecimal.valueOf(129.90);
+                case PRO -> BigDecimal.valueOf(199.90);
+                case ENTERPRISE -> BigDecimal.valueOf(349.90);
+                default -> BigDecimal.valueOf(69.90);
             };
+        };
+    }
+
+    public static String planFromAppStoreProductId(String productId) {
+        String value = productId == null ? "" : productId.trim().toLowerCase(Locale.ROOT);
+        return switch (value) {
+            case APP_STORE_BASIC_MONTHLY -> BASIC;
+            case APP_STORE_STARTER_MONTHLY -> STARTER;
+            case APP_STORE_GROWTH_MONTHLY -> GROWTH;
+            case APP_STORE_PRO_MONTHLY -> PRO;
+            default -> throw new BusinessException(
+                    "APP_STORE_PRODUCT_INVALID",
+                    "Producto App Store no valido"
+            );
         };
     }
 

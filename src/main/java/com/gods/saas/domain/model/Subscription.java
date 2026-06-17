@@ -88,6 +88,21 @@ public class Subscription {
     @Column(name = "paddle_last_transaction_id")
     private String paddleLastTransactionId;
 
+    @Column(name = "app_store_product_id")
+    private String appStoreProductId;
+
+    @Column(name = "app_store_transaction_id")
+    private String appStoreTransactionId;
+
+    @Column(name = "app_store_original_transaction_id")
+    private String appStoreOriginalTransactionId;
+
+    @Column(name = "app_store_environment")
+    private String appStoreEnvironment;
+
+    @Column(name = "app_store_expires_at")
+    private LocalDateTime appStoreExpiresAt;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

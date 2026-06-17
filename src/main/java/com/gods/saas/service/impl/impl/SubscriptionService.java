@@ -1,7 +1,9 @@
 package com.gods.saas.service.impl.impl;
 
 import com.gods.saas.domain.dto.request.ReportPaymentRequest;
+import com.gods.saas.domain.dto.request.AppStorePurchaseVerifyRequest;
 import com.gods.saas.domain.dto.request.SubscriptionCheckoutRequest;
+import com.gods.saas.domain.dto.response.AppStoreProductResponse;
 import com.gods.saas.domain.dto.response.SubscriptionCheckoutResponse;
 import com.gods.saas.domain.dto.response.SubscriptionCurrentResponse;
 import com.gods.saas.domain.dto.response.SubscriptionPlanPriceResponse;
@@ -29,6 +31,10 @@ public interface SubscriptionService {
     SubscriptionCurrentResponse getCurrentSubscriptionResponse(Long tenantId);
 
     List<SubscriptionPlanPriceResponse> getPlanPrices(Long tenantId);
+
+    List<AppStoreProductResponse> getAppStoreProducts();
+
+    SubscriptionCurrentResponse verifyAppStorePurchase(Long tenantId, AppStorePurchaseVerifyRequest request);
 
     SubscriptionCheckoutResponse createInternationalCheckout(Long tenantId, SubscriptionCheckoutRequest request);
 
