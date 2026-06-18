@@ -6,6 +6,7 @@ import com.gods.saas.exception.BusinessException;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.env.Environment;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
@@ -21,6 +22,7 @@ import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class AppStoreReceiptVerifier {
 
     private static final String PRODUCTION_URL = "https://buy.itunes.apple.com/verifyReceipt";
@@ -36,18 +38,23 @@ public class AppStoreReceiptVerifier {
             throw new BusinessException("APP_STORE_RECEIPT_REQUIRED", "Recibo App Store obligatorio");
         }
 
+        log.info("APP_STORE_VERIFY_START productId={} receiptLength={}", expectedProductId, receipt.length());
+
         Map<String, Object> production = postReceipt(PRODUCTION_URL, receipt);
         int status = intValue(production.get("status"));
         Map<String, Object> response = production;
         String environmentName = "PRODUCTION";
+        log.info("APP_STORE_VERIFY_PRODUCTION_STATUS productId={} status={}", expectedProductId, status);
 
         if (status == 21007) {
             response = postReceipt(SANDBOX_URL, receipt);
             status = intValue(response.get("status"));
             environmentName = "SANDBOX";
+            log.info("APP_STORE_VERIFY_SANDBOX_STATUS productId={} status={}", expectedProductId, status);
         }
 
         if (status != 0) {
+            log.warn("APP_STORE_VERIFY_INVALID productId={} environment={} status={}", expectedProductId, environmentName, status);
             throw new BusinessException(
                     "APP_STORE_RECEIPT_INVALID",
                     "Apple no valido el recibo. Codigo: " + status
@@ -57,6 +64,7 @@ public class AppStoreReceiptVerifier {
         Map<String, Object> latest = latestReceiptItem(response, expectedProductId);
         String productId = stringValue(latest.get("product_id"));
         if (!expectedProductId.equals(productId)) {
+            log.warn("APP_STORE_VERIFY_PRODUCT_MISMATCH expectedProductId={} receiptProductId={}", expectedProductId, productId);
             throw new BusinessException(
                     "APP_STORE_PRODUCT_MISMATCH",
                     "El producto comprado no coincide con el plan solicitado"
@@ -65,8 +73,18 @@ public class AppStoreReceiptVerifier {
 
         LocalDateTime expiresAt = millisToDateTime(latest.get("expires_date_ms"));
         if (expiresAt != null && expiresAt.isBefore(LocalDateTime.now(ZoneOffset.UTC))) {
+            log.warn("APP_STORE_VERIFY_EXPIRED productId={} expiresAt={}", expectedProductId, expiresAt);
             throw new BusinessException("APP_STORE_SUBSCRIPTION_EXPIRED", "La suscripcion de App Store esta vencida");
         }
+
+        log.info(
+                "APP_STORE_VERIFY_OK productId={} transactionId={} originalTransactionId={} environment={} expiresAt={}",
+                productId,
+                stringValue(latest.get("transaction_id")),
+                stringValue(latest.get("original_transaction_id")),
+                environmentName,
+                expiresAt
+        );
 
         return VerifiedReceipt.builder()
                 .productId(productId)
@@ -89,6 +107,7 @@ public class AppStoreReceiptVerifier {
             sharedSecret = readProperty("APP_STORE_SHARED_SECRET");
         }
         if (sharedSecret.isBlank()) {
+            log.error("APP_STORE_SHARED_SECRET_MISSING");
             throw new BusinessException(
                     "APP_STORE_SHARED_SECRET_MISSING",
                     "Falta configurar APP_STORE_SHARED_SECRET para validar compras App Store"
@@ -102,12 +121,13 @@ public class AppStoreReceiptVerifier {
     }
 
     private Map<String, Object> latestReceiptItem(Map<String, Object> response, String expectedProductId) {
-        Object rawItems = response.get("latest_receipt_info");
-        if (!(rawItems instanceof List<?> list) || list.isEmpty()) {
+        List<?> list = receiptItems(response);
+        if (list.isEmpty()) {
+            log.warn("APP_STORE_RECEIPT_EMPTY expectedProductId={} responseKeys={}", expectedProductId, response.keySet());
             throw new BusinessException("APP_STORE_RECEIPT_EMPTY", "El recibo App Store no contiene suscripcion");
         }
 
-        return list.stream()
+        Map<String, Object> latest = list.stream()
                 .filter(Map.class::isInstance)
                 .map(item -> {
                     @SuppressWarnings("unchecked")
@@ -120,6 +140,25 @@ public class AppStoreReceiptVerifier {
                         "APP_STORE_PRODUCT_NOT_FOUND",
                         "El recibo no contiene el producto " + expectedProductId
                 ));
+        log.info("APP_STORE_RECEIPT_ITEM_FOUND productId={} itemsCount={}", expectedProductId, list.size());
+        return latest;
+    }
+
+    private List<?> receiptItems(Map<String, Object> response) {
+        Object rawItems = response.get("latest_receipt_info");
+        if (rawItems instanceof List<?> latestReceiptInfo && !latestReceiptInfo.isEmpty()) {
+            return latestReceiptInfo;
+        }
+
+        Object rawReceipt = response.get("receipt");
+        if (rawReceipt instanceof Map<?, ?> receipt) {
+            Object rawInApp = receipt.get("in_app");
+            if (rawInApp instanceof List<?> inApp && !inApp.isEmpty()) {
+                return inApp;
+            }
+        }
+
+        return List.of();
     }
 
     private String readProperty(String key) {
