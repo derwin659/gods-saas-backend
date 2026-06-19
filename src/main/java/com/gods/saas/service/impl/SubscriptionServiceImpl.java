@@ -281,8 +281,10 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         AppStoreReceiptVerifier.VerifiedReceipt verified =
                 appStoreReceiptVerifier.verify(productId, request.getReceiptData());
 
-        Subscription sub = getCurrentSubscriptionOrThrow(tenantId);
         LocalDateTime now = nowForTenant(tenantId);
+        assertAppStorePurchaseAvailableForTenant(tenantId, verified, request, now);
+
+        Subscription sub = getCurrentSubscriptionOrThrow(tenantId);
         LocalDateTime expiresAt = verified.getExpiresAt() != null
                 ? verified.getExpiresAt()
                 : now.plusDays(30);
@@ -328,6 +330,32 @@ public class SubscriptionServiceImpl implements SubscriptionService {
         appStorePurchaseRepository.save(purchase);
 
         return getCurrentSubscriptionResponse(tenantId);
+    }
+
+    private void assertAppStorePurchaseAvailableForTenant(
+            Long tenantId,
+            AppStoreReceiptVerifier.VerifiedReceipt verified,
+            AppStorePurchaseVerifyRequest request,
+            LocalDateTime now
+    ) {
+        String originalTransactionId = firstNonBlank(
+                firstNonBlank(verified.getOriginalTransactionId(), request.getOriginalTransactionId()),
+                firstNonBlank(verified.getTransactionId(), request.getTransactionId())
+        );
+        if (trimToNull(originalTransactionId) == null) {
+            return;
+        }
+
+        appStorePurchaseRepository.findTopByOriginalTransactionIdOrderByIdDesc(originalTransactionId)
+                .filter(existing -> !tenantId.equals(existing.getTenantId()))
+                .filter(existing -> STATUS_ACTIVE.equalsIgnoreCase(firstNonBlank(existing.getStatus(), "")))
+                .filter(existing -> existing.getExpiresAt() == null || existing.getExpiresAt().isAfter(now))
+                .ifPresent(existing -> {
+                    throw new BusinessException(
+                            "APP_STORE_PURCHASE_ALREADY_LINKED",
+                            "Esta suscripcion de App Store ya esta vinculada a otro negocio."
+                    );
+                });
     }
 
     @Override
