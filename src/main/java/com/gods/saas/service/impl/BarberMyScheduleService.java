@@ -13,6 +13,7 @@ import com.gods.saas.domain.repository.AppUserRepository;
 import com.gods.saas.domain.repository.BarberAvailabilityRepository;
 import com.gods.saas.domain.repository.BarberTimeBlockRepository;
 import com.gods.saas.domain.repository.BranchRepository;
+import com.gods.saas.domain.repository.UserTenantRoleRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -31,6 +32,7 @@ public class BarberMyScheduleService {
     private final BarberTimeBlockRepository barberTimeBlockRepository;
     private final AppUserRepository appUserRepository;
     private final BranchRepository branchRepository;
+    private final UserTenantRoleRepository userTenantRoleRepository;
 
     @Transactional(readOnly = true)
     public List<BarberAvailabilityDayResponse> getMyAvailability(
@@ -44,7 +46,7 @@ public class BarberMyScheduleService {
         branchRepository.findByIdAndTenant_Id(branchId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Sucursal no encontrada"));
 
-        validateBarberBelongsToBranch(barber, branchId);
+        validateBarberBelongsToBranch(tenantId, branchId, barberUserId);
 
         return barberAvailabilityRepository
                 .findByTenant_IdAndBranch_IdAndBarber_IdOrderByDayOfWeekAscStartTimeAsc(
@@ -78,7 +80,7 @@ public class BarberMyScheduleService {
         Branch branch = branchRepository.findByIdAndTenant_Id(branchId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Sucursal no encontrada"));
 
-        validateBarberBelongsToBranch(barber, branchId);
+        validateBarberBelongsToBranch(tenantId, branchId, barberUserId);
 
         for (BarberAvailabilityDayRequest day : request.getDays()) {
             if (day.getDayOfWeek() == null || day.getDayOfWeek() < 1 || day.getDayOfWeek() > 7) {
@@ -131,7 +133,7 @@ public class BarberMyScheduleService {
         branchRepository.findByIdAndTenant_Id(branchId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Sucursal no encontrada"));
 
-        validateBarberBelongsToBranch(barber, branchId);
+        validateBarberBelongsToBranch(tenantId, branchId, barberUserId);
 
         return barberTimeBlockRepository
                 .findByTenant_IdAndBranch_IdAndBarber_IdOrderByBlockDateAscStartTimeAsc(
@@ -163,7 +165,7 @@ public class BarberMyScheduleService {
         Branch branch = branchRepository.findByIdAndTenant_Id(branchId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Sucursal no encontrada"));
 
-        validateBarberBelongsToBranch(barber, branchId);
+        validateBarberBelongsToBranch(tenantId, branchId, barberUserId);
 
         if (request.getBlockDate() == null || request.getBlockDate().isBlank()) {
             throw new RuntimeException("La fecha es obligatoria");
@@ -205,7 +207,7 @@ public class BarberMyScheduleService {
         AppUser barber = appUserRepository.findByIdAndTenant_Id(barberUserId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Barbero no encontrado"));
 
-        validateBarberBelongsToBranch(barber, branchId);
+        validateBarberBelongsToBranch(tenantId, branchId, barberUserId);
 
         BarberTimeBlock block = barberTimeBlockRepository.findById(blockId)
                 .orElseThrow(() -> new RuntimeException("Bloqueo no encontrado"));
@@ -225,8 +227,14 @@ public class BarberMyScheduleService {
         barberTimeBlockRepository.delete(block);
     }
 
-    private void validateBarberBelongsToBranch(AppUser barber, Long branchId) {
-        if (barber.getBranch() == null || !barber.getBranch().getId().equals(branchId)) {
+    private void validateBarberBelongsToBranch(Long tenantId, Long branchId, Long barberUserId) {
+        boolean belongsToBranch = userTenantRoleRepository.existsByUser_IdAndTenant_IdAndBranch_Id(
+                barberUserId,
+                tenantId,
+                branchId
+        );
+
+        if (!belongsToBranch) {
             throw new RuntimeException("El barbero no pertenece a esta sucursal");
         }
     }
