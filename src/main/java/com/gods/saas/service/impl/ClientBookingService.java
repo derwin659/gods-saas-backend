@@ -48,6 +48,7 @@ public class ClientBookingService {
     private final BarberTimeBlockRepository barberTimeBlockRepository;
     private final NotificationService notificationService;
     private final PromotionRepository promotionRepository;
+    private final UserTenantRoleRepository userTenantRoleRepository;
 
     public BookingBootstrapResponse getBootstrap(Long tenantId) {
         Tenant tenant = tenantRepository.findById(tenantId)
@@ -84,12 +85,25 @@ public class ClientBookingService {
                 .currencySymbol(resolveCurrencySymbol(currency))
                 .branches(branches.stream().map(BranchMiniResponse::fromEntity).toList())
                 .services(services.stream().map(ServiceMiniResponse::fromEntity).toList())
-                .barbers(barbers.stream().map(BarberMiniResponse::fromEntity).toList())
+                .barbers(barbers.stream().map(barber -> mapBootstrapBarber(tenantId, barber)).toList())
                 .bookingDepositEnabled(depositEnabled)
                 .bookingDepositDefaultAmount(defaultAmount)
                 .bookingDepositDefaultPercent(defaultPercent)
                 .paymentMethods(paymentMethods.stream().map(PaymentMethodMiniResponse::fromEntity).toList())
                 .build();
+    }
+
+    private BarberMiniResponse mapBootstrapBarber(Long tenantId, AppUser barber) {
+        List<Long> branchIds = userTenantRoleRepository
+                .findByUserIdAndTenantIdAndRoleWithBranch(barber.getId(), tenantId, RoleType.BARBER)
+                .stream()
+                .map(UserTenantRole::getBranch)
+                .filter(branch -> branch != null && branch.getId() != null)
+                .map(Branch::getId)
+                .distinct()
+                .toList();
+
+        return BarberMiniResponse.fromEntity(barber, branchIds);
     }
 
     public BookingAvailabilityResponse getAvailability(
@@ -145,10 +159,10 @@ public class ClientBookingService {
                     barber.getId(),
                     barber.getNombre(),
                     barber.getApellido(),
-                    barber.getBranch() != null ? barber.getBranch().getId() : null,
-                    barber.getTenant() != null ? barber.getTenant().getId() : null);
+                    branchId,
+                    tenantId);
 
-            validateBarberBranch(barber, branchId);
+            validateBarberBranch(barber, tenantId, branchId);
 
             BarberAvailability availability = getWorkingAvailabilityOrNull(
                     tenantId, branchId, barberId, fecha
@@ -310,7 +324,7 @@ public class ClientBookingService {
             barber = appUserRepository.findByIdAndTenant_Id(req.getBarberId(), tenantId)
                     .orElseThrow(() -> new RuntimeException("Barbero no encontrado"));
 
-            validateBarberBranch(barber, req.getBranchId());
+            validateBarberBranch(barber, tenantId, req.getBranchId());
 
             if (!isBarberAvailableConsideringAllRules(
                     tenantId,
@@ -777,15 +791,9 @@ public class ClientBookingService {
     }
 
     private List<AppUser> getActiveBranchBarbers(Long tenantId, Long branchId) {
-        List<AppUser> allBarbers = appUserRepository.findByTenant_IdAndRolAndActivoTrue(tenantId, "BARBER");
-
-        log.info("ALL ACTIVE TENANT BARBERS => tenantId={}, count={}, barberIds={}",
-                tenantId,
-                allBarbers.size(),
-                allBarbers.stream().map(AppUser::getId).toList());
-
-        List<AppUser> filtered = allBarbers.stream()
-                .filter(b -> b.getBranch() != null && b.getBranch().getId().equals(branchId))
+        List<AppUser> filtered = userTenantRoleRepository
+                .findActiveUsersByTenantBranchAndRole(tenantId, branchId, RoleType.BARBER)
+                .stream()
                 .sorted(Comparator.comparing(AppUser::getId))
                 .toList();
 
@@ -797,15 +805,20 @@ public class ClientBookingService {
         return filtered;
     }
 
-    private void validateBarberBranch(AppUser barber, Long branchId) {
-        Long barberBranchId = barber.getBranch() != null ? barber.getBranch().getId() : null;
+    private void validateBarberBranch(AppUser barber, Long tenantId, Long branchId) {
+        boolean belongsToBranch = userTenantRoleRepository.existsByUserIdAndTenantIdAndBranchIdAndRoleIn(
+                barber.getId(),
+                tenantId,
+                branchId,
+                List.of(RoleType.BARBER)
+        );
 
-        log.info("VALIDATING BARBER BRANCH => barberId={}, barberBranchId={}, requestedBranchId={}",
-                barber.getId(), barberBranchId, branchId);
+        log.info("VALIDATING BARBER BRANCH => barberId={}, requestedBranchId={}, belongsToBranch={}",
+                barber.getId(), branchId, belongsToBranch);
 
-        if (barber.getBranch() == null || !barber.getBranch().getId().equals(branchId)) {
-            log.warn("BARBER BRANCH MISMATCH => barberId={}, barberBranchId={}, requestedBranchId={}",
-                    barber.getId(), barberBranchId, branchId);
+        if (!belongsToBranch) {
+            log.warn("BARBER BRANCH MISMATCH => barberId={}, requestedBranchId={}",
+                    barber.getId(), branchId);
             throw new RuntimeException("El barbero no pertenece a la sucursal seleccionada");
         }
     }
@@ -1071,7 +1084,7 @@ public class ClientBookingService {
                     .orElseThrow(() -> new RuntimeException("Barbero no encontrado."));
 
             if (branchId != null) {
-                validateBarberBranch(barber, branchId);
+                validateBarberBranch(barber, tenant.getId(), branchId);
             }
         }
 

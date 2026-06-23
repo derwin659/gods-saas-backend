@@ -284,6 +284,9 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
                 .distinct()
                 .toList();
 
+        Long primaryBranchId = branchIds.isEmpty() ? null : branchIds.get(0);
+        String primaryBranchName = branchNames.isEmpty() ? null : branchNames.get(0);
+
         return BarberResponse.builder()
                 .userId(user.getId())
                 .nombre(user.getNombre())
@@ -293,10 +296,10 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
                 .rol(user.getRol())
                 .activo(user.getActivo())
                 .canSell(user.getCanSell() == null ? true : user.getCanSell())
-                .branchId(user.getBranch() != null ? user.getBranch().getId() : null)
-                .branchNombre(user.getBranch() != null ? user.getBranch().getNombre() : null)
-                .branchIds(branchIds.isEmpty() && user.getBranch() != null ? List.of(user.getBranch().getId()) : branchIds)
-                .branchNombres(branchNames.isEmpty() && user.getBranch() != null ? List.of(user.getBranch().getNombre()) : branchNames)
+                .branchId(primaryBranchId)
+                .branchNombre(primaryBranchName)
+                .branchIds(branchIds)
+                .branchNombres(branchNames)
                 .photoUrl(user.getPhotoUrl())
                 .salaryMode(user.getSalaryMode())
                 .commissionPercentage(user.getCommissionPercentage())
