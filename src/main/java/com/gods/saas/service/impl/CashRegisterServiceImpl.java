@@ -139,11 +139,11 @@ public class CashRegisterServiceImpl implements CashRegisterService {
         LocalDateTime toDateTime = to.plusDays(1).atStartOfDay();
 
         return cashRegisterRepository
-                .findByTenant_IdAndBranch_IdAndOpenedAtBetweenOrderByOpenedAtDesc(
+                .findHistoryByOpenedAtOrActivityBetween(
                         tenantId, branchId, fromDateTime, toDateTime
                 )
                 .stream()
-                .map(this::mapResponse)
+                .map(cashRegister -> mapResponse(cashRegister, fromDateTime, toDateTime))
                 .toList();
     }
 
@@ -417,6 +417,15 @@ public class CashRegisterServiceImpl implements CashRegisterService {
 
     private CashRegisterResponse mapResponse(CashRegister cashRegister) {
         CashTotals totals = calculateCashTotals(cashRegister);
+        return mapResponse(cashRegister, totals);
+    }
+
+    private CashRegisterResponse mapResponse(CashRegister cashRegister, LocalDateTime start, LocalDateTime end) {
+        CashTotals totals = calculateCashTotals(cashRegister, start, end);
+        return mapResponse(cashRegister, totals);
+    }
+
+    private CashRegisterResponse mapResponse(CashRegister cashRegister, CashTotals totals) {
 
         BigDecimal closingExpected = cashRegister.getStatus() == CashRegisterStatus.OPEN
                 ? totals.expectedCash()
@@ -466,8 +475,10 @@ public class CashRegisterServiceImpl implements CashRegisterService {
 
     private CashTotals calculateCashTotals(CashRegister cashRegister) {
         LocalDateTime[] range = cashRegisterBusinessRange(cashRegister);
-        LocalDateTime start = range[0];
-        LocalDateTime end = range[1];
+        return calculateCashTotals(cashRegister, range[0], range[1]);
+    }
+
+    private CashTotals calculateCashTotals(CashRegister cashRegister, LocalDateTime start, LocalDateTime end) {
 
         BigDecimal salesTotal = safe(
                 saleRepository.sumTotalByCashRegisterIdAndBusinessDateRange(

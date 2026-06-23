@@ -307,10 +307,6 @@ public class CashSaleServiceImpl implements CashSaleService {
             throw new RuntimeException("La venta no pertenece a una caja");
         }
 
-        if (sale.getCashRegister().getClosedAt() != null) {
-            throw new RuntimeException("Solo se puede editar una venta con caja abierta");
-        }
-
         if (request.getCustomerId() != null) {
             Customer customer = customerRepository.findById(request.getCustomerId())
                     .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
@@ -349,8 +345,63 @@ public class CashSaleServiceImpl implements CashSaleService {
             replaceSalePaymentsFromUpdateRequest(sale, request);
         }
 
+        if (request.getItems() != null) {
+            updateSaleItemsFromRequest(sale, request);
+        }
+
         Sale saved = saleRepository.save(sale);
         return mapResponse(saved, 0);
+    }
+
+    private void updateSaleItemsFromRequest(Sale sale, UpdateSaleRequest request) {
+        if (request.getItems() == null) {
+            return;
+        }
+
+        Map<Long, SaleItem> itemsById = sale.getItems().stream()
+                .filter(item -> item.getId() != null)
+                .collect(Collectors.toMap(SaleItem::getId, item -> item));
+
+        for (UpdateSaleRequest.UpdateSaleItemRequest itemRequest : request.getItems()) {
+            if (itemRequest == null || itemRequest.resolvedItemId() == null) {
+                continue;
+            }
+
+            SaleItem item = itemsById.get(itemRequest.resolvedItemId());
+            if (item == null) {
+                throw new IllegalArgumentException("Item de venta no encontrado: " + itemRequest.resolvedItemId());
+            }
+
+            if (itemRequest.getBarberUserId() != null) {
+                AppUser barber = userRepository.findById(itemRequest.getBarberUserId())
+                        .orElseThrow(() -> new RuntimeException("Barbero no encontrado: " + itemRequest.getBarberUserId()));
+
+                if (barber.getTenant() == null || !barber.getTenant().getId().equals(sale.getTenant().getId())) {
+                    throw new RuntimeException("El barbero no pertenece al tenant");
+                }
+
+                item.setBarberUser(barber);
+            }
+
+            if (itemRequest.getPrecioUnitario() != null) {
+                BigDecimal price = safe(itemRequest.getPrecioUnitario()).setScale(2, RoundingMode.HALF_UP);
+                if (price.compareTo(BigDecimal.ZERO) < 0) {
+                    throw new IllegalArgumentException("El precio del item no puede ser negativo.");
+                }
+
+                int quantity = item.getCantidad() == null ? 1 : item.getCantidad();
+                BigDecimal subtotal = price.multiply(BigDecimal.valueOf(quantity)).setScale(2, RoundingMode.HALF_UP);
+                item.setPrecioUnitario(price);
+                item.setSubtotal(subtotal);
+
+                if (item.getProduct() == null) {
+                    item.setGanancia(subtotal);
+                } else {
+                    BigDecimal cost = safe(item.getCostoUnitario()).multiply(BigDecimal.valueOf(quantity)).setScale(2, RoundingMode.HALF_UP);
+                    item.setGanancia(subtotal.subtract(cost).setScale(2, RoundingMode.HALF_UP));
+                }
+            }
+        }
     }
 
     private void replaceSalePaymentsFromUpdateRequest(Sale sale, UpdateSaleRequest request) {
@@ -1349,10 +1400,6 @@ public class CashSaleServiceImpl implements CashSaleService {
 
         if (sale.getCashRegister() == null) {
             throw new RuntimeException("La venta no pertenece a una caja");
-        }
-
-        if (sale.getCashRegister().getClosedAt() != null) {
-            throw new RuntimeException("Solo se puede eliminar una venta con caja abierta");
         }
 
         // 3) Si la venta tenía productos, devolvemos el stock.

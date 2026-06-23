@@ -218,6 +218,7 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
 
         ZoneId zoneId = getZoneIdForTenant(tenantId);
         LocalDateTime now = LocalDateTime.now(zoneId);
+        LocalDateTime movementDate = resolveMovementDate(request.getMovementDate(), now, zoneId);
 
         BigDecimal remainingAfterAll = preview.getPendingAmount().subtract(amountPaid).setScale(2, RoundingMode.HALF_UP);
         BarberPaymentStatus finalStatus = remainingAfterAll.compareTo(BigDecimal.ZERO) == 0
@@ -247,7 +248,7 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                     .amount(split.amount())
                     .concept(splitConcept)
                     .note(trimToNull(request.getNote()))
-                    .movementDate(now)
+                    .movementDate(movementDate)
                     .createdAt(now)
                     .build();
 
@@ -376,6 +377,19 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 .build();
     }
 
+
+    private LocalDateTime resolveMovementDate(LocalDate requestedDate, LocalDateTime now, ZoneId zoneId) {
+        if (requestedDate == null) {
+            return now;
+        }
+
+        LocalDate today = LocalDate.now(zoneId);
+        if (requestedDate.isAfter(today)) {
+            throw new IllegalStateException("No puedes registrar un pago con fecha futura.");
+        }
+
+        return requestedDate.atTime(now.toLocalTime());
+    }
 
     private List<PaymentSplit> resolvePaymentSplits(CreateBarberPaymentRequest request) {
         if (request.getPayments() != null && !request.getPayments().isEmpty()) {

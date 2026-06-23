@@ -13,6 +13,7 @@ public class CreateBarberPaymentRequest {
     private Long barberUserId;
     private LocalDate periodFrom;
     private LocalDate periodTo;
+    private LocalDate movementDate;
     /**
      * Modo antiguo: un solo método de pago.
      * Se mantiene para no romper web/app actuales.
