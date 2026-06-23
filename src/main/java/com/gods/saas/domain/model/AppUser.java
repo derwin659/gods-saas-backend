@@ -84,6 +84,10 @@ public class AppUser implements UserDetails {
     @Column(name = "activo")
     private Boolean activo = true;
 
+    @Builder.Default
+    @Column(name = "can_sell")
+    private Boolean canSell = true;
+
     @Column(name = "fecha_creacion")
     private LocalDateTime fechaCreacion = LocalDateTime.now();
 

@@ -46,6 +46,10 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
                 cashMovementRepository.sumGeneralExpensesByRange(tenantId, branchId, start, end)
         );
 
+        BigDecimal additionalIncome = nvl(
+                cashMovementRepository.sumAdditionalIncomeByRange(tenantId, branchId, start, end)
+        );
+
         BigDecimal barberAdvances = nvl(
                 cashMovementRepository.sumBarberAdvancesByRange(tenantId, branchId, start, end)
         );
@@ -54,16 +58,18 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
                 cashMovementRepository.sumBarberPaymentsByRange(tenantId, branchId, start, end)
         );
 
-        BigDecimal netProfit = totalSales
+        BigDecimal grossIncome = totalSales.add(additionalIncome);
+
+        BigDecimal netProfit = grossIncome
                 .subtract(operationalExpenses)
                 .subtract(barberAdvances)
                 .subtract(barberPayments);
 
         BigDecimal profitMargin = BigDecimal.ZERO;
-        if (totalSales.compareTo(BigDecimal.ZERO) > 0) {
+        if (grossIncome.compareTo(BigDecimal.ZERO) > 0) {
             profitMargin = netProfit
                     .multiply(new BigDecimal("100"))
-                    .divide(totalSales, 2, RoundingMode.HALF_UP);
+                    .divide(grossIncome, 2, RoundingMode.HALF_UP);
         }
 
         List<DailyProfitabilityPointResponse> daily = cashMovementRepository
@@ -71,11 +77,13 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
                 .stream()
                 .map(p -> {
                     BigDecimal dailySales = nvl(p.getTotalSales());
+                    BigDecimal dailyAdditionalIncome = nvl(p.getAdditionalIncome());
                     BigDecimal dailyExpenses = nvl(p.getOperationalExpenses());
                     BigDecimal dailyAdvances = nvl(p.getBarberAdvances());
                     BigDecimal dailyPayments = nvl(p.getBarberPayments());
 
                     BigDecimal dailyProfit = dailySales
+                            .add(dailyAdditionalIncome)
                             .subtract(dailyExpenses)
                             .subtract(dailyAdvances)
                             .subtract(dailyPayments);
@@ -83,6 +91,7 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
                     return DailyProfitabilityPointResponse.builder()
                             .date(p.getReportDate())
                             .totalSales(dailySales)
+                            .additionalIncome(dailyAdditionalIncome)
                             .operationalExpenses(dailyExpenses)
                             .barberAdvances(dailyAdvances)
                             .barberPayments(dailyPayments)
@@ -95,6 +104,7 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
                 .totalSales(totalSales)
                 .cashSales(cashSales)
                 .nonCashSales(nonCashSales)
+                .additionalIncome(additionalIncome)
                 .operationalExpenses(operationalExpenses)
                 .barberAdvances(barberAdvances)
                 .barberPayments(barberPayments)

@@ -29,6 +29,7 @@ public class BarberUpdateRequest {
 
     @NotNull
     private Boolean activo;
+    private Boolean canSell = true;
 
     private Boolean salaryMode = false;
     private BigDecimal commissionPercentage;

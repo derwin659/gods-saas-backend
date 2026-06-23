@@ -127,6 +127,7 @@ public class BarberHomeServiceImpl implements BarberHomeService {
                 .tenantName(barber.getTenant() != null ? barber.getTenant().getNombre() : "Barbería")
                 .barberName(buildBarberName(barber))
                 .barberPhotoUrl(barber.getPhotoUrl())
+                .canSell(barber.getCanSell() == null ? true : barber.getCanSell())
                 .currency(currency)
                 .currencySymbol(resolveCurrencySymbol(currency))
                 .citasHoy((int) citasHoy)

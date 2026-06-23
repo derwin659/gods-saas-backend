@@ -31,6 +31,7 @@ public class BarberCreateRequest {
     private Long branchId;
 
     private Boolean activo = true;
+    private Boolean canSell = true;
 
     private Boolean salaryMode = false;
     private BigDecimal commissionPercentage;

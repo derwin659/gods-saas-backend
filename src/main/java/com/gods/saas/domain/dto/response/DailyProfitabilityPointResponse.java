@@ -11,6 +11,7 @@ import java.time.LocalDate;
 public class DailyProfitabilityPointResponse {
     private LocalDate date;
     private BigDecimal totalSales;
+    private BigDecimal additionalIncome;
     private BigDecimal operationalExpenses;
     private BigDecimal barberAdvances;
     private BigDecimal barberPayments;

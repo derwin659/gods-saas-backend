@@ -56,6 +56,25 @@ public interface CashMovementRepository extends JpaRepository<CashMovement, Long
     );
 
     @Query("""
+    select coalesce(sum(cm.amount), 0)
+    from CashMovement cm
+    where cm.tenant.id = :tenantId
+      and (:branchId is null or cm.branch.id = :branchId)
+      and cm.type in (
+        com.gods.saas.domain.enums.CashMovementType.INCOME,
+        com.gods.saas.domain.enums.CashMovementType.ADJUSTMENT
+      )
+      and cm.movementDate >= :start
+      and cm.movementDate < :end
+    """)
+    BigDecimal sumAdditionalIncomeByRange(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("start") java.time.LocalDateTime start,
+            @Param("end") java.time.LocalDateTime end
+    );
+
+    @Query("""
 select cm
 from CashMovement cm
 where cm.tenant.id = :tenantId
@@ -126,6 +145,7 @@ order by cm.movementDate desc
     expenses as (
         select
             cast(cm.movement_date as date) as report_date,
+            coalesce(sum(case when cm.type in ('INCOME', 'ADJUSTMENT') then cm.amount else 0 end), 0) as additional_income,
             coalesce(sum(case when cm.type = 'EXPENSE' then cm.amount else 0 end), 0) as operational_expenses,
             coalesce(sum(case when cm.type = 'ADVANCE_BARBER' then cm.amount else 0 end), 0) as barber_advances,
             coalesce(sum(case when cm.type = 'PAYMENT_BARBER' then cm.amount else 0 end), 0) as barber_payments
@@ -139,6 +159,7 @@ order by cm.movementDate desc
     select
         d.report_date as reportDate,
         coalesce(s.total_sales, 0) as totalSales,
+        coalesce(e.additional_income, 0) as additionalIncome,
         coalesce(e.operational_expenses, 0) as operationalExpenses,
         coalesce(e.barber_advances, 0) as barberAdvances,
         coalesce(e.barber_payments, 0) as barberPayments

@@ -128,6 +128,10 @@ public class SaleServiceImpl implements SaleService {
 
         String validationStatus = resolvePaymentValidationStatus(request.getPaymentValidationStatus(), createdByRole);
 
+        if ("BARBER".equals(createdByRole) && user != null && Boolean.FALSE.equals(user.getCanSell())) {
+            throw new RuntimeException("No tienes permiso para registrar ventas. Solicita acceso al dueno.");
+        }
+
         sale.setCreatedByRole(createdByRole);
         sale.setPaymentValidationStatus(validationStatus);
 

@@ -125,6 +125,7 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
                 .passwordHash(passwordEncoder.encode(password))
                 .rol("BARBER")
                 .activo(request.getActivo() != null ? request.getActivo() : true)
+                .canSell(request.getCanSell() == null ? true : request.getCanSell())
                 .fechaCreacion(LocalDateTime.now())
                 .build();
 
@@ -183,6 +184,7 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
         if (request.getActivo() != null) {
             barber.setActivo(request.getActivo());
         }
+        barber.setCanSell(request.getCanSell() == null ? true : request.getCanSell());
 
         barber.setFechaActualizacion(LocalDateTime.now());
 
@@ -235,6 +237,7 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
                 .phone(user.getPhone())
                 .rol(user.getRol())
                 .activo(user.getActivo())
+                .canSell(user.getCanSell() == null ? true : user.getCanSell())
                 .branchId(user.getBranch() != null ? user.getBranch().getId() : null)
                 .branchNombre(user.getBranch() != null ? user.getBranch().getNombre() : null)
                 .photoUrl(user.getPhotoUrl())

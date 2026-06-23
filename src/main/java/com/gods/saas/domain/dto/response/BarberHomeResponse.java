@@ -14,6 +14,7 @@ public class BarberHomeResponse {
     private String tenantName;
     private String barberName;
     private String barberPhotoUrl;
+    private Boolean canSell;
     private String currency;
     private String currencySymbol;
     private int citasHoy;

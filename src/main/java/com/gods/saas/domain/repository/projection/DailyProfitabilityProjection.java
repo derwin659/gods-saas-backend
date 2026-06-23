@@ -6,6 +6,7 @@ import java.time.LocalDate;
 public interface DailyProfitabilityProjection {
     LocalDate getReportDate();
     BigDecimal getTotalSales();
+    BigDecimal getAdditionalIncome();
     BigDecimal getOperationalExpenses();
     BigDecimal getBarberAdvances();
     BigDecimal getBarberPayments();

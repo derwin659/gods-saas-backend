@@ -16,6 +16,7 @@ public class BarberResponse {
     private String phone;
     private String rol;
     private Boolean activo;
+    private Boolean canSell;
     private Long branchId;
     private String branchNombre;
     private String photoUrl;

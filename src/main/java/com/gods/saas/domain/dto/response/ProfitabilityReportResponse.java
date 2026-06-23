@@ -13,6 +13,7 @@ public class ProfitabilityReportResponse {
     private BigDecimal totalSales;
     private BigDecimal cashSales;
     private BigDecimal nonCashSales;
+    private BigDecimal additionalIncome;
 
     private BigDecimal operationalExpenses;
     private BigDecimal barberAdvances;
