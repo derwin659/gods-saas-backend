@@ -189,11 +189,7 @@ public class BarberHomeServiceImpl implements BarberHomeService {
     }
 
     private void validateCurrentUserIsBarber(Long userId, Long tenantId) {
-        UserTenantRole role = userTenantRoleRepository
-                .findByUser_IdAndTenant_Id(userId, tenantId)
-                .orElseThrow(() -> new BusinessException("El usuario no tiene rol asignado en este tenant"));
-
-        if (role.getRole() != RoleType.BARBER) {
+        if (!userTenantRoleRepository.existsByUser_IdAndTenant_IdAndRole(userId, tenantId, RoleType.BARBER)) {
             throw new BusinessException("El usuario autenticado no es un barbero");
         }
     }

@@ -8,6 +8,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 public class BarberUpdateRequest {
@@ -26,6 +27,9 @@ public class BarberUpdateRequest {
 
     @NotNull
     private Long branchId;
+
+    private List<Long> branchIds;
+    private Boolean allBranches = false;
 
     @NotNull
     private Boolean activo;

@@ -52,6 +52,23 @@ public interface UserTenantRoleRepository extends JpaRepository<UserTenantRole, 
 
     boolean existsByUser_IdAndTenant_IdAndRole(Long userId, Long tenantId, RoleType role);
 
+    void deleteByUser_IdAndTenant_IdAndRole(Long userId, Long tenantId, RoleType role);
+
+    @Query("""
+    select utr
+    from UserTenantRole utr
+    left join fetch utr.branch b
+    where utr.user.id = :userId
+      and utr.tenant.id = :tenantId
+      and utr.role = :role
+    order by b.nombre asc
+""")
+    List<UserTenantRole> findByUserIdAndTenantIdAndRoleWithBranch(
+            @Param("userId") Long userId,
+            @Param("tenantId") Long tenantId,
+            @Param("role") RoleType role
+    );
+
     @Query("""
     select count(r)
     from UserTenantRole r
@@ -68,8 +85,11 @@ public interface UserTenantRoleRepository extends JpaRepository<UserTenantRole, 
     from UserTenantRole utr
     join fetch utr.tenant t
     left join fetch utr.branch b
+    left join utr.user u
+    left join u.branch primaryBranch
     where utr.user.id = :userId
       and utr.tenant.id = :tenantId
+      and (primaryBranch is null or b.id = primaryBranch.id)
 """)
     Optional<UserTenantRole> findByUserIdAndTenantIdWithRelations(
             @Param("userId") Long userId,

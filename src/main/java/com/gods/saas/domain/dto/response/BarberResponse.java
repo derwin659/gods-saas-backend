@@ -5,6 +5,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 @Builder
@@ -19,6 +20,8 @@ public class BarberResponse {
     private Boolean canSell;
     private Long branchId;
     private String branchNombre;
+    private List<Long> branchIds;
+    private List<String> branchNombres;
     private String photoUrl;
     private Boolean salaryMode;
     private BigDecimal commissionPercentage;

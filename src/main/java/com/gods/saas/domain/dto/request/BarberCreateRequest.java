@@ -8,6 +8,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.List;
 
 @Data
 public class BarberCreateRequest {
@@ -29,6 +30,9 @@ public class BarberCreateRequest {
 
     @NotNull
     private Long branchId;
+
+    private List<Long> branchIds;
+    private Boolean allBranches = false;
 
     private Boolean activo = true;
     private Boolean canSell = true;

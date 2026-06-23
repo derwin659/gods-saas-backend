@@ -26,7 +26,10 @@ import org.springframework.web.multipart.MultipartFile;
 import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -42,11 +45,11 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
     @Override
     public List<BarberResponse> listBarbers(Long tenantId, Long branchId) {
         List<AppUser> users = (branchId != null)
-                ? appUserRepository.findByTenantIdAndBranchIdAndRolWithBranch(tenantId, branchId, "BARBER")
+                ? userTenantRoleRepository.findActiveUsersByTenantBranchAndRole(tenantId, branchId, RoleType.BARBER)
                 : appUserRepository.findByTenantIdAndRolWithBranch(tenantId, "BARBER");
 
         return users.stream()
-                .map(this::toResponse)
+                .map(user -> toResponse(user, tenantId))
                 .toList();
     }
 
@@ -72,7 +75,6 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
             user.setFixedSalaryAmount(fixedSalaryAmount);
             user.setSalaryFrequency(salaryFrequency);
             user.setSalaryStartDate(salaryStartDate);
-
             user.setCommissionScheme("SALARY");
             user.setCommissionPercentage(null);
         } else {
@@ -82,10 +84,56 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
 
             user.setCommissionPercentage(commissionPercentage);
             user.setCommissionScheme("PERCENTAGE");
-
             user.setFixedSalaryAmount(null);
             user.setSalaryFrequency(null);
             user.setSalaryStartDate(null);
+        }
+    }
+
+    private List<Branch> resolveAssignedBranches(Long tenantId, Long primaryBranchId, List<Long> branchIds, Boolean allBranches) {
+        if (Boolean.TRUE.equals(allBranches)) {
+            List<Branch> branches = branchRepository.findByTenant_IdAndActivoTrueOrderByNombreAsc(tenantId);
+            if (branches.isEmpty()) {
+                throw new BusinessException("No hay sedes activas para asignar.");
+            }
+            return branches;
+        }
+
+        Map<Long, Branch> selected = new LinkedHashMap<>();
+
+        if (branchIds != null) {
+            for (Long id : branchIds) {
+                if (id == null || id <= 0) continue;
+                Branch branch = branchRepository.findByIdAndTenant_Id(id, tenantId)
+                        .orElseThrow(() -> new EntityNotFoundException("La sede no existe o no pertenece al tenant"));
+                selected.put(branch.getId(), branch);
+            }
+        }
+
+        if (selected.isEmpty() && primaryBranchId != null) {
+            Branch branch = branchRepository.findByIdAndTenant_Id(primaryBranchId, tenantId)
+                    .orElseThrow(() -> new EntityNotFoundException("La sede no existe o no pertenece al tenant"));
+            selected.put(branch.getId(), branch);
+        }
+
+        if (selected.isEmpty()) {
+            throw new BusinessException("Selecciona al menos una sede.");
+        }
+
+        return new ArrayList<>(selected.values());
+    }
+
+    private void replaceBarberBranchRoles(AppUser user, Tenant tenantRef, List<Branch> branches) {
+        userTenantRoleRepository.deleteByUser_IdAndTenant_IdAndRole(user.getId(), tenantRef.getId(), RoleType.BARBER);
+
+        for (Branch branch : branches) {
+            UserTenantRole role = UserTenantRole.builder()
+                    .user(user)
+                    .tenant(tenantRef)
+                    .branch(branch)
+                    .role(RoleType.BARBER)
+                    .build();
+            userTenantRoleRepository.save(role);
         }
     }
 
@@ -95,13 +143,12 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
         subscriptionService.validateSubscriptionActive(tenantId);
         subscriptionService.validateBarberLimit(tenantId);
 
-
         String email = normalizeRequired(request.getEmail(), "El email es obligatorio").toLowerCase();
         String nombre = normalizeRequired(request.getNombre(), "El nombre es obligatorio");
         String apellido = normalizeRequired(request.getApellido(), "El apellido es obligatorio");
         String password = normalizeRequired(request.getPassword(), "La contraseña es obligatoria");
 
-        if (request.getBranchId() == null) {
+        if (request.getBranchId() == null && (request.getBranchIds() == null || request.getBranchIds().isEmpty())) {
             throw new BusinessException("La sede es obligatoria");
         }
 
@@ -109,8 +156,13 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
             throw new BusinessException("Ya existe un usuario con ese email en este tenant");
         }
 
-        Branch branch = branchRepository.findByIdAndTenant_Id(request.getBranchId(), tenantId)
-                .orElseThrow(() -> new EntityNotFoundException("La sede no existe o no pertenece al tenant"));
+        List<Branch> assignedBranches = resolveAssignedBranches(
+                tenantId,
+                request.getBranchId(),
+                request.getBranchIds(),
+                request.getAllBranches()
+        );
+        Branch branch = assignedBranches.get(0);
 
         Tenant tenantRef = new Tenant();
         tenantRef.setId(tenantId);
@@ -139,17 +191,9 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
         );
 
         AppUser saved = appUserRepository.save(user);
+        replaceBarberBranchRoles(saved, tenantRef, assignedBranches);
 
-        UserTenantRole role = UserTenantRole.builder()
-                .user(saved)
-                .tenant(tenantRef)
-                .branch(branch)
-                .role(RoleType.BARBER)
-                .build();
-
-        userTenantRoleRepository.save(role);
-
-        return toResponse(saved);
+        return toResponse(saved, tenantId);
     }
 
     @Override
@@ -164,41 +208,32 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
 
         String email = normalizeRequired(request.getEmail(), "El email es obligatorio").toLowerCase();
 
-        if (request.getBranchId() == null) {
+        if (request.getBranchId() == null && (request.getBranchIds() == null || request.getBranchIds().isEmpty())) {
             throw new BusinessException("La sede es obligatoria");
         }
 
         if (appUserRepository.existsByEmailAndTenant_IdAndIdNot(email, tenantId, barberId)) {
             throw new BusinessException("Ya existe otro usuario con ese email en este tenant");
         }
-        System.out.printf("antes {}", request.getBranchId());
-        Branch branch = branchRepository.findByIdAndTenant_Id(request.getBranchId(), tenantId)
-                .orElseThrow(() -> new EntityNotFoundException("La sede no existe o no pertenece al tenant"));
+        List<Branch> assignedBranches = resolveAssignedBranches(
+                tenantId,
+                request.getBranchId(),
+                request.getBranchIds(),
+                request.getAllBranches()
+        );
+        Branch branch = assignedBranches.get(0);
 
         barber.setNombre(normalizeRequired(request.getNombre(), "El nombre es obligatorio"));
         barber.setApellido(normalizeRequired(request.getApellido(), "El apellido es obligatorio"));
         barber.setEmail(email);
         barber.setPhone(normalizeNullable(request.getPhone()));
         barber.setBranch(branch);
-        System.out.printf("branch {}", branch);
         if (request.getActivo() != null) {
             barber.setActivo(request.getActivo());
         }
         barber.setCanSell(request.getCanSell() == null ? true : request.getCanSell());
 
         barber.setFechaActualizacion(LocalDateTime.now());
-
-        AppUser saved = appUserRepository.save(barber);
-
-        UserTenantRole role = userTenantRoleRepository
-                .findByUser_IdAndTenant_Id(barberId, tenantId)
-                .orElse(null);
-
-        if (role != null) {
-            role.setBranch(branch);
-            role.setRole(RoleType.BARBER);
-            userTenantRoleRepository.save(role);
-        }
 
         applyCompensationModel(
                 barber,
@@ -209,7 +244,12 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
                 request.getSalaryStartDate()
         );
 
-        return toResponse(saved);
+        AppUser saved = appUserRepository.save(barber);
+        Tenant tenantRef = new Tenant();
+        tenantRef.setId(tenantId);
+        replaceBarberBranchRoles(saved, tenantRef, assignedBranches);
+
+        return toResponse(saved, tenantId);
     }
 
     @Override
@@ -225,10 +265,25 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
         barber.setActivo(request.getActivo());
         barber.setFechaActualizacion(LocalDateTime.now());
 
-        return toResponse(appUserRepository.save(barber));
+        return toResponse(appUserRepository.save(barber), tenantId);
     }
 
-    private BarberResponse toResponse(AppUser user) {
+    private BarberResponse toResponse(AppUser user, Long tenantId) {
+        List<UserTenantRole> roles = userTenantRoleRepository
+                .findByUserIdAndTenantIdAndRoleWithBranch(user.getId(), tenantId, RoleType.BARBER);
+        List<Long> branchIds = roles.stream()
+                .map(UserTenantRole::getBranch)
+                .filter(branch -> branch != null && branch.getId() != null)
+                .map(Branch::getId)
+                .distinct()
+                .toList();
+        List<String> branchNames = roles.stream()
+                .map(UserTenantRole::getBranch)
+                .filter(branch -> branch != null && branch.getNombre() != null && !branch.getNombre().isBlank())
+                .map(Branch::getNombre)
+                .distinct()
+                .toList();
+
         return BarberResponse.builder()
                 .userId(user.getId())
                 .nombre(user.getNombre())
@@ -240,6 +295,8 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
                 .canSell(user.getCanSell() == null ? true : user.getCanSell())
                 .branchId(user.getBranch() != null ? user.getBranch().getId() : null)
                 .branchNombre(user.getBranch() != null ? user.getBranch().getNombre() : null)
+                .branchIds(branchIds.isEmpty() && user.getBranch() != null ? List.of(user.getBranch().getId()) : branchIds)
+                .branchNombres(branchNames.isEmpty() && user.getBranch() != null ? List.of(user.getBranch().getNombre()) : branchNames)
                 .photoUrl(user.getPhotoUrl())
                 .salaryMode(user.getSalaryMode())
                 .commissionPercentage(user.getCommissionPercentage())
@@ -270,11 +327,7 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
         AppUser barber = appUserRepository.findByIdAndTenant_Id(barberId, tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("Barbero no encontrado."));
 
-        UserTenantRole role = userTenantRoleRepository
-                .findByUser_IdAndTenant_Id(barberId, tenantId)
-                .orElseThrow(() -> new BusinessException("El usuario no tiene rol asignado en este tenant"));
-
-        if (role.getRole() != RoleType.BARBER) {
+        if (!userTenantRoleRepository.existsByUser_IdAndTenant_IdAndRole(barberId, tenantId, RoleType.BARBER)) {
             throw new BusinessException("El usuario indicado no es un barbero");
         }
 
@@ -293,7 +346,7 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
             cloudinaryStorageService.deleteImage(oldPublicId);
         }
 
-        return toResponse(saved);
+        return toResponse(saved, tenantId);
     }
 
     @Override
@@ -302,11 +355,7 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
         AppUser barber = appUserRepository.findByIdAndTenant_Id(barberId, tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("Barbero no encontrado."));
 
-        UserTenantRole role = userTenantRoleRepository
-                .findByUser_IdAndTenant_Id(barberId, tenantId)
-                .orElseThrow(() -> new BusinessException("El usuario no tiene rol asignado en este tenant"));
-
-        if (role.getRole() != RoleType.BARBER) {
+        if (!userTenantRoleRepository.existsByUser_IdAndTenant_IdAndRole(barberId, tenantId, RoleType.BARBER)) {
             throw new BusinessException("El usuario indicado no es un barbero");
         }
 
@@ -322,7 +371,7 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
             cloudinaryStorageService.deleteImage(oldPublicId);
         }
 
-        return toResponse(saved);
+        return toResponse(saved, tenantId);
     }
 
 }
