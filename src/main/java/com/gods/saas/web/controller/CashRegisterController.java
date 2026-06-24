@@ -4,6 +4,7 @@ import com.gods.saas.domain.dto.request.CashMovementRequest;
 import com.gods.saas.domain.dto.request.CloseCashRegisterRequest;
 import com.gods.saas.domain.dto.request.OpenCashRegisterRequest;
 import com.gods.saas.domain.dto.response.CashMovementResponse;
+import com.gods.saas.domain.dto.response.CashAuditLogResponse;
 import com.gods.saas.domain.dto.response.CashRegisterResponse;
 import com.gods.saas.service.impl.impl.CashRegisterService;
 import lombok.RequiredArgsConstructor;
@@ -67,6 +68,18 @@ public class CashRegisterController {
         return cashRegisterService.history(tenantId, effectiveBranchId, from, to);
     }
 
+    @GetMapping("/audit")
+    public List<CashAuditLogResponse> audit(
+            @RequestAttribute("tenantId") Long tenantId,
+            @RequestAttribute("branchId") Long sessionBranchId,
+            @RequestParam(required = false) Long branchId,
+            @RequestParam(required = false) Long cashRegisterId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        return cashRegisterService.audit(tenantId, effectiveBranchId, cashRegisterId, from, to);
+    }
     @GetMapping("/{cashRegisterId}/movements")
     public List<CashMovementResponse> movements(
             @RequestAttribute("tenantId") Long tenantId,

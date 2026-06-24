@@ -4,6 +4,7 @@ import com.gods.saas.domain.dto.request.CashMovementRequest;
 import com.gods.saas.domain.dto.request.CloseCashRegisterRequest;
 import com.gods.saas.domain.dto.request.OpenCashRegisterRequest;
 import com.gods.saas.domain.dto.response.CashMovementResponse;
+import com.gods.saas.domain.dto.response.CashAuditLogResponse;
 import com.gods.saas.domain.dto.response.CashRegisterResponse;
 import com.gods.saas.domain.enums.CashMovementType;
 import com.gods.saas.domain.enums.CashRegisterStatus;
@@ -146,6 +147,36 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 .stream()
                 .map(cashRegister -> mapResponse(cashRegister, fromDateTime, toDateTime))
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<CashAuditLogResponse> audit(Long tenantId, Long branchId, Long cashRegisterId, LocalDate from, LocalDate to) {
+        LocalDateTime fromDateTime = from.atStartOfDay();
+        LocalDateTime toDateTime = to.plusDays(1).atStartOfDay();
+
+        return cashAuditLogRepository
+                .findByBranchAndRange(tenantId, branchId, cashRegisterId, fromDateTime, toDateTime)
+                .stream()
+                .map(this::mapAuditResponse)
+                .toList();
+    }
+
+    private CashAuditLogResponse mapAuditResponse(CashAuditLog log) {
+        AppUser actor = log.getActorUser();
+        return CashAuditLogResponse.builder()
+                .id(log.getId())
+                .cashRegisterId(log.getCashRegister() == null ? null : log.getCashRegister().getId())
+                .entityType(log.getEntityType())
+                .entityId(log.getEntityId())
+                .action(log.getAction())
+                .reason(log.getReason())
+                .beforeSnapshot(log.getBeforeSnapshot())
+                .afterSnapshot(log.getAfterSnapshot())
+                .createdAt(log.getCreatedAt())
+                .actorUserId(actor == null ? null : actor.getId())
+                .actorUserName(actor == null ? null : fullName(actor))
+                .build();
     }
 
     @Override

@@ -5,6 +5,7 @@ import com.gods.saas.domain.dto.request.CloseCashRegisterRequest;
 import com.gods.saas.domain.dto.request.OpenCashRegisterRequest;
 import com.gods.saas.domain.dto.response.CashMovementResponse;
 import com.gods.saas.domain.dto.response.CashRegisterResponse;
+import com.gods.saas.domain.dto.response.CashAuditLogResponse;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -18,6 +19,8 @@ public interface CashRegisterService {
     CashRegisterResponse close(Long tenantId, Long branchId, Long cashRegisterId, CloseCashRegisterRequest request);
 
     List<CashRegisterResponse> history(Long tenantId, Long branchId, LocalDate from, LocalDate to);
+
+    List<CashAuditLogResponse> audit(Long tenantId, Long branchId, Long cashRegisterId, LocalDate from, LocalDate to);
 
 
 
