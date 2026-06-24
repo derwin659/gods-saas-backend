@@ -71,6 +71,7 @@ public class CashSaleServiceImpl implements CashSaleService {
     private final UserTenantRoleRepository userTenantRoleRepository;
     private final LoyaltyAccountRepository loyaltyAccountRepository;
     private final TenantSettingsRepository tenantSettingsRepository;
+    private final CashAuditLogRepository cashAuditLogRepository;
 
     @Override
     public SaleResponse createCashSale(Long tenantId, Long branchId, Long userId, CreateCashSaleRequest request) {
@@ -297,6 +298,7 @@ public class CashSaleServiceImpl implements CashSaleService {
                 : reason.trim());
 
         Sale saved = saleRepository.save(sale);
+
         return mapResponse(saved, 0);
     }
 
@@ -310,6 +312,9 @@ public class CashSaleServiceImpl implements CashSaleService {
         if (sale.getCashRegister() == null) {
             throw new RuntimeException("La venta no pertenece a una caja");
         }
+
+        String auditReason = requireAuditReason(request.getAuditReason());
+        String beforeSnapshot = saleAuditSnapshot(sale);
 
         if (request.getCustomerId() != null) {
             Customer customer = customerRepository.findById(request.getCustomerId())
@@ -354,6 +359,18 @@ public class CashSaleServiceImpl implements CashSaleService {
         }
 
         Sale saved = saleRepository.save(sale);
+        registerCashAudit(
+                saved.getTenant(),
+                saved.getBranch(),
+                saved.getCashRegister(),
+                userId,
+                "SALE",
+                saved.getId(),
+                "UPDATE",
+                auditReason,
+                beforeSnapshot,
+                saleAuditSnapshot(saved)
+        );
         return mapResponse(saved, 0);
     }
 
@@ -1411,7 +1428,7 @@ public class CashSaleServiceImpl implements CashSaleService {
 
     @Override
     @Transactional
-    public void deleteSale(Long tenantId, Long branchId, Long userId, Long saleId) {
+    public void deleteSale(Long tenantId, Long branchId, Long userId, Long saleId, String auditReason) {
         requireOwnerForSensitiveSaleAction(tenantId, userId);
 
         // 1) Cargamos venta con items/productos/cliente/caja/cita.
@@ -1455,6 +1472,77 @@ public class CashSaleServiceImpl implements CashSaleService {
         saleRepository.flush();
     }
 
+    private String requireAuditReason(String reason) {
+        String clean = reason == null ? "" : reason.trim();
+        if (clean.isEmpty()) {
+            throw new IllegalArgumentException("El motivo de auditoria es obligatorio.");
+        }
+        return clean.length() > 500 ? clean.substring(0, 500) : clean;
+    }
+
+    private void registerCashAudit(
+            Tenant tenant,
+            Branch branch,
+            CashRegister cashRegister,
+            Long actorUserId,
+            String entityType,
+            Long entityId,
+            String action,
+            String reason,
+            String beforeSnapshot,
+            String afterSnapshot
+    ) {
+        AppUser actor = actorUserId == null ? null : userRepository.findById(actorUserId).orElse(null);
+        cashAuditLogRepository.save(CashAuditLog.builder()
+                .tenant(tenant)
+                .branch(branch)
+                .cashRegister(cashRegister)
+                .actorUser(actor)
+                .entityType(entityType)
+                .entityId(entityId)
+                .action(action)
+                .reason(reason)
+                .beforeSnapshot(beforeSnapshot)
+                .afterSnapshot(afterSnapshot)
+                .createdAt(tenantTimeService.now(tenant.getId()))
+                .build());
+    }
+
+    private String saleAuditSnapshot(Sale sale) {
+        if (sale == null) {
+            return null;
+        }
+        String itemSummary = sale.getItems() == null ? "[]" : sale.getItems().stream()
+                .map(item -> "{id=" + item.getId()
+                        + ",service=" + (item.getService() == null ? null : item.getService().getId())
+                        + ",product=" + (item.getProduct() == null ? null : item.getProduct().getId())
+                        + ",barber=" + (item.getBarberUser() == null ? null : item.getBarberUser().getId())
+                        + ",qty=" + item.getCantidad()
+                        + ",price=" + item.getPrecioUnitario()
+                        + ",subtotal=" + item.getSubtotal()
+                        + "}")
+                .collect(Collectors.joining(",", "[", "]"));
+        String paymentSummary = sale.getPayments() == null ? "[]" : sale.getPayments().stream()
+                .map(payment -> "{id=" + payment.getId()
+                        + ",method=" + payment.getMethod()
+                        + ",amount=" + payment.getAmount()
+                        + "}")
+                .collect(Collectors.joining(",", "[", "]"));
+        return "{saleId=" + sale.getId()
+                + ",cashRegisterId=" + (sale.getCashRegister() == null ? null : sale.getCashRegister().getId())
+                + ",customerId=" + (sale.getCustomer() == null ? null : sale.getCustomer().getId())
+                + ",method=" + sale.getMetodoPago()
+                + ",subtotal=" + sale.getSubtotal()
+                + ",discount=" + sale.getDiscount()
+                + ",total=" + sale.getTotal()
+                + ",cashReceived=" + sale.getCashReceived()
+                + ",change=" + sale.getChangeAmount()
+                + ",saleDate=" + sale.getSaleDate()
+                + ",createdAt=" + sale.getFechaCreacion()
+                + ",items=" + itemSummary
+                + ",payments=" + paymentSummary
+                + "}";
+    }
     private void requireOwnerForSensitiveSaleAction(Long tenantId, Long userId) {
         boolean canValidate = userTenantRoleRepository.existsByUserIdAndTenantIdAndRoleIn(
                 userId,

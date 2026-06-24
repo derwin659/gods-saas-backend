@@ -27,5 +27,5 @@ public interface CashSaleService {
 
     SaleResponse rejectSalePayment(Long tenantId, Long branchId, Long userId, Long saleId, String reason);
 
-    void deleteSale(Long tenantId, Long branchId, Long userId, Long saleId);
+    void deleteSale(Long tenantId, Long branchId, Long userId, Long saleId, String auditReason);
 }

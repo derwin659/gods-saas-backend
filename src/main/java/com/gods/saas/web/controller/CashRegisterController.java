@@ -110,10 +110,11 @@ public class CashRegisterController {
             @RequestAttribute("branchId") Long sessionBranchId,
             @RequestAttribute("userId") Long userId,
             @PathVariable Long movementId,
-            @RequestParam(required = false) Long branchId
+            @RequestParam(required = false) Long branchId,
+            @RequestParam(required = false) String auditReason
     ) {
         Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
-        cashRegisterService.deleteMovement(tenantId, effectiveBranchId, movementId, userId);
+        cashRegisterService.deleteMovement(tenantId, effectiveBranchId, movementId, userId, auditReason);
         return ResponseEntity.noContent().build();
     }
 }

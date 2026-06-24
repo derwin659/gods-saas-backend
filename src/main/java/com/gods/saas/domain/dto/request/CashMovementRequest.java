@@ -25,6 +25,7 @@ public class CashMovementRequest {
     private BigDecimal amount;
     private String concept;
     private String note;
+    private String auditReason;
     private Long barberUserId;
 
     /**

@@ -27,5 +27,5 @@ public interface CashRegisterService {
 
     CashMovementResponse updateMovement(Long tenantId, Long branchId, Long movementId, Long actorUserId, CashMovementRequest request);
 
-    void deleteMovement(Long tenantId, Long branchId, Long movementId, Long actorUserId);
+    void deleteMovement(Long tenantId, Long branchId, Long movementId, Long actorUserId, String auditReason);
 }

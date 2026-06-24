@@ -43,6 +43,7 @@ public class CashRegisterServiceImpl implements CashRegisterService {
     private final UserTenantRoleRepository userTenantRoleRepository;
     private final BarberPaymentRepository barberPaymentRepository;
     private final TenantPaymentMethodRepository tenantPaymentMethodRepository;
+    private final CashAuditLogRepository cashAuditLogRepository;
 
 
 
@@ -383,7 +384,7 @@ public class CashRegisterServiceImpl implements CashRegisterService {
     }
 
     @Override
-    public void deleteMovement(Long tenantId, Long branchId, Long movementId, Long actorUserId) {
+    public void deleteMovement(Long tenantId, Long branchId, Long movementId, Long actorUserId, String auditReason) {
         validateCashActor(actorUserId, tenantId);
 
         CashMovement movement = cashMovementRepository.findByIdAndTenant_Id(movementId, tenantId)
@@ -633,6 +634,59 @@ public class CashRegisterServiceImpl implements CashRegisterService {
         );
     }
 
+    private String requireAuditReason(String reason) {
+        String clean = reason == null ? "" : reason.trim();
+        if (clean.isEmpty()) {
+            throw new IllegalArgumentException("El motivo de auditoria es obligatorio.");
+        }
+        return clean.length() > 500 ? clean.substring(0, 500) : clean;
+    }
+
+    private void registerCashAudit(
+            Tenant tenant,
+            Branch branch,
+            CashRegister cashRegister,
+            Long actorUserId,
+            String entityType,
+            Long entityId,
+            String action,
+            String reason,
+            String beforeSnapshot,
+            String afterSnapshot
+    ) {
+        AppUser actor = actorUserId == null ? null : appUserRepository.findById(actorUserId).orElse(null);
+        cashAuditLogRepository.save(CashAuditLog.builder()
+                .tenant(tenant)
+                .branch(branch)
+                .cashRegister(cashRegister)
+                .actorUser(actor)
+                .entityType(entityType)
+                .entityId(entityId)
+                .action(action)
+                .reason(reason)
+                .beforeSnapshot(beforeSnapshot)
+                .afterSnapshot(afterSnapshot)
+                .createdAt(LocalDateTime.now(getZoneIdForTenant(tenant.getId())))
+                .build());
+    }
+
+    private String movementAuditSnapshot(CashMovement movement) {
+        if (movement == null) {
+            return null;
+        }
+        return "{movementId=" + movement.getId()
+                + ",cashRegisterId=" + (movement.getCashRegister() == null ? null : movement.getCashRegister().getId())
+                + ",type=" + movement.getType()
+                + ",paymentMethod=" + movement.getPaymentMethod()
+                + ",fromPaymentMethod=" + movement.getFromPaymentMethod()
+                + ",toPaymentMethod=" + movement.getToPaymentMethod()
+                + ",amount=" + movement.getAmount()
+                + ",concept=" + movement.getConcept()
+                + ",note=" + movement.getNote()
+                + ",barberUserId=" + (movement.getBarberUser() == null ? null : movement.getBarberUser().getId())
+                + ",movementDate=" + movement.getMovementDate()
+                + "}";
+    }
     private boolean isIncomeMovement(CashMovement movement) {
         return movement.getType() == CashMovementType.INCOME || movement.getType() == CashMovementType.ADJUSTMENT;
     }

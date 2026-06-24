@@ -57,7 +57,8 @@ public class CashSaleController {
             @RequestAttribute("branchId") Long sessionBranchId,
             @RequestAttribute("userId") Long userId,
             @PathVariable Long saleId,
-            @RequestParam(required = false) Long branchId
+            @RequestParam(required = false) Long branchId,
+            @RequestParam(required = false) String auditReason
     ) {
         Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
         return cashSaleService.approveSalePayment(tenantId, effectiveBranchId, userId, saleId);
@@ -129,9 +130,10 @@ public class CashSaleController {
             @RequestAttribute("branchId") Long sessionBranchId,
             @RequestAttribute("userId") Long userId,
             @PathVariable Long saleId,
-            @RequestParam(required = false) Long branchId
+            @RequestParam(required = false) Long branchId,
+            @RequestParam(required = false) String auditReason
     ) {
         Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
-        cashSaleService.deleteSale(tenantId, effectiveBranchId, userId, saleId);
+        cashSaleService.deleteSale(tenantId, effectiveBranchId, userId, saleId, auditReason);
     }
 }

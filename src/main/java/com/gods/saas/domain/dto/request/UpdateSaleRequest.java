@@ -14,6 +14,7 @@ public class UpdateSaleRequest {
     private BigDecimal total;
     private BigDecimal cashReceived;
     private BigDecimal changeAmount;
+    private String auditReason;
 
     /**
      * Opcional: permite corregir barbero y valor de los items existentes.
