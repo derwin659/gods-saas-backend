@@ -151,7 +151,11 @@ public class CashRegisterServiceImpl implements CashRegisterService {
     @Transactional(readOnly = true)
     public List<CashMovementResponse> getMovements(Long tenantId, Long branchId, Long cashRegisterId) {
         CashRegister cashRegister = getCashRegisterInBranch(tenantId, branchId, cashRegisterId);
-        return cashMovementRepository.findByCashRegister_IdOrderByMovementDateDesc(cashRegister.getId())
+        LocalDateTime[] range = cashRegisterBusinessRange(cashRegister);
+        return cashMovementRepository
+                .findByTenant_IdAndBranch_IdAndMovementDateGreaterThanEqualAndMovementDateLessThanOrderByMovementDateDesc(
+                        tenantId, branchId, range[0], range[1]
+                )
                 .stream()
                 .map(this::mapMovementResponse)
                 .toList();
@@ -172,6 +176,9 @@ public class CashRegisterServiceImpl implements CashRegisterService {
         validateCashActor(actorUserId, tenantId);
 
         CashRegister cashRegister = getOpenCashRegisterInBranch(tenantId, branchId, cashRegisterId);
+        CashRegister movementCashRegister = resolveCashRegisterForMovementDate(
+                tenantId, branchId, cashRegister, movementDate
+        );
 
         AppUser actor = appUserRepository.findById(actorUserId)
                 .orElseThrow(() -> new EntityNotFoundException("Usuario autenticado no encontrado."));
@@ -196,15 +203,15 @@ public class CashRegisterServiceImpl implements CashRegisterService {
             fromPaymentMethod = request.getFromPaymentMethod();
             toPaymentMethod = request.getToPaymentMethod();
             validatePaymentTransfer(fromPaymentMethod, toPaymentMethod);
-            validateAvailableBalanceForTransfer(cashRegister, fromPaymentMethod, amount, null);
+            validateAvailableBalanceForTransfer(movementCashRegister, fromPaymentMethod, amount, null);
             paymentMethod = toPaymentMethod;
             barberUser = null;
         }
 
         CashMovement movement = CashMovement.builder()
-                .tenant(cashRegister.getTenant())
-                .branch(cashRegister.getBranch())
-                .cashRegister(cashRegister)
+                .tenant(movementCashRegister.getTenant())
+                .branch(movementCashRegister.getBranch())
+                .cashRegister(movementCashRegister)
                 .user(actor)
                 .barberUser(barberUser)
                 .type(type)
@@ -240,6 +247,26 @@ public class CashRegisterServiceImpl implements CashRegisterService {
         return requestedDate.atTime(now.toLocalTime());
     }
 
+    private CashRegister resolveCashRegisterForMovementDate(
+            Long tenantId,
+            Long branchId,
+            CashRegister fallback,
+            LocalDateTime movementDate
+    ) {
+        if (movementDate == null) {
+            return fallback;
+        }
+
+        LocalDate day = movementDate.toLocalDate();
+        LocalDateTime start = day.atStartOfDay();
+        LocalDateTime end = day.plusDays(1).atStartOfDay();
+
+        return cashRegisterRepository
+                .findFirstByTenant_IdAndBranch_IdAndOpenedAtGreaterThanEqualAndOpenedAtLessThanOrderByOpenedAtDesc(
+                        tenantId, branchId, start, end
+                )
+                .orElse(fallback);
+    }
     private PaymentMethod resolvePaymentMethod(CashMovementType type, PaymentMethod paymentMethod) {
         if (type == CashMovementType.PAYMENT_METHOD_TRANSFER) {
             return null;
@@ -306,11 +333,6 @@ public class CashRegisterServiceImpl implements CashRegisterService {
 
         CashRegister cashRegister = movement.getCashRegister();
         validateCashRegisterBranch(branchId, cashRegister);
-
-        if (cashRegister.getStatus() != CashRegisterStatus.OPEN) {
-            throw new IllegalStateException("Solo puedes editar movimientos de una caja abierta.");
-        }
-
         BigDecimal amount = safe(request.getAmount());
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalStateException("El monto debe ser mayor a cero.");
@@ -347,7 +369,14 @@ public class CashRegisterServiceImpl implements CashRegisterService {
         movement.setBarberUser(barberUser);
 
         if (request.getMovementDate() != null) {
-            movement.setMovementDate(resolveMovementDate(request, now, zoneId));
+            LocalDateTime movementDate = resolveMovementDate(request, now, zoneId);
+            CashRegister movementCashRegister = resolveCashRegisterForMovementDate(
+                    tenantId, branchId, cashRegister, movementDate
+            );
+            movement.setCashRegister(movementCashRegister);
+            movement.setTenant(movementCashRegister.getTenant());
+            movement.setBranch(movementCashRegister.getBranch());
+            movement.setMovementDate(movementDate);
         }
 
         return mapMovementResponse(cashMovementRepository.save(movement));
@@ -362,11 +391,6 @@ public class CashRegisterServiceImpl implements CashRegisterService {
 
         CashRegister cashRegister = movement.getCashRegister();
         validateCashRegisterBranch(branchId, cashRegister);
-
-        if (cashRegister.getStatus() != CashRegisterStatus.OPEN) {
-            throw new IllegalStateException("Solo puedes eliminar movimientos de una caja abierta.");
-        }
-
         barberPaymentRepository.findByCashMovement_Id(movementId)
                 .ifPresent(barberPaymentRepository::delete);
 
@@ -496,10 +520,13 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 )
         );
 
-        List<CashMovement> movements = cashMovementRepository.findByCashRegister_IdOrderByMovementDateDesc(cashRegister.getId());
-        List<CashMovement> movementsInBusinessRange = movements.stream()
-                .filter(movement -> isMovementInRange(movement, start, end))
-                .toList();
+        List<CashMovement> movementsInBusinessRange = cashMovementRepository
+                .findByTenant_IdAndBranch_IdAndMovementDateGreaterThanEqualAndMovementDateLessThanOrderByMovementDateDesc(
+                        cashRegister.getTenant().getId(),
+                        cashRegister.getBranch().getId(),
+                        start,
+                        end
+                );
 
         /*
          * Importante:

@@ -25,6 +25,12 @@ public interface CashRegisterRepository extends JpaRepository<CashRegister, Long
             LocalDateTime to
     );
 
+    Optional<CashRegister> findFirstByTenant_IdAndBranch_IdAndOpenedAtGreaterThanEqualAndOpenedAtLessThanOrderByOpenedAtDesc(
+            Long tenantId,
+            Long branchId,
+            LocalDateTime from,
+            LocalDateTime to
+    );
     @Query("""
         select distinct cr
         from CashRegister cr

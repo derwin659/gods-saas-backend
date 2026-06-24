@@ -219,6 +219,9 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
         ZoneId zoneId = getZoneIdForTenant(tenantId);
         LocalDateTime now = LocalDateTime.now(zoneId);
         LocalDateTime movementDate = resolveMovementDate(request.getMovementDate(), now, zoneId);
+        CashRegister movementCashRegister = resolveCashRegisterForMovementDate(
+                tenantId, branchId, cashRegister, movementDate
+        );
 
         BigDecimal remainingAfterAll = preview.getPendingAmount().subtract(amountPaid).setScale(2, RoundingMode.HALF_UP);
         BarberPaymentStatus finalStatus = remainingAfterAll.compareTo(BigDecimal.ZERO) == 0
@@ -238,9 +241,9 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                     : concept;
 
             CashMovement movement = CashMovement.builder()
-                    .tenant(cashRegister.getTenant())
-                    .branch(cashRegister.getBranch())
-                    .cashRegister(cashRegister)
+                    .tenant(movementCashRegister.getTenant())
+                    .branch(movementCashRegister.getBranch())
+                    .cashRegister(movementCashRegister)
                     .user(actor)
                     .barberUser(barber)
                     .type(CashMovementType.PAYMENT_BARBER)
@@ -264,9 +267,9 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                     : BarberPaymentStatus.PARTIAL;
 
             BarberPayment entity = BarberPayment.builder()
-                    .tenant(cashRegister.getTenant())
-                    .branch(cashRegister.getBranch())
-                    .cashRegister(cashRegister)
+                    .tenant(movementCashRegister.getTenant())
+                    .branch(movementCashRegister.getBranch())
+                    .cashRegister(movementCashRegister)
                     .barberUser(barber)
                     .registeredByUser(actor)
                     .paymentMode(BarberPaymentMode.valueOf(preview.getPaymentMode()))
@@ -378,6 +381,26 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
     }
 
 
+    private CashRegister resolveCashRegisterForMovementDate(
+            Long tenantId,
+            Long branchId,
+            CashRegister fallback,
+            LocalDateTime movementDate
+    ) {
+        if (movementDate == null) {
+            return fallback;
+        }
+
+        LocalDate day = movementDate.toLocalDate();
+        LocalDateTime start = day.atStartOfDay();
+        LocalDateTime end = day.plusDays(1).atStartOfDay();
+
+        return cashRegisterRepository
+                .findFirstByTenant_IdAndBranch_IdAndOpenedAtGreaterThanEqualAndOpenedAtLessThanOrderByOpenedAtDesc(
+                        tenantId, branchId, start, end
+                )
+                .orElse(fallback);
+    }
     private LocalDateTime resolveMovementDate(LocalDate requestedDate, LocalDateTime now, ZoneId zoneId) {
         if (requestedDate == null) {
             return now;

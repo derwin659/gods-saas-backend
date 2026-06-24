@@ -17,6 +17,13 @@ public interface CashMovementRepository extends JpaRepository<CashMovement, Long
 
     List<CashMovement> findByCashRegister_IdOrderByMovementDateDesc(Long cashRegisterId);
 
+    List<CashMovement> findByTenant_IdAndBranch_IdAndMovementDateGreaterThanEqualAndMovementDateLessThanOrderByMovementDateDesc(
+            Long tenantId,
+            Long branchId,
+            java.time.LocalDateTime start,
+            java.time.LocalDateTime end
+    );
+
 
     Optional<CashMovement> findByIdAndTenant_Id(Long movementId, Long tenantId);
 

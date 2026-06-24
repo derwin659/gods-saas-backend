@@ -143,6 +143,10 @@ public class CashSaleServiceImpl implements CashSaleService {
                 .orElseThrow(() -> new EntityNotFoundException("Venta creada no encontrada"));
 
         savedSale.setSaleDate(effectiveSaleDate);
+        CashRegister effectiveCashRegister = resolveCashRegisterForSaleDate(
+                tenantId, branchId, savedSale.getCashRegister(), effectiveSaleDate
+        );
+        savedSale.setCashRegister(effectiveCashRegister);
         savedSale = saleRepository.save(savedSale);
 
         if (appointment != null) {
@@ -493,6 +497,26 @@ public class CashSaleServiceImpl implements CashSaleService {
         return "CASH".equals(code) || "EFECTIVO".equals(code);
     }
 
+    private CashRegister resolveCashRegisterForSaleDate(
+            Long tenantId,
+            Long branchId,
+            CashRegister fallback,
+            LocalDateTime saleDate
+    ) {
+        if (saleDate == null) {
+            return fallback;
+        }
+
+        LocalDate day = saleDate.toLocalDate();
+        LocalDateTime start = day.atStartOfDay();
+        LocalDateTime end = day.plusDays(1).atStartOfDay();
+
+        return cashRegisterRepository
+                .findFirstByTenant_IdAndBranch_IdAndOpenedAtGreaterThanEqualAndOpenedAtLessThanOrderByOpenedAtDesc(
+                        tenantId, branchId, start, end
+                )
+                .orElse(fallback);
+    }
     private LocalDateTime resolveSaleDate(Long tenantId, CreateCashSaleRequest request) {
         LocalDateTime now = tenantTimeService.now(tenantId);
 
