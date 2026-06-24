@@ -24,7 +24,7 @@ public class UserTenantRoleService {
         Tenant tenant = tenantRepo.findById(tenantId)
                 .orElseThrow(() -> new RuntimeException("Tenant no encontrado"));
 
-        repo.findByUserIdAndTenantId(userId, tenantId).ifPresent(r -> {
+        repo.findFirstByUserIdAndTenantIdOrderByIdAsc(userId, tenantId).ifPresent(r -> {
             throw new RuntimeException("El usuario ya tiene un rol en esta barbería");
         });
 

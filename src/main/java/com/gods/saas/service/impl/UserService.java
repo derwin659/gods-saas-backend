@@ -207,7 +207,7 @@ public class UserService {
         user.setFechaActualizacion(LocalDateTime.now());
         AppUser saved = userRepository.save(user);
 
-        UserTenantRole utr = userTenantRoleRepository.findByUser_IdAndTenant_Id(userId, tenantId).orElse(null);
+        UserTenantRole utr = userTenantRoleRepository.findFirstByUser_IdAndTenant_IdOrderByIdAsc(userId, tenantId).orElse(null);
         if (utr != null) {
             utr.setRole(RoleType.valueOf(newRole));
             if (branchId != null) utr.setBranch(branch);
@@ -435,7 +435,7 @@ public class UserService {
         AppUser saved = userRepository.save(user);
 
         UserTenantRole utr = userTenantRoleRepository
-                .findByUser_IdAndTenant_Id(userId, tenantId)
+                .findFirstByUser_IdAndTenant_IdOrderByIdAsc(userId, tenantId)
                 .orElse(null);
 
         if (utr == null) {

@@ -133,7 +133,7 @@ public class UserController {
         RoleType targetRole = RoleType.valueOf(targetRoleRaw);
 
         UserTenantRole userTenantRole = userTenantRoleRepository
-                .findByUser_IdAndTenant_Id(targetUser.getId(), tenantId)
+                .findFirstByUser_IdAndTenant_IdOrderByIdAsc(targetUser.getId(), tenantId)
                 .orElseThrow(() -> new RuntimeException("El usuario no tiene rol asignado en este tenant."));
 
         userTenantRole.setRole(targetRole);

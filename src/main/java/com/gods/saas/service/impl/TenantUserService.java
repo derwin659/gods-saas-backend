@@ -57,7 +57,7 @@ public class TenantUserService {
                 });
 
         // validar que no esté ya asignado a este tenant
-        utrRepo.findByUserIdAndTenantId(user.getId(), tenantId)
+        utrRepo.findFirstByUserIdAndTenantIdOrderByIdAsc(user.getId(), tenantId)
                 .ifPresent(x -> { throw new ResponseStatusException(CONFLICT, "El usuario ya tiene acceso a este tenant"); });
 
         UserTenantRole utr = new UserTenantRole();
@@ -82,7 +82,7 @@ public class TenantUserService {
         Tenant tenant = tenantRepo.findById(tenantId)
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Tenant no encontrado"));
 
-        UserTenantRole utr = utrRepo.findByUserIdAndTenantId(userId, tenantId)
+        UserTenantRole utr = utrRepo.findFirstByUserIdAndTenantIdOrderByIdAsc(userId, tenantId)
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "El usuario no pertenece a este tenant"));
 
         AppUser user = utr.getUser();
@@ -111,7 +111,7 @@ public class TenantUserService {
 
     @Transactional
     public void removeUserFromTenant(Long tenantId, Long userId) {
-        UserTenantRole utr = utrRepo.findByUserIdAndTenantId(userId, tenantId)
+        UserTenantRole utr = utrRepo.findFirstByUserIdAndTenantIdOrderByIdAsc(userId, tenantId)
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "El usuario no pertenece a este tenant"));
         utrRepo.delete(utr); // elimina relación (no borra AppUser)
     }
@@ -167,7 +167,7 @@ public class TenantUserService {
         }
 
         public void updateUser(Long tenantId, Long userId, UpdateUserRequest req,  String photoUrl) {
-            UserTenantRole utr = utrRepo.findByUserIdAndTenantId(userId, tenantId)
+            UserTenantRole utr = utrRepo.findFirstByUserIdAndTenantIdOrderByIdAsc(userId, tenantId)
                     .orElseThrow(() -> new RuntimeException("Usuario no pertenece al tenant"));
 
             AppUser user = utr.getUser();
@@ -182,7 +182,7 @@ public class TenantUserService {
         }
 
         public void toggleUserStatus(Long tenantId, Long userId) {
-            UserTenantRole utr = utrRepo.findByUserIdAndTenantId(userId, tenantId)
+            UserTenantRole utr = utrRepo.findFirstByUserIdAndTenantIdOrderByIdAsc(userId, tenantId)
                     .orElseThrow(() -> new RuntimeException("Usuario no pertenece al tenant"));
 
             AppUser user = utr.getUser();
@@ -191,7 +191,7 @@ public class TenantUserService {
         }
 
         public void deleteUser(Long tenantId, Long userId) {
-            UserTenantRole utr = utrRepo.findByUserIdAndTenantId(userId, tenantId)
+            UserTenantRole utr = utrRepo.findFirstByUserIdAndTenantIdOrderByIdAsc(userId, tenantId)
                     .orElseThrow(() -> new RuntimeException("Usuario no pertenece al tenant"));
 
             utrRepo.delete(utr);
