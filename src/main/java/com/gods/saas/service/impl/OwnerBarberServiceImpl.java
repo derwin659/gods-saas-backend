@@ -124,9 +124,34 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
     }
 
     private void replaceBarberBranchRoles(AppUser user, Tenant tenantRef, List<Branch> branches) {
-        userTenantRoleRepository.deleteByUser_IdAndTenant_IdAndRole(user.getId(), tenantRef.getId(), RoleType.BARBER);
+        List<Long> selectedBranchIds = branches.stream()
+                .map(Branch::getId)
+                .filter(id -> id != null)
+                .distinct()
+                .toList();
+
+        List<UserTenantRole> existingRoles = userTenantRoleRepository
+                .findByUserIdAndTenantIdAndRoleWithBranch(user.getId(), tenantRef.getId(), RoleType.BARBER);
+
+        for (UserTenantRole existingRole : existingRoles) {
+            Long existingBranchId = existingRole.getBranch() != null ? existingRole.getBranch().getId() : null;
+            if (existingBranchId == null || !selectedBranchIds.contains(existingBranchId)) {
+                userTenantRoleRepository.delete(existingRole);
+            }
+        }
+
+        List<Long> existingBranchIds = existingRoles.stream()
+                .map(UserTenantRole::getBranch)
+                .filter(branch -> branch != null && branch.getId() != null)
+                .map(Branch::getId)
+                .distinct()
+                .toList();
 
         for (Branch branch : branches) {
+            if (existingBranchIds.contains(branch.getId())) {
+                continue;
+            }
+
             UserTenantRole role = UserTenantRole.builder()
                     .user(user)
                     .tenant(tenantRef)
