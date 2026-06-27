@@ -18,6 +18,7 @@ public interface CashAuditLogRepository extends JpaRepository<CashAuditLog, Long
         where log.tenant.id = :tenantId
           and log.branch.id = :branchId
           and (:cashRegisterId is null or log.cashRegister.id = :cashRegisterId)
+          and (:actorUserId is null or log.actorUser.id = :actorUserId)
           and log.createdAt >= :from
           and log.createdAt < :to
         order by log.createdAt desc, log.id desc
@@ -26,6 +27,7 @@ public interface CashAuditLogRepository extends JpaRepository<CashAuditLog, Long
             @Param("tenantId") Long tenantId,
             @Param("branchId") Long branchId,
             @Param("cashRegisterId") Long cashRegisterId,
+            @Param("actorUserId") Long actorUserId,
             @Param("from") LocalDateTime from,
             @Param("to") LocalDateTime to
     );

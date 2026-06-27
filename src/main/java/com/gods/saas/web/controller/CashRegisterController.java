@@ -74,11 +74,13 @@ public class CashRegisterController {
             @RequestAttribute("branchId") Long sessionBranchId,
             @RequestParam(required = false) Long branchId,
             @RequestParam(required = false) Long cashRegisterId,
+
+            @RequestParam(required = false) Long actorUserId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
-        return cashRegisterService.audit(tenantId, effectiveBranchId, cashRegisterId, from, to);
+        return cashRegisterService.audit(tenantId, effectiveBranchId, cashRegisterId, actorUserId, from, to);
     }
     @GetMapping("/{cashRegisterId}/movements")
     public List<CashMovementResponse> movements(

@@ -151,12 +151,12 @@ public class CashRegisterServiceImpl implements CashRegisterService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<CashAuditLogResponse> audit(Long tenantId, Long branchId, Long cashRegisterId, LocalDate from, LocalDate to) {
+    public List<CashAuditLogResponse> audit(Long tenantId, Long branchId, Long cashRegisterId, Long actorUserId, LocalDate from, LocalDate to) {
         LocalDateTime fromDateTime = from.atStartOfDay();
         LocalDateTime toDateTime = to.plusDays(1).atStartOfDay();
 
         return cashAuditLogRepository
-                .findByBranchAndRange(tenantId, branchId, cashRegisterId, fromDateTime, toDateTime)
+                .findByBranchAndRange(tenantId, branchId, cashRegisterId, actorUserId, fromDateTime, toDateTime)
                 .stream()
                 .map(this::mapAuditResponse)
                 .toList();

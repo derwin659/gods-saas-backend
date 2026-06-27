@@ -20,7 +20,7 @@ public interface CashRegisterService {
 
     List<CashRegisterResponse> history(Long tenantId, Long branchId, LocalDate from, LocalDate to);
 
-    List<CashAuditLogResponse> audit(Long tenantId, Long branchId, Long cashRegisterId, LocalDate from, LocalDate to);
+    List<CashAuditLogResponse> audit(Long tenantId, Long branchId, Long cashRegisterId, Long actorUserId, LocalDate from, LocalDate to);
 
 
 
