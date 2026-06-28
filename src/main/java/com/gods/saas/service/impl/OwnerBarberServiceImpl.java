@@ -41,6 +41,7 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
     private final PasswordEncoder passwordEncoder;
     private final SubscriptionService subscriptionService;
     private final CloudinaryStorageService cloudinaryStorageService;
+    private final GeneralAuditService generalAuditService;
 
     @Override
     public List<BarberResponse> listBarbers(Long tenantId, Long branchId) {
@@ -223,13 +224,18 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
 
     @Override
     @Transactional
-    public BarberResponse updateBarber(Long tenantId, Long barberId, BarberUpdateRequest request) {
+    public BarberResponse updateBarber(Long tenantId, Long actorUserId, String actorRole, Long barberId, BarberUpdateRequest request) {
         AppUser barber = appUserRepository.findByIdAndTenant_Id(barberId, tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("Barbero no encontrado."));
 
         if (!"BARBER".equalsIgnoreCase(barber.getRol())) {
             throw new BusinessException("El usuario indicado no es un barbero");
         }
+
+        List<Long> previousBranchIds = userTenantRoleRepository
+                .findByUserIdAndTenantIdAndRoleWithBranch(barberId, tenantId, RoleType.BARBER)
+                .stream().map(UserTenantRole::getBranch).filter(value -> value != null)
+                .map(Branch::getId).filter(value -> value != null).distinct().sorted().toList();
 
         String email = normalizeRequired(request.getEmail(), "El email es obligatorio").toLowerCase();
 
@@ -273,6 +279,15 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
         Tenant tenantRef = new Tenant();
         tenantRef.setId(tenantId);
         replaceBarberBranchRoles(saved, tenantRef, assignedBranches);
+
+        List<Long> newBranchIds = assignedBranches.stream().map(Branch::getId).distinct().sorted().toList();
+        if (!previousBranchIds.equals(newBranchIds)) {
+            generalAuditService.record(
+                    tenantId, branch.getId(), actorUserId, actorRole,
+                    "BARBER_BRANCH_ASSIGNMENT", barberId, "UPDATE",
+                    "Sedes asignadas al profesional actualizadas", previousBranchIds, newBranchIds
+            );
+        }
 
         return toResponse(saved, tenantId);
     }

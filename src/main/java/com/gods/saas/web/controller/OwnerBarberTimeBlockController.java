@@ -28,8 +28,9 @@ public class OwnerBarberTimeBlockController {
         Map<String, Object> claims = getClaims(authHeader);
         Long tenantId = ((Number) claims.get("tenantId")).longValue();
         Long branchId = resolveBranchId(claims, branchIdParam);
+        Long actorUserId = ((Number) claims.get("userId")).longValue();
 
-        ownerBarberTimeBlockService.createBlock(tenantId, branchId, request);
+        ownerBarberTimeBlockService.createBlock(tenantId, branchId, actorUserId, request);
 
         return ResponseEntity.ok(Map.of("message", "Bloqueo creado correctamente"));
     }
@@ -58,8 +59,9 @@ public class OwnerBarberTimeBlockController {
         Map<String, Object> claims = getClaims(authHeader);
         Long tenantId = ((Number) claims.get("tenantId")).longValue();
         Long branchId = resolveBranchId(claims, branchIdParam);
+        Long actorUserId = ((Number) claims.get("userId")).longValue();
 
-        ownerBarberTimeBlockService.deleteBlock(tenantId, branchId, blockId);
+        ownerBarberTimeBlockService.deleteBlock(tenantId, branchId, actorUserId, blockId);
 
         return ResponseEntity.ok(Map.of("message", "Bloqueo eliminado correctamente"));
     }

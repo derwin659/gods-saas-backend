@@ -26,9 +26,10 @@ public class OwnerBarberTimeBlockService {
     private final AppUserRepository appUserRepository;
     private final BranchRepository branchRepository;
     private final UserTenantRoleRepository userTenantRoleRepository;
+    private final GeneralAuditService generalAuditService;
 
     @Transactional
-    public void createBlock(Long tenantId, Long branchId, CreateBarberTimeBlockRequest request) {
+    public void createBlock(Long tenantId, Long branchId, Long actorUserId, CreateBarberTimeBlockRequest request) {
         if (request.getBarberUserId() == null) {
             throw new RuntimeException("El barbero es obligatorio");
         }
@@ -72,7 +73,11 @@ public class OwnerBarberTimeBlockService {
                 .updatedAt(LocalDateTime.now())
                 .build();
 
-        barberTimeBlockRepository.save(block);
+        BarberTimeBlock saved = barberTimeBlockRepository.save(block);
+        generalAuditService.record(
+                tenantId, branchId, actorUserId, null, "BARBER_TIME_BLOCK", saved.getId(),
+                "CREATE", request.getReason(), null, toResponse(saved)
+        );
     }
 
     @Transactional(readOnly = true)
@@ -111,7 +116,7 @@ public class OwnerBarberTimeBlockService {
     }
 
     @Transactional
-    public void deleteBlock(Long tenantId, Long branchId, Long blockId) {
+    public void deleteBlock(Long tenantId, Long branchId, Long actorUserId, Long blockId) {
         BarberTimeBlock block = barberTimeBlockRepository.findById(blockId)
                 .orElseThrow(() -> new RuntimeException("Bloqueo no encontrado"));
 
@@ -123,6 +128,23 @@ public class OwnerBarberTimeBlockService {
             throw new RuntimeException("El bloqueo no pertenece a la sucursal");
         }
 
+        BarberTimeBlockResponse before = toResponse(block);
         barberTimeBlockRepository.delete(block);
+        generalAuditService.record(
+                tenantId, branchId, actorUserId, null, "BARBER_TIME_BLOCK", blockId,
+                "DELETE", block.getReason(), before, null
+        );
+    }
+
+    private BarberTimeBlockResponse toResponse(BarberTimeBlock block) {
+        return BarberTimeBlockResponse.builder()
+                .id(block.getId())
+                .barberUserId(block.getBarber().getId())
+                .blockDate(block.getBlockDate().toString())
+                .startTime(block.getStartTime().toString())
+                .endTime(block.getEndTime().toString())
+                .allDay(block.getAllDay())
+                .reason(block.getReason())
+                .build();
     }
 }

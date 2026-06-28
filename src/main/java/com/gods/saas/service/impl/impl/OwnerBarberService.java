@@ -14,7 +14,7 @@ public interface OwnerBarberService {
 
     BarberResponse createBarber(Long tenantId, BarberCreateRequest request);
 
-    BarberResponse updateBarber(Long tenantId, Long barberId, BarberUpdateRequest request);
+    BarberResponse updateBarber(Long tenantId, Long actorUserId, String actorRole, Long barberId, BarberUpdateRequest request);
 
     BarberResponse updateStatus(Long tenantId, Long barberId, BarberStatusRequest request);
 

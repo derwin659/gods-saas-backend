@@ -30,6 +30,7 @@ public class AdminPermissionService {
 
     private final AdminPermissionRepository adminPermissionRepository;
     private final AppUserRepository appUserRepository;
+    private final GeneralAuditService generalAuditService;
 
     public AdminPermissionsBundleResponse getMyPermissions() {
         Long tenantId = TenantContext.getTenantId();
@@ -147,6 +148,12 @@ public class AdminPermissionService {
                         adminUserId
                 );
 
+        List<String> previousPermissions = existingPermissions.stream()
+                .filter(p -> Boolean.TRUE.equals(p.getEnabled()))
+                .map(AdminPermission::getPermissionKey)
+                .sorted()
+                .toList();
+
         // Primero desactivamos todos.
         for (AdminPermission permission : existingPermissions) {
             permission.setEnabled(false);
@@ -178,6 +185,19 @@ public class AdminPermissionService {
 
             adminPermissionRepository.save(permission);
         }
+
+        generalAuditService.record(
+                tenantId,
+                admin.getBranch() == null ? null : admin.getBranch().getId(),
+                getAuthenticatedUserId(),
+                getAuthenticatedRole(),
+                "ADMIN_PERMISSION",
+                adminUserId,
+                "UPDATE",
+                "Permisos actualizados por el owner",
+                previousPermissions,
+                cleanPermissions.stream().sorted().toList()
+        );
 
         return getPermissionsForAdmin(adminUserId);
     }
@@ -247,6 +267,10 @@ public class AdminPermissionService {
         if (!allowed) {
             throw new AccessDeniedException("No tienes permiso para esta acción");
         }
+    }
+
+    public void requireOwner() {
+        validarOwner();
     }
 
     private void validarOwner() {

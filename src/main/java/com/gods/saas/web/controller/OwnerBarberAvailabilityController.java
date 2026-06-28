@@ -28,8 +28,9 @@ public class OwnerBarberAvailabilityController {
         Map<String, Object> claims = getClaims(authHeader);
         Long tenantId = extractRequiredLong(claims, "tenantId");
         Long branchId = resolveBranchId(claims, branchIdParam);
+        Long actorUserId = extractRequiredLong(claims, "userId");
 
-        ownerBarberAvailabilityService.saveAvailability(tenantId, branchId, request);
+        ownerBarberAvailabilityService.saveAvailability(tenantId, branchId, actorUserId, request);
 
         return ResponseEntity.ok(Map.of("message", "Horario guardado correctamente"));
     }

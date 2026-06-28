@@ -33,6 +33,7 @@ public class BarberMyScheduleService {
     private final AppUserRepository appUserRepository;
     private final BranchRepository branchRepository;
     private final UserTenantRoleRepository userTenantRoleRepository;
+    private final GeneralAuditService generalAuditService;
 
     @Transactional(readOnly = true)
     public List<BarberAvailabilityDayResponse> getMyAvailability(
@@ -98,6 +99,10 @@ public class BarberMyScheduleService {
             }
         }
 
+        List<BarberAvailabilityDayResponse> previousAvailability = getMyAvailability(
+                tenantId, branchId, barberUserId
+        );
+
         barberAvailabilityRepository.deleteByTenant_IdAndBranch_IdAndBarber_Id(
                 tenantId, branchId, barberUserId
         );
@@ -119,6 +124,11 @@ public class BarberMyScheduleService {
 
             barberAvailabilityRepository.save(availability);
         }
+
+        generalAuditService.record(
+                tenantId, branchId, barberUserId, "BARBER", "BARBER_SCHEDULE", barberUserId,
+                "UPDATE", "Horario actualizado por el profesional", previousAvailability, request.getDays()
+        );
     }
 
     @Transactional(readOnly = true)
@@ -194,7 +204,11 @@ public class BarberMyScheduleService {
                 .updatedAt(LocalDateTime.now())
                 .build();
 
-        barberTimeBlockRepository.save(block);
+        BarberTimeBlock saved = barberTimeBlockRepository.save(block);
+        generalAuditService.record(
+                tenantId, branchId, barberUserId, "BARBER", "BARBER_TIME_BLOCK", saved.getId(),
+                "CREATE", request.getReason(), null, toBlockResponse(saved)
+        );
     }
 
     @Transactional
@@ -224,7 +238,20 @@ public class BarberMyScheduleService {
             throw new RuntimeException("No puedes eliminar un bloqueo de otro barbero");
         }
 
+        BarberTimeBlockResponse before = toBlockResponse(block);
         barberTimeBlockRepository.delete(block);
+        generalAuditService.record(
+                tenantId, branchId, barberUserId, "BARBER", "BARBER_TIME_BLOCK", blockId,
+                "DELETE", block.getReason(), before, null
+        );
+    }
+
+    private BarberTimeBlockResponse toBlockResponse(BarberTimeBlock block) {
+        return BarberTimeBlockResponse.builder()
+                .id(block.getId()).barberUserId(block.getBarber().getId())
+                .blockDate(block.getBlockDate().toString())
+                .startTime(block.getStartTime().toString()).endTime(block.getEndTime().toString())
+                .allDay(block.getAllDay()).reason(block.getReason()).build();
     }
 
     private void validateBarberBelongsToBranch(Long tenantId, Long branchId, Long barberUserId) {

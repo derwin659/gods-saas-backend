@@ -59,7 +59,9 @@ public class OwnerBarberController {
         SessionData session = extractSession(request);
         checkConfigBarbers(session);
 
-        return ownerBarberService.updateBarber(session.tenantId(), barberId, requestBody);
+        return ownerBarberService.updateBarber(
+                session.tenantId(), session.userId(), session.role(), barberId, requestBody
+        );
     }
 
     @PatchMapping("/{barberId}/status")

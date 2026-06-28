@@ -27,9 +27,10 @@ public class OwnerBarberAvailabilityService {
     private final AppUserRepository appUserRepository;
     private final BranchRepository branchRepository;
     private final UserTenantRoleRepository userTenantRoleRepository;
+    private final GeneralAuditService generalAuditService;
 
     @Transactional
-    public void saveAvailability(Long tenantId, Long branchId, SaveBarberAvailabilityRequest request) {
+    public void saveAvailability(Long tenantId, Long branchId, Long actorUserId, SaveBarberAvailabilityRequest request) {
         if (request.getBarberUserId() == null) {
             throw new RuntimeException("El barbero es obligatorio");
         }
@@ -70,6 +71,8 @@ public class OwnerBarberAvailabilityService {
             }
         }
 
+        List<BarberAvailabilityDayResponse> previousAvailability = getAvailability(tenantId, branchId, barber.getId());
+
         barberAvailabilityRepository.deleteByTenant_IdAndBranch_IdAndBarber_Id(
                 tenantId, branchId, barber.getId()
         );
@@ -91,6 +94,11 @@ public class OwnerBarberAvailabilityService {
 
             barberAvailabilityRepository.save(availability);
         }
+
+        generalAuditService.record(
+                tenantId, branchId, actorUserId, null, "BARBER_SCHEDULE", barber.getId(),
+                "UPDATE", "Horario actualizado", previousAvailability, request.getDays()
+        );
     }
 
     @Transactional(readOnly = true)
