@@ -29,6 +29,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.LinkedHashSet;
+import java.util.Objects;
 import java.util.stream.Collectors;
 import com.google.i18n.phonenumbers.NumberParseException;
 import com.google.i18n.phonenumbers.PhoneNumberUtil;
@@ -72,6 +73,7 @@ public class CashSaleServiceImpl implements CashSaleService {
     private final LoyaltyAccountRepository loyaltyAccountRepository;
     private final TenantSettingsRepository tenantSettingsRepository;
     private final CashAuditLogRepository cashAuditLogRepository;
+    private final GeneralAuditService generalAuditService;
 
     @Override
     public SaleResponse createCashSale(Long tenantId, Long branchId, Long userId, CreateCashSaleRequest request) {
@@ -315,6 +317,7 @@ public class CashSaleServiceImpl implements CashSaleService {
 
         String auditReason = requireAuditReason(request.getAuditReason());
         String beforeSnapshot = saleAuditSnapshot(sale);
+        String beforeBarberSnapshot = saleBarberSnapshot(sale);
 
         if (request.getCustomerId() != null) {
             Customer customer = customerRepository.findById(request.getCustomerId())
@@ -359,6 +362,7 @@ public class CashSaleServiceImpl implements CashSaleService {
         }
 
         Sale saved = saleRepository.save(sale);
+        String afterBarberSnapshot = saleBarberSnapshot(saved);
         registerCashAudit(
                 saved.getTenant(),
                 saved.getBranch(),
@@ -371,6 +375,20 @@ public class CashSaleServiceImpl implements CashSaleService {
                 beforeSnapshot,
                 saleAuditSnapshot(saved)
         );
+        if (!Objects.equals(beforeBarberSnapshot, afterBarberSnapshot)) {
+            generalAuditService.record(
+                    tenantId,
+                    branchId,
+                    userId,
+                    null,
+                    "SALE_BARBER_ASSIGNMENT",
+                    saved.getId(),
+                    "UPDATE",
+                    auditReason,
+                    beforeBarberSnapshot,
+                    afterBarberSnapshot
+            );
+        }
         return mapResponse(saved, 0);
     }
 
@@ -1543,6 +1561,19 @@ public class CashSaleServiceImpl implements CashSaleService {
                 + ",payments=" + paymentSummary
                 + "}";
     }
+    private String saleBarberSnapshot(Sale sale) {
+        if (sale == null || sale.getItems() == null) {
+            return "[]";
+        }
+        return sale.getItems().stream()
+                .map(item -> "{itemId=" + item.getId()
+                        + ",barberUserId=" + (item.getBarberUser() == null ? null : item.getBarberUser().getId())
+                        + ",barberName=" + (item.getBarberUser() == null ? null : item.getBarberUser().getNombre())
+                        + "}")
+                .sorted()
+                .collect(Collectors.joining(",", "[", "]"));
+    }
+
     private void requireOwnerForSensitiveSaleAction(Long tenantId, Long userId) {
         boolean canValidate = userTenantRoleRepository.existsByUserIdAndTenantIdAndRoleIn(
                 userId,
