@@ -1,5 +1,7 @@
 package com.gods.saas.web.controller;
 
+import com.gods.saas.security.BranchAccessGuard;
+
 import com.gods.saas.domain.dto.response.*;
 import com.gods.saas.service.impl.AdminPermissionService;
 import com.gods.saas.service.impl.impl.OwnerReportsService;
@@ -20,6 +22,7 @@ public class OwnerReportsController {
 
     private final OwnerReportsService ownerReportsService;
     private final AdminPermissionService adminPermissionService;
+    private final BranchAccessGuard branchAccessGuard;
 
     @GetMapping("/profitability")
     public ProfitabilityReportResponse getProfitabilityReport(
@@ -65,6 +68,7 @@ public class OwnerReportsController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         adminPermissionService.checkPermission("REPORTS_ACCESS");
+        requireOwnerForAllBranches(authentication);
         Long tenantId = extractTenantId(authentication);
         return ownerReportsService.getBranchSummary(tenantId, from, to);
     }
@@ -156,26 +160,20 @@ public class OwnerReportsController {
 
 
     private Long effectiveBranchIdForReports(Authentication authentication, Long requestedBranchId) {
-        String role = extractRole(authentication);
-        if ("ADMIN".equalsIgnoreCase(role)) {
-            Long sessionBranchId = extractBranchId(authentication);
-            if (sessionBranchId == null) {
-                throw new AccessDeniedException("El administrador no tiene una sede asignada");
-            }
-            return sessionBranchId;
+        if ("OWNER".equalsIgnoreCase(extractRole(authentication))) {
+            return requestedBranchId;
         }
-        return requestedBranchId;
+        return branchAccessGuard.resolve(requestedBranchId, extractBranchId(authentication));
     }
 
     private Long requireAllowedBranch(Authentication authentication, Long requestedBranchId) {
-        String role = extractRole(authentication);
-        if ("ADMIN".equalsIgnoreCase(role)) {
-            Long sessionBranchId = extractBranchId(authentication);
-            if (sessionBranchId == null || !sessionBranchId.equals(requestedBranchId)) {
-                throw new AccessDeniedException("El administrador solo puede ver reportes de su sede");
-            }
+        return branchAccessGuard.resolve(requestedBranchId, extractBranchId(authentication));
+    }
+
+    private void requireOwnerForAllBranches(Authentication authentication) {
+        if (!"OWNER".equalsIgnoreCase(extractRole(authentication))) {
+            throw new AccessDeniedException("Solo el dueño puede consultar el comparativo de todas las sedes");
         }
-        return requestedBranchId;
     }
 
     private String extractRole(Authentication authentication) {

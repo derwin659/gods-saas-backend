@@ -1,5 +1,7 @@
 package com.gods.saas.web.controller;
 
+import com.gods.saas.security.BranchAccessGuard;
+
 import com.gods.saas.domain.dto.request.CreatePublicProductOrderRequest;
 import com.gods.saas.domain.dto.request.UpdateProductOrderStatusRequest;
 import com.gods.saas.domain.dto.response.ProductOrderResponse;
@@ -18,6 +20,7 @@ public class ProductOrderController {
 
     private final ProductOrderService productOrderService;
     private final AdminPermissionService adminPermissionService;
+    private final BranchAccessGuard branchAccessGuard;
 
     @GetMapping("/api/public/booking/{codigoNegocio}/products")
     public List<ProductResponse> publicProducts(
@@ -43,7 +46,7 @@ public class ProductOrderController {
             @RequestParam(required = false) String status
     ) {
         adminPermissionService.checkPermission("CONFIG_PRODUCTS");
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return productOrderService.ownerOrders(tenantId, effectiveBranchId, status);
     }
 
@@ -56,7 +59,7 @@ public class ProductOrderController {
             @RequestBody(required = false) UpdateProductOrderStatusRequest request
     ) {
         adminPermissionService.checkPermission("CONFIG_PRODUCTS");
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return productOrderService.approve(tenantId, effectiveBranchId, orderId, request != null ? request.getNote() : null);
     }
 
@@ -69,7 +72,7 @@ public class ProductOrderController {
             @RequestBody(required = false) UpdateProductOrderStatusRequest request
     ) {
         adminPermissionService.checkPermission("CONFIG_PRODUCTS");
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return productOrderService.reject(tenantId, effectiveBranchId, orderId, request != null ? request.getNote() : null);
     }
 
@@ -82,7 +85,7 @@ public class ProductOrderController {
             @RequestBody(required = false) UpdateProductOrderStatusRequest request
     ) {
         adminPermissionService.checkPermission("CONFIG_PRODUCTS");
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return productOrderService.cancel(tenantId, effectiveBranchId, orderId, request != null ? request.getNote() : null);
     }
 
@@ -95,7 +98,7 @@ public class ProductOrderController {
             @RequestParam(required = false) Long branchId
     ) {
         adminPermissionService.checkPermission("CONFIG_PRODUCTS");
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return productOrderService.deliver(tenantId, effectiveBranchId, userId, orderId);
     }
 }

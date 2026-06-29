@@ -1,5 +1,7 @@
 package com.gods.saas.web.controller;
 
+import com.gods.saas.security.BranchAccessGuard;
+
 import com.gods.saas.domain.dto.request.AdjustProductStockRequest;
 import com.gods.saas.domain.dto.request.SaveProductRequest;
 import com.gods.saas.domain.dto.response.ProductResponse;
@@ -19,6 +21,7 @@ public class OwnerProductController {
 
     private final OwnerProductService ownerProductService;
     private final AdminPermissionService adminPermissionService;
+    private final BranchAccessGuard branchAccessGuard;
 
     @GetMapping
     public List<ProductResponse> findAll(
@@ -29,7 +32,7 @@ public class OwnerProductController {
     ) {
         adminPermissionService.checkPermission("CONFIG_PRODUCTS");
 
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return ownerProductService.findAll(tenantId, effectiveBranchId, activeOnly);
     }
 
@@ -42,7 +45,7 @@ public class OwnerProductController {
     ) {
         adminPermissionService.checkPermission("CONFIG_PRODUCTS");
 
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return ownerProductService.findById(tenantId, effectiveBranchId, productId);
     }
 
@@ -56,7 +59,7 @@ public class OwnerProductController {
     ) {
         adminPermissionService.checkPermission("CONFIG_PRODUCTS");
 
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return ownerProductService.create(tenantId, effectiveBranchId, userId, request);
     }
 
@@ -71,7 +74,7 @@ public class OwnerProductController {
     ) {
         adminPermissionService.checkPermission("CONFIG_PRODUCTS");
 
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return ownerProductService.update(tenantId, effectiveBranchId, userId, productId, request);
     }
 
@@ -85,7 +88,7 @@ public class OwnerProductController {
     ) {
         adminPermissionService.checkPermission("CONFIG_PRODUCTS");
 
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return ownerProductService.toggleActive(tenantId, effectiveBranchId, userId, productId);
     }
 
@@ -99,7 +102,7 @@ public class OwnerProductController {
     ) {
         adminPermissionService.checkPermission("CONFIG_PRODUCTS");
 
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return ownerProductService.findStockMovements(tenantId, effectiveBranchId, productId, limit);
     }
 
@@ -114,7 +117,7 @@ public class OwnerProductController {
     ) {
         adminPermissionService.checkPermission("CONFIG_PRODUCTS");
 
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return ownerProductService.uploadImage(tenantId, effectiveBranchId, userId, productId, file);
     }
 
@@ -129,7 +132,7 @@ public class OwnerProductController {
     ) {
         adminPermissionService.checkPermission("CONFIG_PRODUCTS");
 
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return ownerProductService.adjustStock(tenantId, effectiveBranchId, userId, productId, request);
     }
 }

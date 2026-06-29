@@ -1,5 +1,7 @@
 package com.gods.saas.web.controller;
 
+import com.gods.saas.security.BranchAccessGuard;
+
 import com.gods.saas.domain.dto.request.CreateBarberPaymentRequest;
 import com.gods.saas.domain.dto.response.BarberPaymentPreviewResponse;
 import com.gods.saas.domain.dto.response.BarberPaymentResponse;
@@ -17,6 +19,7 @@ import java.util.List;
 public class BarberPaymentController {
 
     private final BarberPaymentService barberPaymentService;
+    private final BranchAccessGuard branchAccessGuard;
 
     @GetMapping("/barber-payments/preview")
     public BarberPaymentPreviewResponse preview(
@@ -27,7 +30,7 @@ public class BarberPaymentController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodFrom,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate periodTo
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return barberPaymentService.preview(
                 tenantId, effectiveBranchId, barberUserId, periodFrom, periodTo
         );
@@ -42,7 +45,7 @@ public class BarberPaymentController {
             @RequestParam(required = false) Long branchId,
             @RequestBody CreateBarberPaymentRequest request
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return barberPaymentService.createPayment(
                 tenantId, effectiveBranchId, cashRegisterId, userId, request
         );
@@ -55,7 +58,7 @@ public class BarberPaymentController {
             @RequestParam(required = false) Long branchId,
             @RequestParam Long barberUserId
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return barberPaymentService.history(tenantId, effectiveBranchId, barberUserId);
     }
 }
