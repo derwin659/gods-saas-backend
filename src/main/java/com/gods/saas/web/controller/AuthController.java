@@ -216,7 +216,9 @@ public class AuthController {
                             r.getRole().name(),
                             r.getTenant().getBusinessType() != null && !r.getTenant().getBusinessType().isBlank()
                                     ? r.getTenant().getBusinessType().trim().toUpperCase()
-                                    : "BARBERSHOP"
+                                    : "BARBERSHOP",
+                            r.getBranch() != null ? r.getBranch().getId() : null,
+                            r.getBranch() != null ? r.getBranch().getNombre() : null
                     ))
                     .toList();
 
