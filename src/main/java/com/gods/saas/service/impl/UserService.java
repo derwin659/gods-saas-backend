@@ -248,7 +248,12 @@ public class UserService {
 
     public AppUserResponse responseWithBranches(AppUser user, Long tenantId) {
         AppUserResponse response = AppUserResponse.from(user);
-        RoleType role = RoleType.valueOf(normalizeInternalRole(user.getRol()));
+        RoleType role;
+        try {
+            role = RoleType.valueOf(user.getRol() == null ? "" : user.getRol().trim().toUpperCase(Locale.ROOT));
+        } catch (IllegalArgumentException ex) {
+            return response;
+        }
         List<UserTenantRole> roles = userTenantRoleRepository.findByUserIdAndTenantIdAndRoleWithBranch(user.getId(), tenantId, role);
         response.setBranchIds(roles.stream().map(UserTenantRole::getBranch).filter(Objects::nonNull).map(Branch::getId).distinct().toList());
         response.setBranchNames(roles.stream().map(UserTenantRole::getBranch).filter(Objects::nonNull).map(Branch::getNombre).filter(Objects::nonNull).distinct().toList());
