@@ -235,7 +235,8 @@ public class UserService {
         }
         RoleType role = RoleType.valueOf(normalizeInternalRole(user.getRol()));
         List<UserTenantRole> previous = userTenantRoleRepository.findByUserIdAndTenantIdAndRoleWithBranch(userId, tenantId, role);
-        userTenantRoleRepository.deleteAll(previous);
+        userTenantRoleRepository.deleteAllInBatch(previous);
+        userTenantRoleRepository.flush();
         for (Branch branch : branches) {
             userTenantRoleRepository.save(UserTenantRole.builder().user(user).tenant(new Tenant(tenantId)).branch(branch).role(role).build());
         }
