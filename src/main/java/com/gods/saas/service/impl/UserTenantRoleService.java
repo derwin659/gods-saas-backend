@@ -38,7 +38,7 @@ public class UserTenantRoleService {
     }
 
     public List<UserTenantRole> getTenantsOfUser(Long userId) {
-        return repo.findByUserId(userId);
+        return repo.findByUserIdWithRelations(userId);
     }
 }
 
