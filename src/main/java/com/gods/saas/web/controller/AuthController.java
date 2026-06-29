@@ -146,12 +146,18 @@ public class AuthController {
             );
         }
 
-        UserTenantRole utr = userTenantRoleRepository
-                .findByUserIdAndTenantIdWithRelations(req.getUserId(), req.getTenantId())
-                .orElseThrow(() -> new ResponseStatusException(
-                        HttpStatus.UNAUTHORIZED,
-                        "No tienes acceso a esta barbería"
-                ));
+        UserTenantRole utr;
+        if (req.getBranchId() == null) {
+            utr = userTenantRoleRepository
+                    .findByUserIdAndTenantIdWithRelations(req.getUserId(), req.getTenantId())
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No tienes acceso a esta barberia"));
+        } else {
+            utr = userTenantRoleRepository.findByUserIdWithRelations(req.getUserId()).stream()
+                    .filter(role -> role.getTenant() != null && req.getTenantId().equals(role.getTenant().getId()))
+                    .filter(role -> role.getBranch() != null && req.getBranchId().equals(role.getBranch().getId()))
+                    .findFirst()
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "No tienes acceso a la sede seleccionada"));
+        }
 
         if (utr.getBranch() == null) {
             throw new ResponseStatusException(
