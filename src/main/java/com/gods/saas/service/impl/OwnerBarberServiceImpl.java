@@ -282,10 +282,21 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
 
         List<Long> newBranchIds = assignedBranches.stream().map(Branch::getId).distinct().sorted().toList();
         if (!previousBranchIds.equals(newBranchIds)) {
+            String professionalName = (saved.getNombre() + " " + saved.getApellido()).trim();
+            List<Map<String, Object>> previousBranches = branchRepository.findAllById(previousBranchIds).stream()
+                    .map(value -> Map.<String, Object>of("id", value.getId(), "name", value.getNombre()))
+                    .sorted((left, right) -> left.get("name").toString().compareToIgnoreCase(right.get("name").toString()))
+                    .toList();
+            List<Map<String, Object>> currentBranches = assignedBranches.stream()
+                    .map(value -> Map.<String, Object>of("id", value.getId(), "name", value.getNombre()))
+                    .sorted((left, right) -> left.get("name").toString().compareToIgnoreCase(right.get("name").toString()))
+                    .toList();
+            Map<String, Object> before = Map.of("professionalId", barberId, "professionalName", professionalName, "branches", previousBranches);
+            Map<String, Object> after = Map.of("professionalId", barberId, "professionalName", professionalName, "branches", currentBranches);
             generalAuditService.record(
                     tenantId, branch.getId(), actorUserId, actorRole,
                     "BARBER_BRANCH_ASSIGNMENT", barberId, "UPDATE",
-                    "Sedes asignadas al profesional actualizadas", previousBranchIds, newBranchIds
+                    "Se actualizaron las sedes de " + professionalName, before, after
             );
         }
 
