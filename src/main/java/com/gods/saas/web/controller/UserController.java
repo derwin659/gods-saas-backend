@@ -148,6 +148,13 @@ public class UserController {
         return ResponseEntity.ok(AppUserResponse.from(saved));
     }
 
+    @PutMapping("/{id}/branches")
+    public ResponseEntity<AppUserResponse> updateBranches(
+            @PathVariable Long id,
+            @RequestBody UpdateUserBranchesRequest request) {
+        return ResponseEntity.ok(userService.updateUserBranches(id, request.getBranchIds()));
+    }
+
     // =====================================================
     // CAMBIAR PASSWORD
     // =====================================================

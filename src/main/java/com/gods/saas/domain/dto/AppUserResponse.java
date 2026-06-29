@@ -3,6 +3,7 @@ package com.gods.saas.domain.dto;
 import com.gods.saas.domain.model.AppUser;
 import lombok.Builder;
 import lombok.Data;
+import java.util.List;
 
 @Data
 @Builder
@@ -15,6 +16,8 @@ public class AppUserResponse {
     private String rol;
     private Boolean activo;
     private Long branchId;
+    private List<Long> branchIds;
+    private List<String> branchNames;
 
     public static AppUserResponse from(AppUser user) {
         return AppUserResponse.builder()

@@ -166,7 +166,7 @@ public class UserService {
     public List<AppUserResponse> getUsers() {
         validarOwner();
         Long tenantId = TenantContext.getTenantId();
-        return userRepository.findByTenantId(tenantId).stream().map(AppUserResponse::from).toList();
+        return userRepository.findByTenantId(tenantId).stream().map(user -> responseWithBranches(user, tenantId)).toList();
     }
 
     public AppUserResponse getUser(Long id) {
@@ -174,7 +174,7 @@ public class UserService {
         Long tenantId = TenantContext.getTenantId();
         AppUser user = userRepository.findByIdAndTenantId(id, tenantId)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
-        return AppUserResponse.from(user);
+        return responseWithBranches(user, tenantId);
     }
 
     @Transactional
@@ -215,6 +215,43 @@ public class UserService {
         }
 
         return saved;
+    }
+
+    @Transactional
+    public AppUserResponse updateUserBranches(Long userId, List<Long> branchIds) {
+        validarOwner();
+        Long tenantId = TenantContext.getTenantId();
+        AppUser user = userRepository.findByIdAndTenantId(userId, tenantId)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+        if (branchIds == null || branchIds.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecciona al menos una sede");
+        }
+        List<Long> cleanIds = branchIds.stream().filter(Objects::nonNull).distinct().toList();
+        List<Branch> branches = branchRepository.findAllById(cleanIds).stream()
+                .filter(branch -> branch.getTenant() != null && tenantId.equals(branch.getTenant().getId()))
+                .toList();
+        if (branches.size() != cleanIds.size()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Una o mas sedes no pertenecen al negocio");
+        }
+        RoleType role = RoleType.valueOf(normalizeInternalRole(user.getRol()));
+        List<UserTenantRole> previous = userTenantRoleRepository.findByUserIdAndTenantIdAndRoleWithBranch(userId, tenantId, role);
+        userTenantRoleRepository.deleteAll(previous);
+        for (Branch branch : branches) {
+            userTenantRoleRepository.save(UserTenantRole.builder().user(user).tenant(new Tenant(tenantId)).branch(branch).role(role).build());
+        }
+        user.setBranch(branches.get(0));
+        user.setFechaActualizacion(LocalDateTime.now());
+        userRepository.save(user);
+        return responseWithBranches(user, tenantId);
+    }
+
+    public AppUserResponse responseWithBranches(AppUser user, Long tenantId) {
+        AppUserResponse response = AppUserResponse.from(user);
+        RoleType role = RoleType.valueOf(normalizeInternalRole(user.getRol()));
+        List<UserTenantRole> roles = userTenantRoleRepository.findByUserIdAndTenantIdAndRoleWithBranch(user.getId(), tenantId, role);
+        response.setBranchIds(roles.stream().map(UserTenantRole::getBranch).filter(Objects::nonNull).map(Branch::getId).distinct().toList());
+        response.setBranchNames(roles.stream().map(UserTenantRole::getBranch).filter(Objects::nonNull).map(Branch::getNombre).filter(Objects::nonNull).distinct().toList());
+        return response;
     }
 
     public void cambiarPassword(Long userId, String newPasswordHash) {
