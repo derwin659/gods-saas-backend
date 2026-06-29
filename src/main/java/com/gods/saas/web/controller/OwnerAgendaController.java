@@ -5,6 +5,7 @@ import com.gods.saas.domain.dto.request.UpdateOwnerAppointmentRequest;
 import com.gods.saas.domain.dto.response.OwnerAgendaResponse;
 import com.gods.saas.domain.dto.response.OwnerAppointmentAvailabilityResponse;
 import com.gods.saas.service.impl.AdminPermissionService;
+import com.gods.saas.security.BranchAccessGuard;
 import com.gods.saas.service.impl.JwtService;
 import com.gods.saas.service.impl.OwnerAgendaAppointmentService;
 import com.gods.saas.service.impl.impl.OwnerAgendaService;
@@ -24,6 +25,7 @@ public class OwnerAgendaController {
     private final OwnerAgendaAppointmentService ownerAgendaAppointmentService;
     private final JwtService jwtService;
     private final AdminPermissionService adminPermissionService;
+    private final BranchAccessGuard branchAccessGuard;
 
     @GetMapping
     public List<OwnerAgendaResponse> getAgendaDelDia(
@@ -105,7 +107,7 @@ public class OwnerAgendaController {
         adminPermissionService.checkPermission("AGENDA_ACCESS");
 
         SessionData session = readSession(authHeader);
-        Long branchIdFinal = branchId != null ? branchId : session.branchId();
+        Long branchIdFinal = resolveBranchId(branchId, session.branchId());
 
         boolean canViewPhone = adminPermissionService.hasCurrentUserPermission("CUSTOMERS_VIEW_PHONE");
 
@@ -127,7 +129,7 @@ public class OwnerAgendaController {
         adminPermissionService.checkPermission("AGENDA_ACCESS");
 
         SessionData session = readSession(authHeader);
-        Long branchIdFinal = branchId != null ? branchId : session.branchId();
+        Long branchIdFinal = resolveBranchId(branchId, session.branchId());
 
         boolean approved = getBoolean(request, "approved", false);
         String note = getString(request, "note");
@@ -153,7 +155,7 @@ public class OwnerAgendaController {
         adminPermissionService.checkPermission("AGENDA_ACCESS");
 
         SessionData session = readSession(authHeader);
-        Long branchIdFinal = branchId != null ? branchId : session.branchId();
+        Long branchIdFinal = resolveBranchId(branchId, session.branchId());
 
         boolean canViewPhone = adminPermissionService.hasCurrentUserPermission("CUSTOMERS_VIEW_PHONE");
 
@@ -180,13 +182,7 @@ public class OwnerAgendaController {
     }
 
     private Long resolveBranchId(Long requestBranchId, Long sessionBranchId) {
-        Long branchIdFinal = requestBranchId != null ? requestBranchId : sessionBranchId;
-
-        if (branchIdFinal == null) {
-            throw new RuntimeException("No se encontró branchId en el token ni en la consulta.");
-        }
-
-        return branchIdFinal;
+        return branchAccessGuard.resolve(requestBranchId, sessionBranchId);
     }
 
     private boolean getBoolean(Map<String, Object> request, String key, boolean defaultValue) {

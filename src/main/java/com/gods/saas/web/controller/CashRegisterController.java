@@ -1,5 +1,7 @@
 package com.gods.saas.web.controller;
 
+import com.gods.saas.security.BranchAccessGuard;
+
 import com.gods.saas.domain.dto.request.CashMovementRequest;
 import com.gods.saas.domain.dto.request.CloseCashRegisterRequest;
 import com.gods.saas.domain.dto.request.OpenCashRegisterRequest;
@@ -21,6 +23,7 @@ import java.util.List;
 public class CashRegisterController {
 
     private final CashRegisterService cashRegisterService;
+    private final BranchAccessGuard branchAccessGuard;
 
     @PostMapping("/open")
     public CashRegisterResponse open(
@@ -30,7 +33,7 @@ public class CashRegisterController {
             @RequestParam(required = false) Long branchId,
             @RequestBody OpenCashRegisterRequest request
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return cashRegisterService.open(tenantId, effectiveBranchId, userId, request);
     }
 
@@ -40,7 +43,7 @@ public class CashRegisterController {
             @RequestAttribute("branchId") Long sessionBranchId,
             @RequestParam(required = false) Long branchId
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return cashRegisterService.getCurrent(tenantId, effectiveBranchId);
     }
 
@@ -52,7 +55,7 @@ public class CashRegisterController {
             @RequestParam(required = false) Long branchId,
             @RequestBody CloseCashRegisterRequest request
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return cashRegisterService.close(tenantId, effectiveBranchId, cashRegisterId, request);
     }
 
@@ -64,7 +67,7 @@ public class CashRegisterController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return cashRegisterService.history(tenantId, effectiveBranchId, from, to);
     }
 
@@ -79,7 +82,7 @@ public class CashRegisterController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return cashRegisterService.audit(tenantId, effectiveBranchId, cashRegisterId, actorUserId, from, to);
     }
     @GetMapping("/{cashRegisterId}/movements")
@@ -89,7 +92,7 @@ public class CashRegisterController {
             @PathVariable Long cashRegisterId,
             @RequestParam(required = false) Long branchId
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return cashRegisterService.getMovements(tenantId, effectiveBranchId, cashRegisterId);
     }
 
@@ -102,7 +105,7 @@ public class CashRegisterController {
             @RequestParam(required = false) Long branchId,
             @RequestBody CashMovementRequest request
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return cashRegisterService.createMovement(tenantId, effectiveBranchId, cashRegisterId, userId, request);
     }
 
@@ -115,7 +118,7 @@ public class CashRegisterController {
             @RequestParam(required = false) Long branchId,
             @RequestBody CashMovementRequest request
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return cashRegisterService.updateMovement(tenantId, effectiveBranchId, movementId, userId, request);
     }
 
@@ -128,7 +131,7 @@ public class CashRegisterController {
             @RequestParam(required = false) Long branchId,
             @RequestParam(required = false) String auditReason
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         cashRegisterService.deleteMovement(tenantId, effectiveBranchId, movementId, userId, auditReason);
         return ResponseEntity.noContent().build();
     }

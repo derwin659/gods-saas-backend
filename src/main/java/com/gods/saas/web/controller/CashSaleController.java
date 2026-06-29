@@ -1,5 +1,7 @@
 package com.gods.saas.web.controller;
 
+import com.gods.saas.security.BranchAccessGuard;
+
 import com.gods.saas.domain.dto.request.CreateCashSaleRequest;
 import com.gods.saas.domain.dto.request.RejectSalePaymentRequest;
 import com.gods.saas.domain.dto.request.UpdateSaleRequest;
@@ -18,6 +20,7 @@ import java.util.List;
 public class CashSaleController {
 
     private final CashSaleService cashSaleService;
+    private final BranchAccessGuard branchAccessGuard;
 
     @PostMapping
     public SaleResponse create(
@@ -27,7 +30,7 @@ public class CashSaleController {
             @RequestParam(required = false) Long branchId,
             @RequestBody CreateCashSaleRequest request
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return cashSaleService.createCashSale(tenantId, effectiveBranchId, userId, request);
     }
 
@@ -37,7 +40,7 @@ public class CashSaleController {
             @RequestAttribute("branchId") Long sessionBranchId,
             @RequestParam(required = false) Long branchId
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return cashSaleService.getTodaySales(tenantId, effectiveBranchId);
     }
 
@@ -47,7 +50,7 @@ public class CashSaleController {
             @RequestAttribute("branchId") Long sessionBranchId,
             @RequestParam(required = false) Long branchId
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return cashSaleService.getPendingValidationSales(tenantId, effectiveBranchId);
     }
 
@@ -60,7 +63,7 @@ public class CashSaleController {
             @RequestParam(required = false) Long branchId,
             @RequestParam(required = false) String auditReason
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return cashSaleService.approveSalePayment(tenantId, effectiveBranchId, userId, saleId);
     }
 
@@ -73,7 +76,7 @@ public class CashSaleController {
             @RequestParam(required = false) Long branchId,
             @RequestBody(required = false) RejectSalePaymentRequest request
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         String reason = request != null ? request.getReason() : null;
         return cashSaleService.rejectSalePayment(tenantId, effectiveBranchId, userId, saleId, reason);
     }
@@ -87,7 +90,7 @@ public class CashSaleController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return cashSaleService.getSalesByRange(tenantId, effectiveBranchId, from, to);
     }
 
@@ -99,7 +102,7 @@ public class CashSaleController {
             @PathVariable Long cashRegisterId,
             @RequestParam(required = false) Long branchId
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return cashSaleService.getSalesByCashRegister(tenantId, effectiveBranchId, cashRegisterId);
     }
 
@@ -120,7 +123,7 @@ public class CashSaleController {
             @RequestParam(required = false) Long branchId,
             @RequestBody UpdateSaleRequest request
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return cashSaleService.updateSale(tenantId, effectiveBranchId, userId, saleId, request);
     }
 
@@ -133,7 +136,7 @@ public class CashSaleController {
             @RequestParam(required = false) Long branchId,
             @RequestParam(required = false) String auditReason
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         cashSaleService.deleteSale(tenantId, effectiveBranchId, userId, saleId, auditReason);
     }
 }
