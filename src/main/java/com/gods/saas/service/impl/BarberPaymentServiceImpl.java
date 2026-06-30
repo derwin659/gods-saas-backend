@@ -30,6 +30,7 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
     private static final String DEFAULT_TIMEZONE = "America/Lima";
 
     private final BarberPaymentRepository barberPaymentRepository;
+    private final BarberBranchCompensationRepository barberBranchCompensationRepository;
     private final CashRegisterRepository cashRegisterRepository;
     private final CashMovementRepository cashMovementRepository;
     private final SaleRepository saleRepository;
@@ -49,6 +50,9 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
     ) {
         validatePeriod(periodFrom, periodTo);
         AppUser barber = resolveBarber(tenantId, branchId, barberUserId);
+        BarberBranchCompensation branchCompensation = barberBranchCompensationRepository
+                .findByTenant_IdAndBranch_IdAndBarber_Id(tenantId, branchId, barberUserId)
+                .orElse(null);
 
         LocalDate effectivePeriodFrom = resolveEffectivePeriodFrom(
                 tenantId, branchId, barberUserId, periodFrom, periodTo
@@ -60,13 +64,13 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                             tenantId, branchId, barberUserId, periodFrom, periodTo
                     )
             );
-            return emptyPreview(barber, periodFrom, periodTo, previousPayments);
+            return emptyPreview(barber, branchCompensation, periodFrom, periodTo, previousPayments);
         }
 
         LocalDateTime start = effectivePeriodFrom.atStartOfDay();
         LocalDateTime end = periodTo.plusDays(1).atStartOfDay();
 
-        boolean salaryMode = Boolean.TRUE.equals(barber.getSalaryMode());
+        boolean salaryMode = isSalaryMode(barber, branchCompensation);
         BigDecimal salesBase = safe(
                 saleRepository.sumBarberItemSalesByRange(
                         tenantId, branchId, barberUserId, start, end
@@ -79,7 +83,7 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 )
         );
 
-        BigDecimal commissionPercentage = safe(barber.getCommissionPercentage());
+        BigDecimal commissionPercentage = safe(commissionPercentage(barber, branchCompensation));
         BigDecimal serviceCommissionAmount = salaryMode
                 ? BigDecimal.ZERO
                 : salesBase.multiply(commissionPercentage)
@@ -116,7 +120,7 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
         );
 
         BigDecimal salaryAmount = salaryMode
-                ? resolveSalaryAmountForPeriod(barber, effectivePeriodFrom, periodTo)
+                ? resolveSalaryAmountForPeriod(barber, branchCompensation, effectivePeriodFrom, periodTo)
                 : BigDecimal.ZERO;
 
         BigDecimal gross = (salaryMode ? salaryAmount.add(productCommissionsAmount) : commissionAmount)
@@ -344,20 +348,13 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
 
     private BarberPaymentPreviewResponse emptyPreview(
             AppUser barber,
-            LocalDate periodFrom,
-            LocalDate periodTo
-    ) {
-        return emptyPreview(barber, periodFrom, periodTo, BigDecimal.ZERO);
-    }
-
-    private BarberPaymentPreviewResponse emptyPreview(
-            AppUser barber,
+            BarberBranchCompensation branchCompensation,
             LocalDate periodFrom,
             LocalDate periodTo,
             BigDecimal previousPayments
     ) {
-        boolean salaryMode = Boolean.TRUE.equals(barber.getSalaryMode());
-        BigDecimal commissionPercentage = salaryMode ? null : safe(barber.getCommissionPercentage());
+        boolean salaryMode = isSalaryMode(barber, branchCompensation);
+        BigDecimal commissionPercentage = salaryMode ? null : safe(commissionPercentage(barber, branchCompensation));
 
         return BarberPaymentPreviewResponse.builder()
                 .barberUserId(barber.getId())
@@ -624,17 +621,37 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
         return trimmed.isEmpty() ? null : trimmed;
     }
 
-    private BigDecimal resolveSalaryAmountForPeriod(AppUser barber, LocalDate periodFrom, LocalDate periodTo) {
-        BigDecimal fixedSalaryAmount = safe(barber.getFixedSalaryAmount());
+    private boolean isSalaryMode(AppUser barber, BarberBranchCompensation compensation) {
+        return compensation != null
+                ? Boolean.TRUE.equals(compensation.getSalaryMode())
+                : Boolean.TRUE.equals(barber.getSalaryMode());
+    }
+
+    private BigDecimal commissionPercentage(AppUser barber, BarberBranchCompensation compensation) {
+        return compensation != null ? compensation.getCommissionPercentage() : barber.getCommissionPercentage();
+    }
+
+    private BigDecimal resolveSalaryAmountForPeriod(
+            AppUser barber,
+            BarberBranchCompensation compensation,
+            LocalDate periodFrom,
+            LocalDate periodTo
+    ) {
+        BigDecimal fixedSalaryAmount = safe(
+                compensation != null ? compensation.getFixedSalaryAmount() : barber.getFixedSalaryAmount()
+        );
+        SalaryFrequency frequency = compensation != null
+                ? compensation.getSalaryFrequency()
+                : barber.getSalaryFrequency();
+
         if (fixedSalaryAmount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalStateException("El barbero no tiene sueldo fijo configurado.");
+            throw new IllegalStateException("El barbero no tiene sueldo fijo configurado para esta sede.");
+        }
+        if (frequency == null) {
+            throw new IllegalStateException("El barbero no tiene periodicidad de sueldo configurada para esta sede.");
         }
 
-        if (barber.getSalaryFrequency() == null) {
-            throw new IllegalStateException("El barbero no tiene periodicidad de sueldo configurada.");
-        }
-
-        return switch (barber.getSalaryFrequency()) {
+        return switch (frequency) {
             case WEEKLY -> fixedSalaryAmount;
             case BIWEEKLY -> fixedSalaryAmount;
             case MONTHLY -> prorateMonthlySalary(fixedSalaryAmount, periodFrom, periodTo);
