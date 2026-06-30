@@ -304,7 +304,7 @@ public class UserService {
             if ("BARBER".equals(role)) {
                 subscriptionService.validateBarberLimit(tenantId);
             }
-            if ("ADMIN".equals(role) || "OWNER".equals(role)) {
+            if ("ADMIN".equals(role) || "CASHIER".equals(role) || "OWNER".equals(role)) {
                 subscriptionService.validateAdminLimit(tenantId);
             }
         }
@@ -344,7 +344,7 @@ public class UserService {
                 .build();
         userTenantRoleRepository.save(userTenantRole);
 
-        if ("ADMIN".equals(role)) {
+        if ("ADMIN".equals(role) || "CASHIER".equals(role)) {
             adminPermissionService.createDefaultPermissionsForNewAdmin(tenantId, user.getId());
         }
 
@@ -409,8 +409,8 @@ public class UserService {
 
     private String normalizeInternalRole(String raw) {
         String role = raw == null ? "" : raw.trim().toUpperCase(Locale.ROOT);
-        if (!List.of("OWNER", "ADMIN", "BARBER").contains(role)) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Rol no permitido. Usa OWNER, ADMIN o BARBER");
+        if (!List.of("OWNER", "ADMIN", "CASHIER", "BARBER").contains(role)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Rol no permitido. Usa OWNER, ADMIN, CASHIER o BARBER");
         }
         return role;
     }
@@ -428,10 +428,10 @@ public class UserService {
         Long tenantId = TenantContext.getTenantId();
         String newRole = normalizeInternalRole(targetRole);
 
-        if (!List.of("ADMIN", "BARBER").contains(newRole)) {
+        if (!List.of("ADMIN", "CASHIER", "BARBER").contains(newRole)) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Solo puedes cambiar entre ADMIN y BARBER"
+                    "Solo puedes cambiar entre ADMIN, CASHIER y BARBER"
             );
         }
 
@@ -466,7 +466,7 @@ public class UserService {
             subscriptionService.validateBarberLimit(tenantId);
         }
 
-        if ("ADMIN".equals(newRole)) {
+        if ("ADMIN".equals(newRole) || "CASHIER".equals(newRole)) {
             subscriptionService.validateAdminLimit(tenantId);
         }
 

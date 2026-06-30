@@ -73,8 +73,8 @@ public class AdminPermissionService {
         AppUser admin = appUserRepository.findByIdAndTenantId(adminUserId, tenantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Administrador no encontrado"));
 
-        if (!"ADMIN".equalsIgnoreCase(admin.getRol())) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El usuario indicado no es ADMIN");
+        if (!List.of("ADMIN", "CASHIER").contains(admin.getRol().toUpperCase(Locale.ROOT))) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El usuario indicado no es ADMIN ni CASHIER");
         }
 
         List<String> permissions = adminPermissionRepository
@@ -87,7 +87,7 @@ public class AdminPermissionService {
         return AdminPermissionsBundleResponse.builder()
                 .tenantId(tenantId)
                 .userId(adminUserId)
-                .role("ADMIN")
+                .role(admin.getRol().toUpperCase(Locale.ROOT))
                 .owner(false)
                 .permissions(permissions)
                 .build();
@@ -108,10 +108,10 @@ public class AdminPermissionService {
                         "Administrador no encontrado"
                 ));
 
-        if (!"ADMIN".equalsIgnoreCase(admin.getRol())) {
+        if (!List.of("ADMIN", "CASHIER").contains(admin.getRol().toUpperCase(Locale.ROOT))) {
             throw new ResponseStatusException(
                     HttpStatus.BAD_REQUEST,
-                    "Solo puedes asignar permisos a usuarios ADMIN"
+                    "Solo puedes asignar permisos a usuarios ADMIN o CASHIER"
             );
         }
 
@@ -207,7 +207,11 @@ public class AdminPermissionService {
         AppUser admin = appUserRepository.findByIdAndTenantId(adminUserId, tenantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Administrador no encontrado"));
 
-        for (String key : AdminPermissionKey.defaultsForNewAdmin()) {
+        List<String> defaults = "CASHIER".equalsIgnoreCase(admin.getRol())
+                ? AdminPermissionKey.defaultsForNewCashier()
+                : AdminPermissionKey.defaultsForNewAdmin();
+
+        for (String key : defaults) {
             boolean exists = adminPermissionRepository
                     .findByTenant_IdAndUser_IdAndPermissionKey(tenantId, adminUserId, key)
                     .isPresent();
@@ -232,7 +236,7 @@ public class AdminPermissionService {
 
         if ("OWNER".equalsIgnoreCase(role)) return true;
 
-        if (!"ADMIN".equalsIgnoreCase(role)) return false;
+        if (!List.of("ADMIN", "CASHIER").contains(role.toUpperCase(Locale.ROOT))) return false;
 
         return adminPermissionRepository.existsByTenant_IdAndUser_IdAndPermissionKeyAndEnabledTrue(
                 tenantId,
@@ -254,7 +258,7 @@ public class AdminPermissionService {
 
         if ("OWNER".equalsIgnoreCase(role)) return;
 
-        if (!"ADMIN".equalsIgnoreCase(role)) {
+        if (!List.of("ADMIN", "CASHIER").contains(role.toUpperCase(Locale.ROOT))) {
             throw new AccessDeniedException("No tienes permiso para esta acción");
         }
 

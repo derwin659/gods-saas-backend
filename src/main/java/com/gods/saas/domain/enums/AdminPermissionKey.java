@@ -33,6 +33,15 @@ public enum AdminPermissionKey {
                 .anyMatch(p -> p.name().equalsIgnoreCase(key.trim()));
     }
 
+    public static List<String> defaultsForNewCashier() {
+        return List.of(
+                CASH_ACCESS,
+                CASH_REGISTER_INCOME,
+                CASH_REGISTER_EXPENSE,
+                CUSTOMERS_ACCESS
+        ).stream().map(Enum::name).toList();
+    }
+
     public static List<String> defaultsForNewAdmin() {
         return List.of(
                 CASH_ACCESS,

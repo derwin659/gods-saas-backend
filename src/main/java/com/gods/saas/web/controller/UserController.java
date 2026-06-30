@@ -112,8 +112,8 @@ public class UserController {
                 ? ""
                 : body.get("targetRole").toString().trim().toUpperCase();
 
-        if (!"ADMIN".equals(targetRoleRaw) && !"BARBER".equals(targetRoleRaw)) {
-            throw new RuntimeException("Rol inválido. Solo se permite ADMIN o BARBER.");
+        if (!"ADMIN".equals(targetRoleRaw) && !"CASHIER".equals(targetRoleRaw) && !"BARBER".equals(targetRoleRaw)) {
+            throw new RuntimeException("Rol inválido. Solo se permite ADMIN, CASHIER o BARBER.");
         }
 
         Object branchValue = body.get("branchId");

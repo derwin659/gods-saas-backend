@@ -106,10 +106,10 @@ public class SecurityConfig {
                         .hasAnyRole("OWNER", "ADMIN", "BARBER", "CASHIER")
                         .requestMatchers("/api/public/**").permitAll()
                         .requestMatchers("/api/owner/booking-links/**").hasAnyRole("OWNER", "ADMIN")
-                        .requestMatchers("/api/owner/home/**").hasAnyRole("OWNER", "ADMIN")
-                        .requestMatchers("/api/owner/agenda/**").hasAnyRole("OWNER", "ADMIN")
+                        .requestMatchers("/api/owner/home/**").hasAnyRole("OWNER", "ADMIN", "CASHIER")
+                        .requestMatchers("/api/owner/agenda/**").hasAnyRole("OWNER", "ADMIN", "CASHIER")
                         .requestMatchers("/api/owner/reports/**").hasAnyRole("OWNER", "ADMIN")
-                        .requestMatchers("/api/owner/customers/**").hasAnyRole("OWNER", "ADMIN")
+                        .requestMatchers("/api/owner/customers/**").hasAnyRole("OWNER", "ADMIN", "CASHIER")
 
                         .requestMatchers("/api/owner/notifications/**")
                         .hasAnyRole("OWNER", "ADMIN", "BARBER", "CASHIER")
@@ -118,18 +118,18 @@ public class SecurityConfig {
                         .authenticated()
 
                         .requestMatchers("/api/owner/admin-permissions/me")
-                        .hasAnyRole("OWNER", "ADMIN")
+                        .hasAnyRole("OWNER", "ADMIN", "CASHIER")
 
                         .requestMatchers("/api/owner/admin-permissions/**")
                         .hasRole("OWNER")
 
-                        .requestMatchers("/api/owner/cash-registers/**").hasAnyRole("OWNER", "ADMIN")
-                        .requestMatchers("/api/owner/cash-sales/**").hasAnyRole("OWNER", "ADMIN")
-                        .requestMatchers("/api/owner/local-consumption-orders/**").hasAnyRole("OWNER", "ADMIN")
+                        .requestMatchers("/api/owner/cash-registers/**").hasAnyRole("OWNER", "ADMIN", "CASHIER")
+                        .requestMatchers("/api/owner/cash-sales/**").hasAnyRole("OWNER", "ADMIN", "CASHIER")
+                        .requestMatchers("/api/owner/local-consumption-orders/**").hasAnyRole("OWNER", "ADMIN", "CASHIER")
                         .requestMatchers("/api/owner/marketing-campaigns/**").hasAnyRole("OWNER", "ADMIN")
-                        .requestMatchers("/api/owner/product-orders/**").hasAnyRole("OWNER", "ADMIN")
+                        .requestMatchers("/api/owner/product-orders/**").hasAnyRole("OWNER", "ADMIN", "CASHIER")
                         .requestMatchers("/api/owner/products/**").hasAnyRole("OWNER", "ADMIN")
-                        .requestMatchers("/api/owner/sale-catalog/**").hasAnyRole("OWNER", "ADMIN")
+                        .requestMatchers("/api/owner/sale-catalog/**").hasAnyRole("OWNER", "ADMIN", "CASHIER")
                         .requestMatchers("/api/owner/services/**").hasAnyRole("OWNER", "ADMIN")
 
                         .requestMatchers("/api/customers/quick")
