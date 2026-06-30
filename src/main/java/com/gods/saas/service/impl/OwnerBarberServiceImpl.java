@@ -47,7 +47,7 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
     public List<BarberResponse> listBarbers(Long tenantId, Long branchId) {
         List<AppUser> users = (branchId != null)
                 ? userTenantRoleRepository.findActiveUsersByTenantBranchAndRole(tenantId, branchId, RoleType.BARBER)
-                : appUserRepository.findByTenantIdAndRolWithBranch(tenantId, "BARBER");
+                : userTenantRoleRepository.findActiveUsersByTenantBranchAndRole(tenantId, null, RoleType.BARBER);
 
         return users.stream()
                 .map(user -> toResponse(user, tenantId))

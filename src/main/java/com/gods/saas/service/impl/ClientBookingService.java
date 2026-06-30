@@ -56,7 +56,7 @@ public class ClientBookingService {
 
         List<Branch> branches = branchRepository.findByTenant_IdAndActivoTrue(tenantId);
         List<ServiceEntity> services = serviceRepository.findByTenant_IdAndActivoTrue(tenantId);
-        List<AppUser> barbers = appUserRepository.findByTenant_IdAndRolAndActivoTrue(tenantId, "BARBER");
+        List<AppUser> barbers = userTenantRoleRepository.findActiveUsersByTenantBranchAndRole(tenantId, null, RoleType.BARBER);
 
         List<TenantPaymentMethod> paymentMethods =
                 tenantPaymentMethodRepository.findByTenant_IdAndActiveTrueOrderBySortOrderAscDisplayNameAsc(tenantId);

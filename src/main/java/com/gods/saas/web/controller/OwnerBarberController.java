@@ -5,11 +5,13 @@ import com.gods.saas.security.BranchAccessGuard;
 import com.gods.saas.domain.dto.request.BarberCreateRequest;
 import com.gods.saas.domain.dto.request.BarberStatusRequest;
 import com.gods.saas.domain.dto.request.BarberUpdateRequest;
+import com.gods.saas.domain.dto.request.OwnerProfessionalProfileRequest;
 import com.gods.saas.domain.dto.request.UpdateBarberServicesRequest;
 import com.gods.saas.domain.dto.response.BarberServiceAssignmentResponse;
 import com.gods.saas.domain.dto.response.BarberResponse;
 import com.gods.saas.service.impl.AdminPermissionService;
 import com.gods.saas.service.impl.BarberServiceAssignmentService;
+import com.gods.saas.service.impl.OwnerProfessionalProfileService;
 import com.gods.saas.service.impl.JwtService;
 import com.gods.saas.service.impl.impl.OwnerBarberService;
 import com.gods.saas.utils.JwtUtil;
@@ -34,6 +36,7 @@ public class OwnerBarberController {
     private final AdminPermissionService adminPermissionService;
     private final BranchAccessGuard branchAccessGuard;
     private final BarberServiceAssignmentService barberServiceAssignmentService;
+    private final OwnerProfessionalProfileService ownerProfessionalProfileService;
 
     @GetMapping
     public List<BarberResponse> listBarbers(
@@ -105,6 +108,27 @@ public class OwnerBarberController {
         checkConfigBarbers(session);
 
         return ownerBarberService.deletePhoto(session.tenantId(), barberId);
+    }
+
+    @GetMapping("/self-professional")
+    public Map<String,Object> getSelfProfessional(HttpServletRequest request) {
+        SessionData session = extractSession(request);
+        if (!"OWNER".equalsIgnoreCase(session.role())) throw new AccessDeniedException("Solo el dueño puede configurar su perfil profesional");
+        return ownerProfessionalProfileService.status(session.tenantId(), session.userId());
+    }
+
+    @PutMapping("/self-professional")
+    public Map<String,Object> enableSelfProfessional(@RequestBody OwnerProfessionalProfileRequest body, HttpServletRequest request) {
+        SessionData session = extractSession(request);
+        if (!"OWNER".equalsIgnoreCase(session.role())) throw new AccessDeniedException("Solo el dueño puede configurar su perfil profesional");
+        return ownerProfessionalProfileService.enable(session.tenantId(), session.userId(), body);
+    }
+
+    @DeleteMapping("/self-professional")
+    public Map<String,Object> disableSelfProfessional(HttpServletRequest request) {
+        SessionData session = extractSession(request);
+        if (!"OWNER".equalsIgnoreCase(session.role())) throw new AccessDeniedException("Solo el dueño puede configurar su perfil profesional");
+        return ownerProfessionalProfileService.disable(session.tenantId(), session.userId());
     }
 
     @GetMapping("/{barberId}/services")
