@@ -6,6 +6,7 @@ import com.gods.saas.domain.dto.ForgotPasswordRequest;
 import com.gods.saas.domain.dto.request.ResetPasswordRequest;
 import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.AppUserRepository;
+import com.gods.saas.domain.repository.BranchRepository;
 import com.gods.saas.domain.repository.UserTenantRoleRepository;
 import com.gods.saas.service.impl.*;
 import com.gods.saas.utils.JwtUtil;
@@ -48,6 +49,9 @@ public class AuthController {
 
     @Autowired
     private UserTenantRoleRepository userTenantRoleRepository;
+
+    @Autowired
+    private BranchRepository branchRepository;
 
     @Autowired
     private JwtUtil jwtUtil;
@@ -147,19 +151,33 @@ public class AuthController {
         }
 
         UserTenantRole utr;
+        Branch selectedOwnerBranch = null;
         if (req.getBranchId() == null) {
             utr = userTenantRoleRepository
                     .findByUserIdAndTenantIdWithRelations(req.getUserId(), req.getTenantId())
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No tienes acceso a esta barberia"));
         } else {
-            utr = userTenantRoleRepository.findByUserIdWithRelations(req.getUserId()).stream()
+            List<UserTenantRole> tenantRoles = userTenantRoleRepository.findByUserIdWithRelations(req.getUserId()).stream()
                     .filter(role -> role.getTenant() != null && req.getTenantId().equals(role.getTenant().getId()))
+                    .toList();
+
+            utr = tenantRoles.stream()
                     .filter(role -> role.getBranch() != null && req.getBranchId().equals(role.getBranch().getId()))
                     .findFirst()
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "No tienes acceso a la sede seleccionada"));
+                    .orElse(null);
+
+            if (utr == null) {
+                utr = tenantRoles.stream()
+                        .filter(role -> role.getRole() == RoleType.OWNER)
+                        .findFirst()
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "No tienes acceso a la sede seleccionada"));
+                selectedOwnerBranch = branchRepository.findByIdAndTenant_Id(req.getBranchId(), req.getTenantId())
+                        .filter(branch -> Boolean.TRUE.equals(branch.getActivo()))
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "La sede seleccionada no esta activa en este negocio"));
+            }
         }
 
-        if (utr.getBranch() == null) {
+        if (utr.getBranch() == null && selectedOwnerBranch == null) {
             throw new ResponseStatusException(
                     HttpStatus.UNAUTHORIZED,
                     "El usuario no tiene sucursal asignada"
@@ -167,7 +185,7 @@ public class AuthController {
         }
 
         Tenant tenant = utr.getTenant();
-        Branch branch = utr.getBranch();
+        Branch branch = selectedOwnerBranch != null ? selectedOwnerBranch : utr.getBranch();
 
         String token = jwtService.generateToken(
                 user,
