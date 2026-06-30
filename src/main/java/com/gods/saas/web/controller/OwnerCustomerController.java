@@ -179,6 +179,31 @@ public class OwnerCustomerController {
 
 
 
+    @GetMapping("/export-count")
+    public ResponseEntity<java.util.Map<String, Long>> exportCount(@RequestHeader("Authorization") String authHeader) {
+        adminPermissionService.checkPermission("CUSTOMERS_ACCESS");
+        return ResponseEntity.ok(java.util.Map.of("total", customerExportService.count(extractTenantId(authHeader))));
+    }
+
+    @GetMapping("/export.xlsx")
+    public ResponseEntity<byte[]> exportExcel(@RequestHeader("Authorization") String authHeader) {
+        adminPermissionService.checkPermission("CUSTOMERS_ACCESS");
+        adminPermissionService.checkPermission("CUSTOMERS_VIEW_PHONE");
+        String token = authHeader.replace("Bearer ", "");
+        Long tenantId = jwtUtil.getTenantIdFromToken(token);
+        Long userId = jwtUtil.getUserIdFromToken(token);
+        byte[] file = customerExportService.exportXlsx(tenantId);
+        long total = customerExportService.count(tenantId);
+        generalAuditService.record(tenantId, null, userId, null, "CUSTOMER_EXPORT", null,
+                "EXPORTED", "Exportacion completa de clientes", null,
+                java.util.Map.of("format", "XLSX", "records", total));
+        String filename = "clientes-" + java.time.LocalDate.now() + ".xlsx";
+        return ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .header(org.springframework.http.HttpHeaders.CONTENT_TYPE, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                .body(file);
+    }
+
     private Long extractTenantId(String authHeader) {
         String token = authHeader.replace("Bearer ", "");
         return jwtUtil.getTenantIdFromToken(token);
