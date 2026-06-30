@@ -1,5 +1,7 @@
 package com.gods.saas.web.controller;
 
+import com.gods.saas.security.BranchAccessGuard;
+
 import com.gods.saas.domain.dto.response.SimpleBarberResponse;
 import com.gods.saas.domain.dto.response.SimpleCustomerResponse;
 import com.gods.saas.domain.dto.response.SimpleServiceResponse;
@@ -19,6 +21,7 @@ import java.util.List;
 public class OwnerCatalogController {
 
     private final OwnerCatalogService ownerCatalogService;
+    private final BranchAccessGuard branchAccessGuard;
 
     @GetMapping("/barbers")
     public List<SimpleBarberResponse> getBarbers(
@@ -26,7 +29,7 @@ public class OwnerCatalogController {
             @RequestAttribute("branchId") Long sessionBranchId,
             @RequestParam(required = false) Long branchId
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return ownerCatalogService.getBarbers(tenantId, effectiveBranchId);
     }
 

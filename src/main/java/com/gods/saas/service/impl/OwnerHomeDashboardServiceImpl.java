@@ -42,7 +42,7 @@ public class OwnerHomeDashboardServiceImpl implements OwnerHomeDashboardService 
         LocalDateTime end = today.plusDays(1).atStartOfDay();
         LocalTime now = tenantTimeService.currentTime(tenantId);
 
-        Long globalBranchId = null;
+        Long globalBranchId = branchId;
 
         BigDecimal todaySales = saleRepository.sumSalesByDay(tenantId, globalBranchId, start, end);
 
@@ -66,6 +66,7 @@ public class OwnerHomeDashboardServiceImpl implements OwnerHomeDashboardService 
         List<BranchDashboardItemResponse> branches = branchRepository
                 .findByTenantIdAndActivoTrueOrderByNombreAsc(tenantId)
                 .stream()
+                .filter(branch -> branchId == null || branch.getId().equals(branchId))
                 .map(branch -> mapBranchDashboard(branch, tenantId, today, start, end))
                 .toList();
 

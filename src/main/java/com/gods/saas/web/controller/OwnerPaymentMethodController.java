@@ -1,5 +1,7 @@
 package com.gods.saas.web.controller;
 
+import com.gods.saas.security.BranchAccessGuard;
+
 import com.gods.saas.domain.dto.response.OwnerPaymentMethodResponse;
 import com.gods.saas.domain.model.TenantPaymentMethod;
 import com.gods.saas.domain.repository.TenantPaymentMethodRepository;
@@ -21,13 +23,16 @@ import java.util.Map;
 public class OwnerPaymentMethodController {
 
     private final TenantPaymentMethodRepository tenantPaymentMethodRepository;
+    private final BranchAccessGuard branchAccessGuard;
 
     @GetMapping
     public List<OwnerPaymentMethodResponse> list(
             @RequestAttribute("tenantId") Long tenantId,
+            @RequestAttribute("branchId") Long sessionBranchId,
             @RequestParam(required = false) Long branchId
     ) {
-        List<TenantPaymentMethod> configuredMethods = loadConfiguredMethods(tenantId, branchId);
+        Long effectiveBranchId = branchAccessGuard.resolveOptionalForOwner(branchId, sessionBranchId);
+        List<TenantPaymentMethod> configuredMethods = loadConfiguredMethods(tenantId, effectiveBranchId);
 
         if (configuredMethods == null || configuredMethods.isEmpty()) {
             return defaultPeruFallback();

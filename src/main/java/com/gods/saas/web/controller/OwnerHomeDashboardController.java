@@ -1,5 +1,7 @@
 package com.gods.saas.web.controller;
 
+import com.gods.saas.security.BranchAccessGuard;
+
 import com.gods.saas.domain.dto.response.OwnerHomeDashboardResponse;
 import com.gods.saas.service.impl.impl.OwnerHomeDashboardService;
 import lombok.RequiredArgsConstructor;
@@ -14,6 +16,7 @@ import java.util.Map;
 public class OwnerHomeDashboardController {
 
     private final OwnerHomeDashboardService ownerHomeDashboardService;
+    private final BranchAccessGuard branchAccessGuard;
 
     @GetMapping("/dashboard")
     public OwnerHomeDashboardResponse getDashboard(
@@ -22,8 +25,10 @@ public class OwnerHomeDashboardController {
     ) {
         Map<String, Object> details = (Map<String, Object>) authentication.getDetails();
         Long tenantId = toLong(details.get("tenantId"));
+        Long sessionBranchId = toLong(details.get("branchId"));
+        Long effectiveBranchId = branchAccessGuard.resolveOptionalForOwner(branchId, sessionBranchId);
 
-        return ownerHomeDashboardService.getDashboard(tenantId, branchId);
+        return ownerHomeDashboardService.getDashboard(tenantId, effectiveBranchId);
     }
 
     private Long toLong(Object value) {

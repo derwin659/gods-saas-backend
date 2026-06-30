@@ -1,5 +1,7 @@
 package com.gods.saas.web.controller;
 
+import com.gods.saas.security.BranchAccessGuard;
+
 import com.gods.saas.domain.dto.response.CashRegisterResponse;
 import com.gods.saas.service.impl.impl.CashRegisterService;
 import lombok.RequiredArgsConstructor;
@@ -15,6 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class CashRegisterAccessController {
 
     private final CashRegisterService cashRegisterService;
+    private final BranchAccessGuard branchAccessGuard;
 
     @GetMapping("/current")
     public CashRegisterResponse current(
@@ -22,7 +25,7 @@ public class CashRegisterAccessController {
             @RequestAttribute("branchId") Long sessionBranchId,
             @RequestParam(required = false) Long branchId
     ) {
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return cashRegisterService.getCurrent(tenantId, effectiveBranchId);
     }
 }

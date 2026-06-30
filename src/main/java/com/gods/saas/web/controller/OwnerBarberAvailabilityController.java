@@ -1,5 +1,7 @@
 package com.gods.saas.web.controller;
 
+import com.gods.saas.security.BranchAccessGuard;
+
 import com.gods.saas.domain.dto.request.SaveBarberAvailabilityRequest;
 import com.gods.saas.domain.dto.response.BarberAvailabilityDayResponse;
 import com.gods.saas.service.impl.JwtService;
@@ -18,6 +20,7 @@ public class OwnerBarberAvailabilityController {
 
     private final OwnerBarberAvailabilityService ownerBarberAvailabilityService;
     private final JwtService jwtService;
+    private final BranchAccessGuard branchAccessGuard;
 
     @PostMapping
     public ResponseEntity<Map<String, String>> saveAvailability(
@@ -51,10 +54,9 @@ public class OwnerBarberAvailabilityController {
     }
 
     private Long resolveBranchId(Map<String, Object> claims, Long branchIdParam) {
-        if (branchIdParam != null) {
-            return branchIdParam;
-        }
-        return extractRequiredLong(claims, "branchId");
+        Object value = claims.get("branchId");
+        Long sessionBranchId = value instanceof Number ? ((Number) value).longValue() : null;
+        return branchAccessGuard.resolve(branchIdParam, sessionBranchId);
     }
 
     private Long extractRequiredLong(Map<String, Object> claims, String key) {

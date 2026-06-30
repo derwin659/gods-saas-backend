@@ -23,6 +23,10 @@ public class BranchAccessGuard {
         return effectiveBranchId;
     }
 
+    public Long resolveOptionalForOwner(Long requestedBranchId, Long sessionBranchId) {
+        return isOwner() ? requestedBranchId : resolve(requestedBranchId, sessionBranchId);
+    }
+
     private boolean isOwner() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         return authentication != null && authentication.getAuthorities().stream()

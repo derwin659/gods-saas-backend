@@ -1,5 +1,7 @@
 package com.gods.saas.web.controller;
 
+import com.gods.saas.security.BranchAccessGuard;
+
 import com.gods.saas.domain.dto.request.CreateBarberTimeBlockRequest;
 import com.gods.saas.domain.dto.response.BarberTimeBlockResponse;
 import com.gods.saas.service.impl.JwtService;
@@ -18,6 +20,7 @@ public class OwnerBarberTimeBlockController {
 
     private final OwnerBarberTimeBlockService ownerBarberTimeBlockService;
     private final JwtService jwtService;
+    private final BranchAccessGuard branchAccessGuard;
 
     @PostMapping
     public ResponseEntity<Map<String, String>> createBlock(
@@ -67,16 +70,9 @@ public class OwnerBarberTimeBlockController {
     }
 
     private Long resolveBranchId(Map<String, Object> claims, Long branchIdParam) {
-        if (branchIdParam != null) {
-            return branchIdParam;
-        }
-
-        Object branchIdClaim = claims.get("branchId");
-        if (branchIdClaim == null) {
-            throw new RuntimeException("No se encontró la sucursal activa");
-        }
-
-        return ((Number) branchIdClaim).longValue();
+        Object value = claims.get("branchId");
+        Long sessionBranchId = value instanceof Number ? ((Number) value).longValue() : null;
+        return branchAccessGuard.resolve(branchIdParam, sessionBranchId);
     }
 
     private Map<String, Object> getClaims(String authHeader) {

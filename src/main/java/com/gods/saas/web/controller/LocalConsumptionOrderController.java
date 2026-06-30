@@ -1,5 +1,7 @@
 package com.gods.saas.web.controller;
 
+import com.gods.saas.security.BranchAccessGuard;
+
 import com.gods.saas.domain.dto.request.UpdateLocalConsumptionOrderRequest;
 import com.gods.saas.domain.dto.response.LocalConsumptionOrderResponse;
 import com.gods.saas.service.impl.AdminPermissionService;
@@ -16,6 +18,7 @@ import java.util.List;
 public class LocalConsumptionOrderController {
     private final LocalConsumptionOrderService localConsumptionOrderService;
     private final AdminPermissionService adminPermissionService;
+    private final BranchAccessGuard branchAccessGuard;
 
     @GetMapping
     public List<LocalConsumptionOrderResponse> ownerOrders(
@@ -25,7 +28,7 @@ public class LocalConsumptionOrderController {
             @RequestParam(required = false) String status
     ) {
         adminPermissionService.checkPermission("CASH_REGISTER");
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return localConsumptionOrderService.ownerOrders(tenantId, effectiveBranchId, status);
     }
 
@@ -38,7 +41,7 @@ public class LocalConsumptionOrderController {
             @RequestBody(required = false) UpdateLocalConsumptionOrderRequest request
     ) {
         adminPermissionService.checkPermission("CASH_REGISTER");
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return localConsumptionOrderService.reject(
                 tenantId,
                 effectiveBranchId,
@@ -57,7 +60,7 @@ public class LocalConsumptionOrderController {
             @RequestBody(required = false) UpdateLocalConsumptionOrderRequest request
     ) {
         adminPermissionService.checkPermission("CASH_REGISTER");
-        Long effectiveBranchId = branchId != null ? branchId : sessionBranchId;
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return localConsumptionOrderService.complete(
                 tenantId,
                 effectiveBranchId,

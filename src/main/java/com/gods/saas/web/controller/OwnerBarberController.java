@@ -1,5 +1,7 @@
 package com.gods.saas.web.controller;
 
+import com.gods.saas.security.BranchAccessGuard;
+
 import com.gods.saas.domain.dto.request.BarberCreateRequest;
 import com.gods.saas.domain.dto.request.BarberStatusRequest;
 import com.gods.saas.domain.dto.request.BarberUpdateRequest;
@@ -27,6 +29,7 @@ public class OwnerBarberController {
     private final OwnerBarberService ownerBarberService;
     private final JwtService jwtUtil;
     private final AdminPermissionService adminPermissionService;
+    private final BranchAccessGuard branchAccessGuard;
 
     @GetMapping
     public List<BarberResponse> listBarbers(
@@ -36,7 +39,8 @@ public class OwnerBarberController {
         SessionData session = extractSession(request);
         checkConfigBarbers(session);
 
-        return ownerBarberService.listBarbers(session.tenantId(), branchId);
+        Long effectiveBranchId = branchAccessGuard.resolveOptionalForOwner(branchId, session.branchId());
+        return ownerBarberService.listBarbers(session.tenantId(), effectiveBranchId);
     }
 
     @PostMapping
@@ -119,9 +123,10 @@ public class OwnerBarberController {
         Long tenantId = getLongRequestAttribute(request, "tenantId");
         Long userId = getLongRequestAttribute(request, "userId");
         String role = getStringRequestAttribute(request, "role");
+        Long branchId = getLongRequestAttribute(request, "branchId");
 
         if (tenantId != null && userId != null && role != null && !role.isBlank()) {
-            return new SessionData(tenantId, userId, role);
+            return new SessionData(tenantId, userId, role, branchId);
         }
 
         String token = extractToken(request);
@@ -131,6 +136,7 @@ public class OwnerBarberController {
         tenantId = toLong(claims.get("tenantId"));
         userId = toLong(claims.get("userId"));
         role = claims.get("role") == null ? "" : claims.get("role").toString();
+        branchId = toLong(claims.get("branchId"));
 
         if (tenantId == null) {
             throw new IllegalArgumentException("No se encontró tenantId en la sesión.");
@@ -144,7 +150,7 @@ public class OwnerBarberController {
             throw new IllegalArgumentException("No se encontró role en la sesión.");
         }
 
-        return new SessionData(tenantId, userId, role);
+        return new SessionData(tenantId, userId, role, branchId);
     }
 
     private Long getLongRequestAttribute(HttpServletRequest request, String key) {
@@ -184,7 +190,8 @@ public class OwnerBarberController {
     private record SessionData(
             Long tenantId,
             Long userId,
-            String role
+            String role,
+            Long branchId
     ) {
     }
 }
