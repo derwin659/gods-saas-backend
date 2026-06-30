@@ -9,6 +9,8 @@ import com.gods.saas.domain.dto.response.OwnerCustomerLoyaltyResponse;
 import com.gods.saas.domain.model.Customer;
 import com.gods.saas.service.impl.AdminPermissionService;
 import com.gods.saas.service.impl.CustomerService;
+import com.gods.saas.service.impl.CustomerExportService;
+import com.gods.saas.service.impl.GeneralAuditService;
 import com.gods.saas.utils.JwtUtil;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
@@ -26,6 +28,8 @@ public class OwnerCustomerController {
     private final CustomerService customerService;
     private final JwtUtil jwtUtil;
     private final AdminPermissionService adminPermissionService;
+    private final CustomerExportService customerExportService;
+    private final GeneralAuditService generalAuditService;
 
     @Operation(summary = "Listar clientes para owner/admin")
     @SecurityRequirement(name = "bearerAuth")

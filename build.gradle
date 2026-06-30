@@ -26,6 +26,7 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'com.googlecode.libphonenumber:libphonenumber:8.13.47'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.apache.poi:poi-ooxml:5.3.0'
     runtimeOnly 'org.postgresql:postgresql'
 
     compileOnly 'org.projectlombok:lombok'
