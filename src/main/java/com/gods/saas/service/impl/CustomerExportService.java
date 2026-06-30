@@ -39,7 +39,8 @@ public class CustomerExportService {
                 row.createCell(c++).setCellValue(item.getCompras()==null?0:item.getCompras());
                 row.createCell(c).setCellValue(Boolean.FALSE.equals(item.getActivo())?"Inactivo":"Activo");
             }
-            for(int i=0;i<headers.length;i++) sheet.autoSizeColumn(i);
+            int[] widths = {10,22,22,18,28,20,20,22,12,12,12};
+            for(int i=0;i<headers.length;i++) sheet.setColumnWidth(i, widths[i] * 256);
             sheet.createFreezePane(0,1); book.write(out); return out.toByteArray();
         } catch (Exception ex) { throw new IllegalStateException("No se pudo generar el Excel de clientes", ex); }
     }
