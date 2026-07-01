@@ -81,6 +81,7 @@ public class OwnerCatalogServiceImpl implements OwnerCatalogService {
                 .id(user.getId())
                 .nombre(user.getNombre())
                 .email(user.getEmail())
+                .photoUrl(user.getPhotoUrl())
                 .build();
     }
 

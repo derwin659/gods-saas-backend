@@ -37,11 +37,14 @@ public class BarberSaleService {
     private final ServiceRepository serviceRepository;
     private final SaleService saleService;
     private final CustomerCutHistoryService customerCutHistoryService;
+    private final BarberServiceAssignmentService barberServiceAssignmentService;
 
     @Transactional(Transactional.TxType.SUPPORTS)
-    public List<SimpleServiceResponse> getAvailableServices(Long tenantId) {
+    public List<SimpleServiceResponse> getAvailableServices(Long tenantId, Long branchId, Long barberUserId) {
         return serviceRepository.findByTenant_IdAndActivoTrueOrderByNombreAsc(tenantId)
                 .stream()
+                .filter(service -> barberServiceAssignmentService.canPerform(
+                        tenantId, branchId, barberUserId, service.getId()))
                 .map(service -> SimpleServiceResponse.builder()
                         .id(service.getId())
                         .nombre(service.getNombre())

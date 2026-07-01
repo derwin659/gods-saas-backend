@@ -55,11 +55,15 @@ public class BarberSaleController {
         Map<String, Object> claims = getClaims(authentication);
 
         Long tenantId = toLong(claims.get("tenantId"));
+        Long branchId = toLong(claims.get("branchId"));
+        Long userId = toLong(claims.get("userId"));
         if (tenantId == null) {
             throw new RuntimeException("El token no contiene tenantId");
         }
 
-        return barberSaleService.getAvailableServices(tenantId);
+        if (branchId == null) throw new RuntimeException("El token no contiene branchId");
+        if (userId == null) throw new RuntimeException("El token no contiene userId");
+        return barberSaleService.getAvailableServices(tenantId, branchId, userId);
     }
 
     @GetMapping("/catalog/products")
