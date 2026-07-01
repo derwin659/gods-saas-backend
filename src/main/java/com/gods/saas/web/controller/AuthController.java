@@ -150,31 +150,31 @@ public class AuthController {
             );
         }
 
+        List<UserTenantRole> tenantRoles = userTenantRoleRepository.findByUserIdWithRelations(req.getUserId()).stream()
+                .filter(role -> role.getTenant() != null && req.getTenantId().equals(role.getTenant().getId()))
+                .toList();
+        UserTenantRole ownerRole = tenantRoles.stream()
+                .filter(role -> role.getRole() == RoleType.OWNER)
+                .findFirst()
+                .orElse(null);
+
         UserTenantRole utr;
         Branch selectedOwnerBranch = null;
         if (req.getBranchId() == null) {
-            utr = userTenantRoleRepository
-                    .findByUserIdAndTenantIdWithRelations(req.getUserId(), req.getTenantId())
+            utr = ownerRole != null
+                    ? ownerRole
+                    : tenantRoles.stream().findFirst()
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No tienes acceso a esta barberia"));
+        } else if (ownerRole != null) {
+            utr = ownerRole;
+            selectedOwnerBranch = branchRepository.findByIdAndTenant_Id(req.getBranchId(), req.getTenantId())
+                    .filter(branch -> Boolean.TRUE.equals(branch.getActivo()))
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "La sede seleccionada no esta activa en este negocio"));
         } else {
-            List<UserTenantRole> tenantRoles = userTenantRoleRepository.findByUserIdWithRelations(req.getUserId()).stream()
-                    .filter(role -> role.getTenant() != null && req.getTenantId().equals(role.getTenant().getId()))
-                    .toList();
-
             utr = tenantRoles.stream()
                     .filter(role -> role.getBranch() != null && req.getBranchId().equals(role.getBranch().getId()))
                     .findFirst()
-                    .orElse(null);
-
-            if (utr == null) {
-                utr = tenantRoles.stream()
-                        .filter(role -> role.getRole() == RoleType.OWNER)
-                        .findFirst()
-                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "No tienes acceso a la sede seleccionada"));
-                selectedOwnerBranch = branchRepository.findByIdAndTenant_Id(req.getBranchId(), req.getTenantId())
-                        .filter(branch -> Boolean.TRUE.equals(branch.getActivo()))
-                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "La sede seleccionada no esta activa en este negocio"));
-            }
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "No tienes acceso a la sede seleccionada"));
         }
 
         if (utr.getBranch() == null && selectedOwnerBranch == null) {
