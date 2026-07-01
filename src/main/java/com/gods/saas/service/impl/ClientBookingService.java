@@ -24,6 +24,7 @@ import java.text.Normalizer;
 import java.util.Locale;
 
 import java.util.Map;
+import java.util.LinkedHashMap;
 
 
 @Service
@@ -104,7 +105,16 @@ public class ClientBookingService {
                 .distinct()
                 .toList();
 
-        return BarberMiniResponse.fromEntity(barber, branchIds);
+        BarberMiniResponse response = BarberMiniResponse.fromEntity(barber, branchIds);
+        Map<Long, List<Long>> serviceIdsByBranch = new LinkedHashMap<>();
+        for (Long branchId : branchIds) {
+            BarberServiceAssignmentResponse assignment = barberServiceAssignmentService.get(tenantId, branchId, barber.getId());
+            if (assignment.isConfigured()) {
+                serviceIdsByBranch.put(branchId, assignment.getServiceIds());
+            }
+        }
+        response.setServiceIdsByBranch(serviceIdsByBranch);
+        return response;
     }
 
     public BookingAvailabilityResponse getAvailability(

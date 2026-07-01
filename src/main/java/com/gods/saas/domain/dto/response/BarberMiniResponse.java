@@ -7,6 +7,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 
 import java.util.List;
+import java.util.Map;
 
 @Data
 @Builder
@@ -19,6 +20,7 @@ public class BarberMiniResponse {
     private Long branchId;
     private List<Long> branchIds;
     private String photoUrl;
+    private Map<Long, List<Long>> serviceIdsByBranch;
 
     public static BarberMiniResponse fromEntity(AppUser u) {
         return fromEntity(u, List.of());
@@ -34,6 +36,7 @@ public class BarberMiniResponse {
                 .branchId(safeBranchIds.isEmpty() ? null : safeBranchIds.get(0))
                 .branchIds(safeBranchIds)
                 .photoUrl(u.getPhotoUrl())
+                .serviceIdsByBranch(Map.of())
                 .build();
     }
 }
