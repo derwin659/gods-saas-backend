@@ -48,6 +48,7 @@ public class SaleServiceImpl implements SaleService {
     private final NotificationService notificationService;
     private final UserTenantRoleRepository userTenantRoleRepository;
     private final TenantSettingsRepository tenantSettingsRepository;
+    private final BarberServiceAssignmentService barberServiceAssignmentService;
 
     @Override
     public SaleResponse crearVenta(CreateSaleRequest request) {
@@ -222,6 +223,15 @@ public class SaleServiceImpl implements SaleService {
 
                 if (!barberUser.getTenant().getId().equals(tenant.getId())) {
                     throw new RuntimeException("El barbero no pertenece al tenant");
+                }
+
+                if (item.getService() != null
+                        && !barberServiceAssignmentService.canPerform(
+                                tenant.getId(), branch.getId(), barberUser.getId(), item.getService().getId())) {
+                    throw new RuntimeException(
+                            barberUser.getNombre() + " no realiza el servicio "
+                                    + item.getService().getNombre() + " en esta sede"
+                    );
                 }
 
                 item.setBarberUser(barberUser);

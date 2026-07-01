@@ -49,6 +49,7 @@ public class ClientBookingService {
     private final NotificationService notificationService;
     private final PromotionRepository promotionRepository;
     private final UserTenantRoleRepository userTenantRoleRepository;
+    private final BarberServiceAssignmentService barberServiceAssignmentService;
 
     public BookingBootstrapResponse getBootstrap(Long tenantId) {
         Tenant tenant = tenantRepository.findById(tenantId)
@@ -163,6 +164,7 @@ public class ClientBookingService {
                     tenantId);
 
             validateBarberBranch(barber, tenantId, branchId);
+            validateBarberServices(tenantId, branchId, barberId, selectedServices);
 
             BarberAvailability availability = getWorkingAvailabilityOrNull(
                     tenantId, branchId, barberId, fecha
@@ -206,7 +208,9 @@ public class ClientBookingService {
                 current = current.plusMinutes(slotInterval);
             }
         } else {
-            List<AppUser> barberos = getActiveBranchBarbers(tenantId, branchId);
+            List<AppUser> barberos = getActiveBranchBarbers(tenantId, branchId).stream()
+                    .filter(barber -> canPerformAll(tenantId, branchId, barber.getId(), selectedServices))
+                    .toList();
 
             log.info("ACTIVE BRANCH BARBERS => branchId={}, count={}, barberIds={}",
                     branchId,
@@ -325,6 +329,7 @@ public class ClientBookingService {
                     .orElseThrow(() -> new RuntimeException("Barbero no encontrado"));
 
             validateBarberBranch(barber, tenantId, req.getBranchId());
+            validateBarberServices(tenantId, req.getBranchId(), barber.getId(), selectedServices);
 
             if (!isBarberAvailableConsideringAllRules(
                     tenantId,
@@ -342,7 +347,8 @@ public class ClientBookingService {
                     req.getBranchId(),
                     fecha,
                     horaInicio,
-                    horaFin
+                    horaFin,
+                    selectedServices
             );
         }
 
@@ -601,9 +607,12 @@ public class ClientBookingService {
             Long branchId,
             LocalDate fecha,
             LocalTime horaInicio,
-            LocalTime horaFin
+            LocalTime horaFin,
+            List<ServiceEntity> selectedServices
     ) {
-        List<AppUser> barberos = getActiveBranchBarbers(tenantId, branchId);
+        List<AppUser> barberos = getActiveBranchBarbers(tenantId, branchId).stream()
+                .filter(barber -> canPerformAll(tenantId, branchId, barber.getId(), selectedServices))
+                .toList();
 
         for (AppUser b : barberos) {
             if (isBarberAvailableConsideringAllRules(
@@ -820,6 +829,17 @@ public class ClientBookingService {
             log.warn("BARBER BRANCH MISMATCH => barberId={}, requestedBranchId={}",
                     barber.getId(), branchId);
             throw new RuntimeException("El barbero no pertenece a la sucursal seleccionada");
+        }
+    }
+
+    private boolean canPerformAll(Long tenantId, Long branchId, Long barberId, List<ServiceEntity> services) {
+        return services.stream().allMatch(service -> barberServiceAssignmentService.canPerform(
+                tenantId, branchId, barberId, service.getId()));
+    }
+
+    private void validateBarberServices(Long tenantId, Long branchId, Long barberId, List<ServiceEntity> services) {
+        if (!canPerformAll(tenantId, branchId, barberId, services)) {
+            throw new RuntimeException("El profesional seleccionado no realiza uno o más de estos servicios en esta sede");
         }
     }
 

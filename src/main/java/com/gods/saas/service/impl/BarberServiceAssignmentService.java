@@ -37,9 +37,26 @@ public class BarberServiceAssignmentService {
         List<ServiceEntity> services = ids.stream().map(id -> serviceRepository.findByIdAndTenant_Id(id, tenantId)
                 .filter(service -> Boolean.TRUE.equals(service.getActivo()))
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.BAD_REQUEST, "Servicio no disponible: " + id))).toList();
-        repository.deleteByTenant_IdAndBranch_IdAndBarber_Id(tenantId, branchId, barberId);
+        List<BarberBranchService> currentRows =
+                repository.findByTenant_IdAndBranch_IdAndBarber_IdOrderByService_NombreAsc(tenantId, branchId, barberId);
+        Set<Long> requested = new LinkedHashSet<>(ids);
+        List<BarberBranchService> removed = currentRows.stream()
+                .filter(row -> !requested.contains(row.getService().getId()))
+                .toList();
+        repository.deleteAll(removed);
+        repository.flush();
+
+        Set<Long> existingIds = currentRows.stream()
+                .filter(row -> requested.contains(row.getService().getId()))
+                .map(row -> row.getService().getId())
+                .collect(java.util.stream.Collectors.toSet());
         Branch branch = branchRepository.findByIdAndTenant_Id(branchId, tenantId).orElseThrow();
-        for (ServiceEntity service : services) repository.save(BarberBranchService.builder().tenant(new Tenant(tenantId)).branch(branch).barber(barber).service(service).build());
+        for (ServiceEntity service : services) {
+            if (!existingIds.contains(service.getId())) {
+                repository.save(BarberBranchService.builder()
+                        .tenant(new Tenant(tenantId)).branch(branch).barber(barber).service(service).build());
+            }
+        }
         auditService.record(tenantId, branchId, actorUserId, actorRole, "BARBER_SERVICE", barberId, "UPDATE", "Servicios habilitados actualizados", before, ids);
         return get(tenantId, branchId, barberId);
     }
@@ -49,6 +66,7 @@ public class BarberServiceAssignmentService {
         validateScope(tenantId, branchId, barberId);
         List<Long> before = repository.findByTenant_IdAndBranch_IdAndBarber_IdOrderByService_NombreAsc(tenantId, branchId, barberId).stream().map(row -> row.getService().getId()).toList();
         repository.deleteByTenant_IdAndBranch_IdAndBarber_Id(tenantId, branchId, barberId);
+        repository.flush();
         auditService.record(tenantId, branchId, actorUserId, actorRole, "BARBER_SERVICE", barberId, "RESET", "Restablecido a todos los servicios", before, Map.of("allActiveServices", true));
         return get(tenantId, branchId, barberId);
     }
@@ -60,7 +78,7 @@ public class BarberServiceAssignmentService {
 
     private AppUser validateScope(Long tenantId, Long branchId, Long barberId) {
         branchRepository.findByIdAndTenant_Id(branchId, tenantId).orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Sede no encontrada"));
-        AppUser barber = appUserRepository.findByIdAndTenant_Id(barberId, tenantId).filter(user -> "BARBER".equalsIgnoreCase(user.getRol()))
+        AppUser barber = appUserRepository.findByIdAndTenant_Id(barberId, tenantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Profesional no encontrado"));
         if (!userTenantRoleRepository.existsByUser_IdAndTenant_IdAndBranch_Id(barberId, tenantId, branchId))
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "El profesional no pertenece a esta sede");
