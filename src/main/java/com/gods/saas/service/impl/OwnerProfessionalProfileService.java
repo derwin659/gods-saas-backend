@@ -51,8 +51,8 @@ public class OwnerProfessionalProfileService {
     }
 
     private AppUser requireOwner(Long tenantId, Long ownerId) {
-        return appUserRepository.findByIdAndTenant_Id(ownerId, tenantId).filter(u -> "OWNER".equalsIgnoreCase(u.getRol()))
-                .orElseThrow(() -> new BusinessException("La cuenta no corresponde al dueño"));
+        return appUserRepository.findByIdAndTenant_Id(ownerId, tenantId)
+                .orElseThrow(() -> new BusinessException("No se encontró la cuenta del dueño"));
     }
     private List<Branch> resolveBranches(Long tenantId, List<Long> ids) {
         LinkedHashMap<Long,Branch> values = new LinkedHashMap<>();
