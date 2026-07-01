@@ -35,6 +35,7 @@ public class OwnerAgendaAppointmentService {
     private final BarberTimeBlockRepository barberTimeBlockRepository;
     private final UserTenantRoleRepository userTenantRoleRepository;
     private final NotificationService notificationService;
+    private final BarberServiceAssignmentService barberServiceAssignmentService;
 
     @Transactional
     public OwnerAgendaResponse createAppointment(Long tenantId, Long branchId, CreateOwnerAppointmentRequest request) {
@@ -51,6 +52,7 @@ public class OwnerAgendaAppointmentService {
         Customer customer = getCustomer(tenantId, request.getCustomerId());
         ServiceEntity service = getService(tenantId, request.getServiceId());
         AppUser barber = getBarber(tenantId, effectiveBranchId, request.getBarberUserId());
+        validateBarberService(tenantId, effectiveBranchId, barber.getId(), service.getId());
 
         LocalDate fecha = LocalDate.parse(request.getFecha());
         LocalTime horaInicio = LocalTime.parse(request.getHoraInicio());
@@ -120,6 +122,7 @@ public class OwnerAgendaAppointmentService {
 
         if (service == null) throw new RuntimeException("La cita no tiene servicio asociado");
         if (barber == null) throw new RuntimeException("La cita no tiene barbero asociado");
+        validateBarberService(tenantId, effectiveBranchId, barber.getId(), service.getId());
 
         LocalDate fecha = request.getFecha() != null && !request.getFecha().isBlank()
                 ? LocalDate.parse(request.getFecha())
@@ -264,6 +267,7 @@ public class OwnerAgendaAppointmentService {
         getBranch(tenantId, branchId);
         ServiceEntity service = getService(tenantId, serviceId);
         AppUser barber = getBarber(tenantId, branchId, barberUserId);
+        validateBarberService(tenantId, branchId, barber.getId(), service.getId());
 
         int duration = getServiceDuration(service);
         int slotInterval = resolveSlotIntervalMinutes(duration);
@@ -342,6 +346,12 @@ public class OwnerAgendaAppointmentService {
         if (!belongsToBranch) throw new RuntimeException("El barbero no pertenece a esta sucursal");
 
         return barber;
+    }
+
+    private void validateBarberService(Long tenantId, Long branchId, Long barberId, Long serviceId) {
+        if (!barberServiceAssignmentService.canPerform(tenantId, branchId, barberId, serviceId)) {
+            throw new RuntimeException("El profesional seleccionado no realiza este servicio en esta sede");
+        }
     }
 
     private LocalTime resolveHoraFin(LocalTime horaInicio, String rawHoraFin, ServiceEntity service) {
