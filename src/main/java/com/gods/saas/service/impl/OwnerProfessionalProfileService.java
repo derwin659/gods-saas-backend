@@ -32,6 +32,7 @@ public class OwnerProfessionalProfileService {
         if (branches.isEmpty()) throw new BusinessException("Selecciona al menos una sede");
         List<UserTenantRole> previous = roleRepository.findByUserIdAndTenantIdAndRoleWithBranch(ownerId, tenantId, RoleType.BARBER);
         roleRepository.deleteAll(previous);
+        roleRepository.flush();
         Tenant tenant = new Tenant(tenantId);
         for (Branch branch : branches) roleRepository.save(UserTenantRole.builder().user(owner).tenant(tenant).branch(branch).role(RoleType.BARBER).build());
         if (owner.getBranch() == null) { owner.setBranch(branches.get(0)); appUserRepository.save(owner); }
@@ -45,6 +46,7 @@ public class OwnerProfessionalProfileService {
         requireOwner(tenantId, ownerId);
         List<UserTenantRole> previous = roleRepository.findByUserIdAndTenantIdAndRoleWithBranch(ownerId, tenantId, RoleType.BARBER);
         roleRepository.deleteAll(previous);
+        roleRepository.flush();
         auditService.record(tenantId, null, ownerId, "OWNER", "OWNER_PROFESSIONAL", ownerId, "DISABLE",
                 "El dueño dejó de atender clientes", previous.stream().map(r -> r.getBranch().getId()).toList(), Map.of("enabled", false));
         return response(List.of());
