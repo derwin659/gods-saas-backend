@@ -46,7 +46,7 @@ public class OwnerBarberTimeBlockService {
                 branchId
         );
 
-        if (!belongsToBranch) {
+        if (!belongsToBranch && !barber.getId().equals(actorUserId)) {
             throw new RuntimeException("El barbero no pertenece a esta sucursal");
         }
 
@@ -81,7 +81,7 @@ public class OwnerBarberTimeBlockService {
     }
 
     @Transactional(readOnly = true)
-    public List<BarberTimeBlockResponse> listBlocks(Long tenantId, Long branchId, Long barberUserId) {
+    public List<BarberTimeBlockResponse> listBlocks(Long tenantId, Long branchId, Long barberUserId, Long actorUserId) {
         appUserRepository.findByIdAndTenant_Id(barberUserId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Barbero no encontrado"));
 
@@ -94,7 +94,7 @@ public class OwnerBarberTimeBlockService {
                 branch.getId()
         );
 
-        if (!belongsToBranch) {
+        if (!belongsToBranch && !barberUserId.equals(actorUserId)) {
             throw new RuntimeException("El barbero no pertenece a esta sucursal");
         }
 

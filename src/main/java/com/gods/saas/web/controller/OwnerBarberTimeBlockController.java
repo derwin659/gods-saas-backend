@@ -47,9 +47,10 @@ public class OwnerBarberTimeBlockController {
         Map<String, Object> claims = getClaims(authHeader);
         Long tenantId = ((Number) claims.get("tenantId")).longValue();
         Long branchId = resolveBranchId(claims, branchIdParam);
+        Long actorUserId = ((Number) claims.get("userId")).longValue();
 
         return ResponseEntity.ok(
-                ownerBarberTimeBlockService.listBlocks(tenantId, branchId, barberUserId)
+                ownerBarberTimeBlockService.listBlocks(tenantId, branchId, barberUserId, actorUserId)
         );
     }
 

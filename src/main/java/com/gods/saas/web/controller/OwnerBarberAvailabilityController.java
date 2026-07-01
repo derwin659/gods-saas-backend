@@ -47,9 +47,10 @@ public class OwnerBarberAvailabilityController {
         Map<String, Object> claims = getClaims(authHeader);
         Long tenantId = extractRequiredLong(claims, "tenantId");
         Long branchId = resolveBranchId(claims, branchIdParam);
+        Long actorUserId = extractRequiredLong(claims, "userId");
 
         return ResponseEntity.ok(
-                ownerBarberAvailabilityService.getAvailability(tenantId, branchId, barberUserId)
+                ownerBarberAvailabilityService.getAvailability(tenantId, branchId, barberUserId, actorUserId)
         );
     }
 

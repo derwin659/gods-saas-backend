@@ -51,7 +51,7 @@ public class OwnerBarberAvailabilityService {
                 branchId
         );
 
-        if (!belongsToBranch) {
+        if (!belongsToBranch && !barber.getId().equals(actorUserId)) {
             throw new RuntimeException("El barbero no pertenece a esta sucursal");
         }
 
@@ -71,7 +71,7 @@ public class OwnerBarberAvailabilityService {
             }
         }
 
-        List<BarberAvailabilityDayResponse> previousAvailability = getAvailability(tenantId, branchId, barber.getId());
+        List<BarberAvailabilityDayResponse> previousAvailability = getAvailability(tenantId, branchId, barber.getId(), actorUserId);
 
         barberAvailabilityRepository.deleteByTenant_IdAndBranch_IdAndBarber_Id(
                 tenantId, branchId, barber.getId()
@@ -102,7 +102,7 @@ public class OwnerBarberAvailabilityService {
     }
 
     @Transactional(readOnly = true)
-    public List<BarberAvailabilityDayResponse> getAvailability(Long tenantId, Long branchId, Long barberUserId) {
+    public List<BarberAvailabilityDayResponse> getAvailability(Long tenantId, Long branchId, Long barberUserId, Long actorUserId) {
         appUserRepository.findByIdAndTenant_Id(barberUserId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Barbero no encontrado"));
 
@@ -115,7 +115,7 @@ public class OwnerBarberAvailabilityService {
                 branch.getId()
         );
 
-        if (!belongsToBranch) {
+        if (!belongsToBranch && !barberUserId.equals(actorUserId)) {
             throw new RuntimeException("El barbero no pertenece a esta sucursal");
         }
 
