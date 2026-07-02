@@ -241,7 +241,7 @@ public class PromotionServiceImpl implements PromotionService {
 
         String publicPlan = SubscriptionPlanCatalog.publicPlan(subscription.getPlan());
 
-        if (!SubscriptionPlanCatalog.STARTER.equals(publicPlan) && !subscription.isPromotionsEnabled()) {
+        if (!hasStarterConfiguration(publicPlan) && !subscription.isPromotionsEnabled()) {
             throw new RuntimeException("Tu plan actual no permite gestionar promociones");
         }
     }
@@ -253,16 +253,21 @@ public class PromotionServiceImpl implements PromotionService {
 
         String publicPlan = SubscriptionPlanCatalog.publicPlan(subscription.getPlan());
 
-        if (!SubscriptionPlanCatalog.STARTER.equals(publicPlan) && !subscription.isPromotionsEnabled()) {
+        if (!hasStarterConfiguration(publicPlan) && !subscription.isPromotionsEnabled()) {
             throw new RuntimeException("Tu plan actual no permite gestionar promociones");
         }
 
-        if (SubscriptionPlanCatalog.STARTER.equals(publicPlan)) {
+        if (hasStarterConfiguration(publicPlan)) {
             long totalPromotions = promotionRepository.countByTenant_Id(tenantId);
             if (totalPromotions >= 5) {
-                throw new RuntimeException("El plan STARTER permite hasta 5 promociones");
+                throw new RuntimeException("Tu plan permite hasta 5 promociones");
             }
         }
+    }
+
+    private boolean hasStarterConfiguration(String publicPlan) {
+        return SubscriptionPlanCatalog.BASIC.equals(publicPlan)
+                || SubscriptionPlanCatalog.STARTER.equals(publicPlan);
     }
 
     private Branch resolveBranch(Long tenantId, Long branchId) {

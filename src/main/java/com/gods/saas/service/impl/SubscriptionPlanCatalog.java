@@ -148,13 +148,14 @@ public final class SubscriptionPlanCatalog {
                 subscription.setCustomRewardsEnabled(false);
             }
             case BASIC -> {
+                // Starter compacto: mismas capacidades, menor tamaño de equipo.
                 subscription.setMaxBranches(1);
-                subscription.setMaxBarbers(1);
-                subscription.setMaxAdmins(0);
+                subscription.setMaxBarbers(2);
+                subscription.setMaxAdmins(1);
                 subscription.setAiEnabled(false);
-                subscription.setLoyaltyEnabled(false);
+                subscription.setLoyaltyEnabled(true);
                 subscription.setPromotionsEnabled(false);
-                subscription.setCustomRewardsEnabled(false);
+                subscription.setCustomRewardsEnabled(true);
             }
             case STARTER, STARTER_LEGACY -> {
                 subscription.setMaxBranches(1);

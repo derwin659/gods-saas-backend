@@ -177,7 +177,7 @@ public class RewardItemServiceImpl implements RewardItemService {
 
         String publicPlan = SubscriptionPlanCatalog.publicPlan(subscription.getPlan());
 
-        if (!SubscriptionPlanCatalog.STARTER.equals(publicPlan)
+        if (!hasStarterConfiguration(publicPlan)
                 && (subscription.getCustomRewardsEnabled() == null || !subscription.getCustomRewardsEnabled())) {
             throw new RuntimeException("Tu plan actual no permite gestionar premios personalizados");
         }
@@ -190,18 +190,23 @@ public class RewardItemServiceImpl implements RewardItemService {
 
         String publicPlan = SubscriptionPlanCatalog.publicPlan(subscription.getPlan());
 
-        if (!SubscriptionPlanCatalog.STARTER.equals(publicPlan)
+        if (!hasStarterConfiguration(publicPlan)
                 && (subscription.getCustomRewardsEnabled() == null || !subscription.getCustomRewardsEnabled())) {
             throw new RuntimeException("Tu plan actual no permite gestionar premios personalizados");
         }
 
-        if (SubscriptionPlanCatalog.STARTER.equals(publicPlan)) {
+        if (hasStarterConfiguration(publicPlan)) {
             long totalRewards = repository.countByTenant_Id(tenantId);
 
             if (totalRewards >= STARTER_MAX_REWARDS) {
-                throw new RuntimeException("El plan STARTER permite hasta 5 premios");
+                throw new RuntimeException("Tu plan permite hasta 5 premios");
             }
         }
+    }
+
+    private boolean hasStarterConfiguration(String publicPlan) {
+        return SubscriptionPlanCatalog.BASIC.equals(publicPlan)
+                || SubscriptionPlanCatalog.STARTER.equals(publicPlan);
     }
 
     private String trimToNull(String value) {
