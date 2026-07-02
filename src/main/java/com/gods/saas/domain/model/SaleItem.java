@@ -69,6 +69,14 @@ public class SaleItem {
     @Builder.Default
     private BigDecimal productCommissionAmount = BigDecimal.ZERO;
 
+    /** Porcentaje de comisión resuelto al registrar o editar el servicio. */
+    @Column(name = "commission_percentage_applied", precision = 5, scale = 2)
+    private BigDecimal commissionPercentageApplied;
+
+    /** Monto histórico de comisión de este servicio. */
+    @Column(name = "commission_amount_applied", precision = 12, scale = 2)
+    private BigDecimal commissionAmountApplied;
+
     @PrePersist
     @PreUpdate
     private void ensureDefaults() {

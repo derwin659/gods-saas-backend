@@ -21,4 +21,6 @@ public class SaleItemResponse {
     private BigDecimal precioUnitario;
     private BigDecimal subtotal;
     private BigDecimal productCommissionAmount;
+    private BigDecimal commissionPercentageApplied;
+    private BigDecimal commissionAmountApplied;
 }

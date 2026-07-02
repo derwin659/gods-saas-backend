@@ -86,8 +86,9 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
         BigDecimal commissionPercentage = safe(commissionPercentage(barber, branchCompensation));
         BigDecimal serviceCommissionAmount = salaryMode
                 ? BigDecimal.ZERO
-                : salesBase.multiply(commissionPercentage)
-                .divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP);
+                : safe(saleRepository.sumBarberServiceCommissionsByRange(
+                        tenantId, branchId, barberUserId, start, end, commissionPercentage
+                )).setScale(2, RoundingMode.HALF_UP);
 
         BigDecimal commissionAmount = serviceCommissionAmount
                 .add(productCommissionsAmount)

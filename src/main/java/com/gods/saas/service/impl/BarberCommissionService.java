@@ -300,8 +300,9 @@ public class BarberCommissionService {
 
             serviceCommissionAmount = salaryMode
                     ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
-                    : calculateCommission(totalVentas, porcentajeComision)
-                    .setScale(2, RoundingMode.HALF_UP);
+                    : nvl(saleRepository.sumBarberServiceCommissionsByRange(
+                            tenantId, branchId, barber.getId(), summaryStart, summaryEnd, porcentajeComision
+                    )).setScale(2, RoundingMode.HALF_UP);
 
             totalComision = serviceCommissionAmount
                     .add(productCommissionAmount)
@@ -389,10 +390,7 @@ public class BarberCommissionService {
     ) {
         boolean salaryMode = Boolean.TRUE.equals(barber.getSalaryMode());
         BigDecimal dayBaseSales = nvl(baseSales).setScale(2, RoundingMode.HALF_UP);
-        BigDecimal serviceCommission = salaryMode
-                ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
-                : calculateCommission(dayBaseSales, porcentajeComision)
-                .setScale(2, RoundingMode.HALF_UP);
+        BigDecimal serviceCommission = BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP);
 
         LocalDateTime saleStart = fecha.atStartOfDay(tenantZone)
                 .withZoneSameInstant(ZoneOffset.UTC)
@@ -400,6 +398,12 @@ public class BarberCommissionService {
         LocalDateTime saleEnd = fecha.plusDays(1).atStartOfDay(tenantZone)
                 .withZoneSameInstant(ZoneOffset.UTC)
                 .toLocalDateTime();
+
+        if (!salaryMode) {
+            serviceCommission = nvl(saleRepository.sumBarberServiceCommissionsByRange(
+                    tenantId, branchId, barberUserId, saleStart, saleEnd, porcentajeComision
+            )).setScale(2, RoundingMode.HALF_UP);
+        }
 
         BigDecimal productCommission = nvl(
                 saleRepository.sumBarberProductCommissionsByRange(

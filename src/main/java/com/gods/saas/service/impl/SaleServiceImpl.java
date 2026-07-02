@@ -49,6 +49,7 @@ public class SaleServiceImpl implements SaleService {
     private final UserTenantRoleRepository userTenantRoleRepository;
     private final TenantSettingsRepository tenantSettingsRepository;
     private final BarberServiceAssignmentService barberServiceAssignmentService;
+    private final BarberServiceCommissionService barberServiceCommissionService;
 
     @Override
     public SaleResponse crearVenta(CreateSaleRequest request) {
@@ -254,6 +255,12 @@ public class SaleServiceImpl implements SaleService {
             item.setPrecioUnitario(precioUnitario);
             item.setSubtotal(subtotalItem);
 
+            if (item.getService() != null && barberUser != null) {
+                BigDecimal percentage = barberServiceCommissionService.resolvePercentage(tenant.getId(), branch.getId(), barberUser.getId(), item.getService().getId()).setScale(2, RoundingMode.HALF_UP);
+                item.setCommissionPercentageApplied(percentage);
+                item.setCommissionAmountApplied(subtotalItem.multiply(percentage).divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP));
+            }
+
             if (item.getService() != null) {
                 item.setCostoUnitario(BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP));
                 item.setGanancia(subtotalItem);
@@ -290,6 +297,8 @@ public class SaleServiceImpl implements SaleService {
                             .cantidad(cantidad)
                             .precioUnitario(precioUnitario)
                             .subtotal(subtotalItem)
+                            .commissionPercentageApplied(item.getCommissionPercentageApplied())
+                            .commissionAmountApplied(item.getCommissionAmountApplied())
                             .build()
             );
         }
@@ -397,6 +406,8 @@ public class SaleServiceImpl implements SaleService {
                             .cantidad(old.getCantidad())
                             .precioUnitario(old.getPrecioUnitario())
                             .subtotal(old.getSubtotal())
+                            .commissionPercentageApplied(savedItem.getCommissionPercentageApplied())
+                            .commissionAmountApplied(savedItem.getCommissionAmountApplied())
                             .build()
             );
         }

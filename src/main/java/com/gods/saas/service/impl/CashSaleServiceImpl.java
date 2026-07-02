@@ -74,6 +74,7 @@ public class CashSaleServiceImpl implements CashSaleService {
     private final TenantSettingsRepository tenantSettingsRepository;
     private final CashAuditLogRepository cashAuditLogRepository;
     private final GeneralAuditService generalAuditService;
+    private final BarberServiceCommissionService barberServiceCommissionService;
 
     @Override
     public SaleResponse createCashSale(Long tenantId, Long branchId, Long userId, CreateCashSaleRequest request) {
@@ -407,6 +408,7 @@ public class CashSaleServiceImpl implements CashSaleService {
             }
 
             SaleItem item = itemsById.get(itemRequest.resolvedItemId());
+            boolean commissionInputsChanged = false;
             if (item == null) {
                 throw new IllegalArgumentException("Item de venta no encontrado: " + itemRequest.resolvedItemId());
             }
@@ -420,6 +422,7 @@ public class CashSaleServiceImpl implements CashSaleService {
                 }
 
                 item.setBarberUser(barber);
+                commissionInputsChanged = true;
             }
 
             if (itemRequest.getPrecioUnitario() != null) {
@@ -433,12 +436,20 @@ public class CashSaleServiceImpl implements CashSaleService {
                 item.setPrecioUnitario(price);
                 item.setSubtotal(subtotal);
 
+                commissionInputsChanged = true;
+
                 if (item.getProduct() == null) {
                     item.setGanancia(subtotal);
                 } else {
                     BigDecimal cost = safe(item.getCostoUnitario()).multiply(BigDecimal.valueOf(quantity)).setScale(2, RoundingMode.HALF_UP);
                     item.setGanancia(subtotal.subtract(cost).setScale(2, RoundingMode.HALF_UP));
                 }
+            }
+
+            if (commissionInputsChanged && item.getService() != null && item.getBarberUser() != null) {
+                BigDecimal percentage = barberServiceCommissionService.resolvePercentage(sale.getTenant().getId(), sale.getBranch().getId(), item.getBarberUser().getId(), item.getService().getId()).setScale(2, RoundingMode.HALF_UP);
+                item.setCommissionPercentageApplied(percentage);
+                item.setCommissionAmountApplied(safe(item.getSubtotal()).multiply(percentage).divide(new BigDecimal("100"), 2, RoundingMode.HALF_UP));
             }
         }
     }
@@ -754,6 +765,8 @@ public class CashSaleServiceImpl implements CashSaleService {
                                         .cantidad(item.getCantidad())
                                         .precioUnitario(safe(item.getPrecioUnitario()))
                                         .subtotal(safe(item.getSubtotal()))
+                                        .commissionPercentageApplied(item.getCommissionPercentageApplied())
+                                        .commissionAmountApplied(item.getCommissionAmountApplied())
                                         .build()
                         ).collect(Collectors.toList())
                 )

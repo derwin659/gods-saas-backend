@@ -905,6 +905,26 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
             @Param("end") LocalDateTime end
     );
 
+    /** Comisión histórica de servicios; ventas antiguas usan el porcentaje general. */
+    @Query(value = """
+        select coalesce(sum(case when si.commission_amount_applied is not null then si.commission_amount_applied else coalesce(si.subtotal, 0) * coalesce(:fallbackPercentage, 0) / 100 end), 0)
+        from sale_item si join sale s on s.sale_id = si.sale_id
+        where s.tenant_id = :tenantId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
+          and (:branchId is null or s.branch_id = :branchId)
+          and si.barber_user_id = :barberUserId
+          and (si.service_id is not null or upper(coalesce(si.tipo_item, '')) = 'SERVICE' or (si.product_id is null and upper(coalesce(si.tipo_item, '')) <> 'PRODUCT'))
+          and upper(trim(coalesce(s.metodo_pago, ''))) not in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
+          and coalesce(s.total, 0) > 0
+          and COALESCE(s.sale_date, s.fecha_creacion) >= :start
+          and COALESCE(s.sale_date, s.fecha_creacion) < :end
+        """, nativeQuery = true)
+    BigDecimal sumBarberServiceCommissionsByRange(
+            @Param("tenantId") Long tenantId, @Param("branchId") Long branchId,
+            @Param("barberUserId") Long barberUserId, @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end, @Param("fallbackPercentage") BigDecimal fallbackPercentage
+    );
+
     /**
      * Comisión fija de productos vendidos por el barbero.
      * Si una venta antigua no guardó product_commission_amount, calcula desde el producto actual.
