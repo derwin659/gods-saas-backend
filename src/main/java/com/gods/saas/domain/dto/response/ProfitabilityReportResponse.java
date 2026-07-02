@@ -18,6 +18,8 @@ public class ProfitabilityReportResponse {
     private BigDecimal operationalExpenses;
     private BigDecimal barberAdvances;
     private BigDecimal barberPayments;
+    private BigDecimal barberCommissionsAccrued;
+    private BigDecimal cashFlowAfterBarberSettlements;
 
     private BigDecimal netProfit;
     private BigDecimal profitMargin;

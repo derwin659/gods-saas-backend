@@ -914,6 +914,38 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
             @Param("end") LocalDateTime end
     );
 
+    /** Comisión devengada por servicios y productos, independiente de cuándo se liquide en caja. */
+    @Query(value = """
+        select coalesce(sum(
+            case
+                when si.service_id is not null then
+                    case when coalesce(bbc.salary_mode, u.salary_mode, false) then 0
+                         else coalesce(si.commission_amount_applied,
+                              coalesce(si.subtotal, 0) * coalesce(bbc.commission_percentage, u.commission_percentage, 0) / 100)
+                    end
+                when si.product_id is not null then coalesce(si.product_commission_amount, 0)
+                else 0
+            end
+        ), 0)
+        from sale_item si
+        join sale s on s.sale_id = si.sale_id
+        left join app_user u on u.user_id = si.barber_user_id
+        left join barber_branch_compensation bbc
+          on bbc.tenant_id = s.tenant_id and bbc.branch_id = s.branch_id and bbc.barber_user_id = si.barber_user_id
+        where s.tenant_id = :tenantId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
+          and (:branchId is null or s.branch_id = :branchId)
+          and si.barber_user_id is not null
+          and upper(trim(coalesce(s.metodo_pago, ''))) not in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA')
+          and coalesce(s.total, 0) > 0
+          and COALESCE(s.sale_date, s.fecha_creacion) >= :start
+          and COALESCE(s.sale_date, s.fecha_creacion) < :end
+        """, nativeQuery = true)
+    BigDecimal sumAccruedBarberCommissionsByRange(
+            @Param("tenantId") Long tenantId, @Param("branchId") Long branchId,
+            @Param("start") LocalDateTime start, @Param("end") LocalDateTime end
+    );
+
     /** Comisión histórica de servicios; ventas antiguas usan el porcentaje general. */
     @Query(value = """
         select coalesce(sum(case when si.commission_amount_applied is not null then si.commission_amount_applied else coalesce(si.subtotal, 0) * coalesce(:fallbackPercentage, 0) / 100 end), 0)

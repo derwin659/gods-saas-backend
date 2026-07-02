@@ -59,8 +59,15 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
         );
 
         BigDecimal grossIncome = totalSales.add(additionalIncome);
+        BigDecimal barberCommissionsAccrued = nvl(
+                saleRepository.sumAccruedBarberCommissionsByRange(tenantId, branchId, start, end)
+        );
 
+        // Utilidad por devengo: los pagos y adelantos liquidan una deuda, no son un gasto adicional.
         BigDecimal netProfit = grossIncome
+                .subtract(operationalExpenses)
+                .subtract(barberCommissionsAccrued);
+        BigDecimal cashFlowAfterBarberSettlements = grossIncome
                 .subtract(operationalExpenses)
                 .subtract(barberAdvances)
                 .subtract(barberPayments);
@@ -82,7 +89,18 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
                     BigDecimal dailyAdvances = nvl(p.getBarberAdvances());
                     BigDecimal dailyPayments = nvl(p.getBarberPayments());
 
+                    LocalDateTime dailyStart = p.getReportDate().atStartOfDay();
+                    LocalDateTime dailyEnd = p.getReportDate().plusDays(1).atStartOfDay();
+                    BigDecimal dailyCommissionsAccrued = nvl(
+                            saleRepository.sumAccruedBarberCommissionsByRange(
+                                    tenantId, branchId, dailyStart, dailyEnd
+                            )
+                    );
                     BigDecimal dailyProfit = dailySales
+                            .add(dailyAdditionalIncome)
+                            .subtract(dailyExpenses)
+                            .subtract(dailyCommissionsAccrued);
+                    BigDecimal dailyCashFlow = dailySales
                             .add(dailyAdditionalIncome)
                             .subtract(dailyExpenses)
                             .subtract(dailyAdvances)
@@ -95,6 +113,8 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
                             .operationalExpenses(dailyExpenses)
                             .barberAdvances(dailyAdvances)
                             .barberPayments(dailyPayments)
+                            .barberCommissionsAccrued(dailyCommissionsAccrued)
+                            .cashFlowAfterBarberSettlements(dailyCashFlow)
                             .netProfit(dailyProfit)
                             .build();
                 })
@@ -108,6 +128,8 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
                 .operationalExpenses(operationalExpenses)
                 .barberAdvances(barberAdvances)
                 .barberPayments(barberPayments)
+                .barberCommissionsAccrued(barberCommissionsAccrued)
+                .cashFlowAfterBarberSettlements(cashFlowAfterBarberSettlements)
                 .netProfit(netProfit)
                 .profitMargin(profitMargin)
                 .dailyProfitability(daily)
