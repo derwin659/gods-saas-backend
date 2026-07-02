@@ -18,6 +18,12 @@ public class BarberSaleDetailResponse {
     private BigDecimal total;
     private BigDecimal subtotal;
     private BigDecimal discount;
+    private BigDecimal serviceCommissionAmountApplied;
+    private BigDecimal productCommissionAmountApplied;
+    private BigDecimal commissionAmountApplied;
+    private BigDecimal effectiveCommissionPercentage;
+    private BigDecimal ownerNetAmount;
+    private Boolean commissionSnapshotComplete;
     private String paymentMethod;
     private String createdAt;
 }

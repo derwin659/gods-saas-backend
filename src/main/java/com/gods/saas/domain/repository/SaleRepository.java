@@ -629,6 +629,10 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
                     ''
                 ) as serviceNames,
                 coalesce(sum(si.subtotal), 0) as barber_item_subtotal,
+                coalesce(sum(case when si.service_id is not null then si.subtotal else 0 end), 0) as service_subtotal,
+                coalesce(sum(case when si.service_id is not null then si.commission_amount_applied else 0 end), 0) as service_commission_amount,
+                coalesce(sum(case when si.product_id is not null then si.product_commission_amount else 0 end), 0) as product_commission_amount,
+                bool_and(case when si.service_id is not null then si.commission_amount_applied is not null else true end) as commission_snapshot_complete,
                 coalesce(s.metodo_pago, '') as paymentMethod,
                 COALESCE(s.sale_date, s.fecha_creacion) as createdAt
             from sale s
@@ -670,6 +674,11 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
                 ),
                 0
             ) as discount,
+            bsr.service_commission_amount as serviceCommissionAmountApplied,
+            bsr.product_commission_amount as productCommissionAmountApplied,
+            (bsr.service_commission_amount + bsr.product_commission_amount) as commissionAmountApplied,
+            case when bsr.service_subtotal > 0 then round(bsr.service_commission_amount * 100 / bsr.service_subtotal, 2) else 0 end as effectiveCommissionPercentage,
+            bsr.commission_snapshot_complete as commissionSnapshotComplete,
             bsr.paymentMethod as paymentMethod,
             bsr.createdAt as createdAt
         from barber_sale_rows bsr

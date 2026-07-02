@@ -12,5 +12,10 @@ public interface BarberSaleDetailProjection {
     LocalDateTime getCreatedAt();
     BigDecimal getSubtotal();
     BigDecimal getDiscount();
+    BigDecimal getServiceCommissionAmountApplied();
+    BigDecimal getProductCommissionAmountApplied();
+    BigDecimal getCommissionAmountApplied();
+    BigDecimal getEffectiveCommissionPercentage();
+    Boolean getCommissionSnapshotComplete();
 
 }

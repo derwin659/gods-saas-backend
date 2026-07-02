@@ -380,6 +380,12 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
                 .total(nvl(p.getTotal()))
                 .subtotal(nvl(p.getSubtotal()))
                 .discount(nvl(p.getDiscount()))
+                .serviceCommissionAmountApplied(nvl(p.getServiceCommissionAmountApplied()))
+                .productCommissionAmountApplied(nvl(p.getProductCommissionAmountApplied()))
+                .commissionAmountApplied(nvl(p.getCommissionAmountApplied()))
+                .effectiveCommissionPercentage(nvl(p.getEffectiveCommissionPercentage()))
+                .ownerNetAmount(nvl(p.getTotal()).subtract(nvl(p.getCommissionAmountApplied())).max(BigDecimal.ZERO))
+                .commissionSnapshotComplete(Boolean.TRUE.equals(p.getCommissionSnapshotComplete()))
                 .paymentMethod(p.getPaymentMethod())
                 .createdAt(p.getCreatedAt() != null ? p.getCreatedAt().toString() : "")
                 .build();
