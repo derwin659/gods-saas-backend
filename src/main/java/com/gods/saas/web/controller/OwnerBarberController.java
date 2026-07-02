@@ -7,10 +7,13 @@ import com.gods.saas.domain.dto.request.BarberStatusRequest;
 import com.gods.saas.domain.dto.request.BarberUpdateRequest;
 import com.gods.saas.domain.dto.request.OwnerProfessionalProfileRequest;
 import com.gods.saas.domain.dto.request.UpdateBarberServicesRequest;
+import com.gods.saas.domain.dto.request.UpdateBarberServiceCommissionsRequest;
 import com.gods.saas.domain.dto.response.BarberServiceAssignmentResponse;
+import com.gods.saas.domain.dto.response.BarberServiceCommissionResponse;
 import com.gods.saas.domain.dto.response.BarberResponse;
 import com.gods.saas.service.impl.AdminPermissionService;
 import com.gods.saas.service.impl.BarberServiceAssignmentService;
+import com.gods.saas.service.impl.BarberServiceCommissionService;
 import com.gods.saas.service.impl.OwnerProfessionalProfileService;
 import com.gods.saas.service.impl.JwtService;
 import com.gods.saas.service.impl.impl.OwnerBarberService;
@@ -36,6 +39,7 @@ public class OwnerBarberController {
     private final AdminPermissionService adminPermissionService;
     private final BranchAccessGuard branchAccessGuard;
     private final BarberServiceAssignmentService barberServiceAssignmentService;
+    private final BarberServiceCommissionService barberServiceCommissionService;
     private final OwnerProfessionalProfileService ownerProfessionalProfileService;
 
     @GetMapping
@@ -155,6 +159,24 @@ public class OwnerBarberController {
         checkConfigBarbers(session);
         Long allowedBranchId = branchAccessGuard.resolve(branchId, session.branchId());
         return barberServiceAssignmentService.reset(session.tenantId(), allowedBranchId, barberId, session.userId(), session.role());
+    }
+
+
+    @GetMapping("/{barberId}/service-commissions")
+    public BarberServiceCommissionResponse getServiceCommissions(@PathVariable Long barberId, @RequestParam Long branchId, HttpServletRequest request) {
+        SessionData session = extractSession(request);
+        checkConfigBarbers(session);
+        Long allowedBranchId = branchAccessGuard.resolve(branchId, session.branchId());
+        return barberServiceCommissionService.get(session.tenantId(), allowedBranchId, barberId);
+    }
+
+    @PutMapping("/{barberId}/service-commissions")
+    public BarberServiceCommissionResponse updateServiceCommissions(@PathVariable Long barberId, @RequestParam Long branchId,
+            @RequestBody UpdateBarberServiceCommissionsRequest body, HttpServletRequest request) {
+        SessionData session = extractSession(request);
+        checkConfigBarbers(session);
+        Long allowedBranchId = branchAccessGuard.resolve(branchId, session.branchId());
+        return barberServiceCommissionService.update(session.tenantId(), allowedBranchId, barberId, session.userId(), session.role(), body);
     }
 
     private void checkConfigBarbers(SessionData session) {
