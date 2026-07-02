@@ -3,6 +3,8 @@ package com.gods.saas.domain.model;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.time.LocalDateTime;
+
 @Entity
 @Table(name = "service")
 @Getter
@@ -47,4 +49,13 @@ public class ServiceEntity {
 
     @Column(name = "image_public_id", length = 255)
     private String imagePublicId;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
+    @Column(name = "deleted_by_user_id")
+    private Long deletedByUserId;
+
+    @Column(name = "deletion_reason", length = 500)
+    private String deletionReason;
 }

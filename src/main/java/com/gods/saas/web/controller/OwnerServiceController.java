@@ -1,7 +1,10 @@
 package com.gods.saas.web.controller;
 
 import com.gods.saas.domain.dto.request.ServiceRequest;
+import com.gods.saas.domain.dto.request.DeleteServiceRequest;
 import com.gods.saas.domain.dto.response.ServiceResponse;
+import com.gods.saas.domain.dto.response.ServiceDeletionPreviewResponse;
+import com.gods.saas.domain.dto.response.ServiceDeletionResponse;
 import com.gods.saas.service.impl.AdminPermissionService;
 import com.gods.saas.service.impl.impl.OwnerServiceCrudService;
 import com.gods.saas.utils.SecurityTenantUtil;
@@ -66,6 +69,23 @@ public class OwnerServiceController {
 
         Long tenantId = securityTenantUtil.getCurrentTenantId();
         return ResponseEntity.ok(ownerServiceCrudService.toggleStatus(tenantId, serviceId));
+    }
+
+    @GetMapping("/{serviceId}/deletion-preview")
+    public ResponseEntity<ServiceDeletionPreviewResponse> deletionPreview(@PathVariable Long serviceId) {
+        adminPermissionService.checkPermission("CONFIG_SERVICES");
+        Long tenantId = securityTenantUtil.getCurrentTenantId();
+        return ResponseEntity.ok(ownerServiceCrudService.deletionPreview(tenantId, serviceId));
+    }
+
+    @DeleteMapping("/{serviceId}")
+    public ResponseEntity<ServiceDeletionResponse> delete(
+            @PathVariable Long serviceId,
+            @Valid @RequestBody DeleteServiceRequest request
+    ) {
+        adminPermissionService.checkPermission("CONFIG_SERVICES");
+        Long tenantId = securityTenantUtil.getCurrentTenantId();
+        return ResponseEntity.ok(ownerServiceCrudService.delete(tenantId, serviceId, request));
     }
 
     @PostMapping(value = "/{serviceId}/image", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

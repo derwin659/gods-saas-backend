@@ -1,10 +1,15 @@
 package com.gods.saas.service.impl;
 
 import com.gods.saas.domain.dto.request.ServiceRequest;
+import com.gods.saas.domain.dto.request.DeleteServiceRequest;
 import com.gods.saas.domain.dto.response.ServiceResponse;
+import com.gods.saas.domain.dto.response.ServiceDeletionPreviewResponse;
+import com.gods.saas.domain.dto.response.ServiceDeletionResponse;
 import com.gods.saas.domain.model.ServiceEntity;
 import com.gods.saas.domain.model.Tenant;
 import com.gods.saas.domain.repository.ServiceRepository;
+import com.gods.saas.domain.repository.BarberBranchServiceRepository;
+import com.gods.saas.domain.repository.BarberServiceCommissionRepository;
 import com.gods.saas.domain.repository.TenantRepository;
 import com.gods.saas.service.impl.impl.OwnerServiceCrudService;
 import jakarta.persistence.EntityNotFoundException;
@@ -14,6 +19,10 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.Map;
+import java.time.LocalDateTime;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
 @Service
 @RequiredArgsConstructor
@@ -23,13 +32,16 @@ public class OwnerServiceCrudServiceImpl implements OwnerServiceCrudService {
     private final ServiceRepository serviceRepository;
     private final TenantRepository tenantRepository;
     private final CloudinaryStorageService cloudinaryStorageService;
+    private final BarberBranchServiceRepository barberBranchServiceRepository;
+    private final BarberServiceCommissionRepository barberServiceCommissionRepository;
+    private final GeneralAuditService generalAuditService;
 
     @Override
     @Transactional(readOnly = true)
     public List<ServiceResponse> findAll(Long tenantId, Boolean onlyActive) {
         List<ServiceEntity> services = Boolean.TRUE.equals(onlyActive)
-                ? serviceRepository.findByTenant_IdAndActivoTrueOrderByNombreAsc(tenantId)
-                : serviceRepository.findByTenant_IdOrderByNombreAsc(tenantId);
+                ? serviceRepository.findByTenant_IdAndActivoTrueAndDeletedAtIsNullOrderByNombreAsc(tenantId)
+                : serviceRepository.findByTenant_IdAndDeletedAtIsNullOrderByNombreAsc(tenantId);
 
         return services.stream()
                 .map(this::toResponse)
@@ -54,7 +66,7 @@ public class OwnerServiceCrudServiceImpl implements OwnerServiceCrudService {
             throw new IllegalArgumentException("El nombre del servicio es obligatorio");
         }
 
-        boolean exists = serviceRepository.existsByTenant_IdAndNombreIgnoreCase(
+        boolean exists = serviceRepository.existsByTenant_IdAndNombreIgnoreCaseAndDeletedAtIsNull(
                 tenantId,
                 nombreLimpio
         );
@@ -86,7 +98,7 @@ public class OwnerServiceCrudServiceImpl implements OwnerServiceCrudService {
             throw new IllegalArgumentException("El nombre del servicio es obligatorio");
         }
 
-        boolean exists = serviceRepository.existsByTenant_IdAndNombreIgnoreCaseAndIdNot(
+        boolean exists = serviceRepository.existsByTenant_IdAndNombreIgnoreCaseAndIdNotAndDeletedAtIsNull(
                 tenantId,
                 nombreLimpio,
                 serviceId
@@ -113,6 +125,94 @@ public class OwnerServiceCrudServiceImpl implements OwnerServiceCrudService {
         service.setActivo(!Boolean.TRUE.equals(service.getActivo()));
         return toResponse(serviceRepository.save(service));
     }
+
+    @Override
+    @Transactional(readOnly = true)
+    public ServiceDeletionPreviewResponse deletionPreview(Long tenantId, Long serviceId) {
+        ServiceEntity service = getServiceOrThrow(tenantId, serviceId);
+        long appointments = serviceRepository.countAppointmentReferences(serviceId);
+        long saleItems = serviceRepository.countSaleItemReferences(serviceId);
+        long legacyDetails = serviceRepository.countSaleDetailReferences(serviceId);
+        long localItems = serviceRepository.countLocalConsumptionReferences(serviceId);
+        long promotions = serviceRepository.countPromotionReferences(serviceId);
+        long configurations = barberBranchServiceRepository.countByTenant_IdAndService_Id(tenantId, serviceId)
+                + barberServiceCommissionRepository.countByTenant_IdAndService_Id(tenantId, serviceId);
+        boolean hasHistory = appointments + saleItems + legacyDetails + localItems + promotions + configurations > 0;
+        return ServiceDeletionPreviewResponse.builder()
+                .serviceId(serviceId).serviceName(service.getNombre())
+                .appointments(appointments).saleItems(saleItems)
+                .legacySaleDetails(legacyDetails).localConsumptionItems(localItems)
+                .promotions(promotions).configurations(configurations)
+                .hasHistory(hasHistory)
+                .deletionMode(hasHistory ? "ARCHIVE" : "HARD_DELETE")
+                .explanation(hasHistory
+                        ? "Se eliminará del catálogo y se conservará su historial de ventas y citas."
+                        : "Se eliminará definitivamente porque nunca fue utilizado.")
+                .build();
+    }
+
+    @Override
+    public ServiceDeletionResponse delete(Long tenantId, Long serviceId, DeleteServiceRequest request) {
+        ServiceEntity service = getServiceOrThrow(tenantId, serviceId);
+        ServiceDeletionPreviewResponse preview = deletionPreview(tenantId, serviceId);
+        Actor actor = currentActor();
+        Map<String, Object> before = Map.of(
+                "name", service.getNombre(), "active", Boolean.TRUE.equals(service.getActivo()),
+                "appointments", preview.getAppointments(), "saleItems", preview.getSaleItems(),
+                "deletionMode", preview.getDeletionMode()
+        );
+        String oldPublicId = service.getImagePublicId();
+
+        serviceRepository.disablePromotionsForService(serviceId);
+        barberServiceCommissionRepository.deleteByTenant_IdAndService_Id(tenantId, serviceId);
+        barberBranchServiceRepository.deleteByTenant_IdAndService_Id(tenantId, serviceId);
+        barberServiceCommissionRepository.flush();
+        barberBranchServiceRepository.flush();
+
+        if (preview.isHasHistory()) {
+            service.setActivo(false);
+            service.setDeletedAt(LocalDateTime.now());
+            service.setDeletedByUserId(actor.userId());
+            service.setDeletionReason(request.reason().trim());
+            service.setImageUrl(null);
+            service.setImagePublicId(null);
+            serviceRepository.save(service);
+        } else {
+            serviceRepository.delete(service);
+            serviceRepository.flush();
+        }
+
+        if (oldPublicId != null && !oldPublicId.isBlank()) {
+            cloudinaryStorageService.deleteImage(oldPublicId);
+        }
+
+        generalAuditService.record(tenantId, null, actor.userId(), actor.role(),
+                "SERVICE", serviceId, preview.isHasHistory() ? "ARCHIVE" : "DELETE",
+                request.reason(), before,
+                Map.of("deleted", true, "historyPreserved", preview.isHasHistory()));
+
+        return ServiceDeletionResponse.builder()
+                .serviceId(serviceId).serviceName(service.getNombre())
+                .deletionMode(preview.getDeletionMode()).deleted(true)
+                .historyPreserved(preview.isHasHistory())
+                .message(preview.isHasHistory()
+                        ? "Servicio eliminado del catálogo. Su historial fue protegido."
+                        : "Servicio eliminado definitivamente.")
+                .build();
+    }
+
+    private Actor currentActor() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication != null && authentication.getDetails() instanceof Map<?, ?> details) {
+            Object rawUserId = details.get("userId");
+            Object rawRole = details.get("role");
+            Long userId = rawUserId instanceof Number value ? value.longValue() : null;
+            return new Actor(userId, rawRole == null ? null : rawRole.toString());
+        }
+        return new Actor(null, null);
+    }
+
+    private record Actor(Long userId, String role) {}
 
     @Override
     public ServiceResponse uploadImage(Long tenantId, Long serviceId, MultipartFile file) {
@@ -154,7 +254,7 @@ public class OwnerServiceCrudServiceImpl implements OwnerServiceCrudService {
     }
 
     private ServiceEntity getServiceOrThrow(Long tenantId, Long serviceId) {
-        return serviceRepository.findByIdAndTenant_Id(serviceId, tenantId)
+        return serviceRepository.findByIdAndTenant_IdAndDeletedAtIsNull(serviceId, tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("Servicio no encontrado"));
     }
 

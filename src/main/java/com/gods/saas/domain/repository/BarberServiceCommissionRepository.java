@@ -7,4 +7,6 @@ import java.util.*;
 public interface BarberServiceCommissionRepository extends JpaRepository<BarberServiceCommission, Long> {
     List<BarberServiceCommission> findByTenant_IdAndBranch_IdAndBarber_IdOrderByService_NombreAsc(Long tenantId, Long branchId, Long barberId);
     Optional<BarberServiceCommission> findByTenant_IdAndBranch_IdAndBarber_IdAndService_Id(Long tenantId, Long branchId, Long barberId, Long serviceId);
+    void deleteByTenant_IdAndService_Id(Long tenantId, Long serviceId);
+    long countByTenant_IdAndService_Id(Long tenantId, Long serviceId);
 }
