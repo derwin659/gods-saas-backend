@@ -132,7 +132,9 @@ public class OwnerServiceCrudServiceImpl implements OwnerServiceCrudService {
         ServiceEntity service = getServiceOrThrow(tenantId, serviceId);
         long appointments = serviceRepository.countAppointmentReferences(serviceId);
         long saleItems = serviceRepository.countSaleItemReferences(serviceId);
-        long legacyDetails = serviceRepository.countSaleDetailReferences(serviceId);
+        // sale_detail es una estructura legacy que no existe en todas las bases.
+        // El historial vigente y protegido vive en sale_item.
+        long legacyDetails = 0;
         long localItems = serviceRepository.countLocalConsumptionReferences(serviceId);
         long promotions = serviceRepository.countPromotionReferences(serviceId);
         long configurations = barberBranchServiceRepository.countByTenant_IdAndService_Id(tenantId, serviceId)

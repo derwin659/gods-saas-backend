@@ -35,8 +35,6 @@ public interface ServiceRepository extends JpaRepository<ServiceEntity, Long> {
     @Query(value = "select count(*) from sale_item where service_id = :serviceId", nativeQuery = true)
     long countSaleItemReferences(@Param("serviceId") Long serviceId);
 
-    @Query(value = "select count(*) from sale_detail where service_id = :serviceId", nativeQuery = true)
-    long countSaleDetailReferences(@Param("serviceId") Long serviceId);
 
     @Query(value = "select count(*) from local_consumption_order_item where service_id = :serviceId", nativeQuery = true)
     long countLocalConsumptionReferences(@Param("serviceId") Long serviceId);
