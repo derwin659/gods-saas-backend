@@ -120,6 +120,15 @@ public class AppUser implements UserDetails {
     @Column(name = "photo_public_id", length = 255)
     private String photoPublicId;
 
+    @Column(name = "retired_at")
+    private LocalDateTime retiredAt;
+
+    @Column(name = "retired_by_user_id")
+    private Long retiredByUserId;
+
+    @Column(name = "retirement_reason", length = 500)
+    private String retirementReason;
+
     // ============================================================
     // SPRING SECURITY METHODS (IMPORTANTES)
     // ============================================================

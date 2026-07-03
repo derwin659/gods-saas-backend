@@ -5,15 +5,19 @@ import com.gods.saas.security.BranchAccessGuard;
 import com.gods.saas.domain.dto.request.BarberCreateRequest;
 import com.gods.saas.domain.dto.request.BarberStatusRequest;
 import com.gods.saas.domain.dto.request.BarberUpdateRequest;
+import com.gods.saas.domain.dto.request.DeleteBarberRequest;
 import com.gods.saas.domain.dto.request.OwnerProfessionalProfileRequest;
 import com.gods.saas.domain.dto.request.UpdateBarberServicesRequest;
 import com.gods.saas.domain.dto.request.UpdateBarberServiceCommissionsRequest;
 import com.gods.saas.domain.dto.response.BarberServiceAssignmentResponse;
 import com.gods.saas.domain.dto.response.BarberServiceCommissionResponse;
 import com.gods.saas.domain.dto.response.BarberResponse;
+import com.gods.saas.domain.dto.response.BarberDeletionPreviewResponse;
+import com.gods.saas.domain.dto.response.BarberDeletionResponse;
 import com.gods.saas.service.impl.AdminPermissionService;
 import com.gods.saas.service.impl.BarberServiceAssignmentService;
 import com.gods.saas.service.impl.BarberServiceCommissionService;
+import com.gods.saas.service.impl.BarberSafeDeletionService;
 import com.gods.saas.service.impl.OwnerProfessionalProfileService;
 import com.gods.saas.service.impl.JwtService;
 import com.gods.saas.service.impl.impl.OwnerBarberService;
@@ -41,6 +45,7 @@ public class OwnerBarberController {
     private final BarberServiceAssignmentService barberServiceAssignmentService;
     private final BarberServiceCommissionService barberServiceCommissionService;
     private final OwnerProfessionalProfileService ownerProfessionalProfileService;
+    private final BarberSafeDeletionService barberSafeDeletionService;
 
     @GetMapping
     public List<BarberResponse> listBarbers(
@@ -89,6 +94,21 @@ public class OwnerBarberController {
         checkConfigBarbers(session);
 
         return ownerBarberService.updateStatus(session.tenantId(), barberId, requestBody);
+    }
+
+    @GetMapping("/{barberId}/deletion-preview")
+    public BarberDeletionPreviewResponse deletionPreview(@PathVariable Long barberId, HttpServletRequest request) {
+        SessionData session = extractSession(request);
+        checkConfigBarbers(session);
+        return barberSafeDeletionService.preview(session.tenantId(), barberId);
+    }
+
+    @DeleteMapping("/{barberId}")
+    public BarberDeletionResponse deleteBarber(@PathVariable Long barberId,
+            @Valid @RequestBody DeleteBarberRequest body, HttpServletRequest request) {
+        SessionData session = extractSession(request);
+        checkConfigBarbers(session);
+        return barberSafeDeletionService.delete(session.tenantId(), session.userId(), session.role(), barberId, body);
     }
 
     @PostMapping(value = "/{barberId}/photo", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
