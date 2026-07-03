@@ -1,6 +1,5 @@
 package com.gods.saas.service.impl;
 
-import com.gods.saas.domain.dto.response.BarberReportSummaryResponse;
 import com.gods.saas.domain.dto.response.BranchDashboardItemResponse;
 import com.gods.saas.domain.dto.response.DashboardAlertResponse;
 import com.gods.saas.domain.dto.response.DashboardLeaderResponse;
@@ -15,6 +14,7 @@ import com.gods.saas.domain.repository.CashMovementRepository;
 import com.gods.saas.domain.repository.CustomerRepository;
 import com.gods.saas.domain.repository.SaleRepository;
 import com.gods.saas.domain.repository.UserTenantRoleRepository;
+import com.gods.saas.domain.repository.projection.DashboardLeaderProjection;
 import com.gods.saas.domain.repository.projection.TopServiceReportProjection;
 import com.gods.saas.service.impl.impl.OwnerHomeDashboardService;
 import lombok.RequiredArgsConstructor;
@@ -82,7 +82,7 @@ public class OwnerHomeDashboardServiceImpl implements OwnerHomeDashboardService 
                 .toList();
 
         DashboardLeaderResponse topBarber = saleRepository
-                .getBarberSummary(tenantId, branchId, start, end)
+                .getTopBarberForDashboard(tenantId, branchId, start, end)
                 .stream()
                 .findFirst()
                 .map(this::mapTopBarber)
@@ -150,11 +150,11 @@ public class OwnerHomeDashboardServiceImpl implements OwnerHomeDashboardService 
                 .build();
     }
 
-    private DashboardLeaderResponse mapTopBarber(BarberReportSummaryResponse item) {
+    private DashboardLeaderResponse mapTopBarber(DashboardLeaderProjection item) {
         return DashboardLeaderResponse.builder()
-                .name(item.getBarberName())
-                .amount(nvl(item.getTotalSales()))
-                .count(item.getTotalServices() == null ? 0L : item.getTotalServices())
+                .name(item.getName())
+                .amount(nvl(item.getAmount()))
+                .count(item.getCount() == null ? 0L : item.getCount())
                 .build();
     }
 

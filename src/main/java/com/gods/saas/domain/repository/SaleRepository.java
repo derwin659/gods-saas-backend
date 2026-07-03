@@ -745,6 +745,29 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
             @Param("toDateTime") LocalDateTime toDateTime
     );
 
+    @Query(value = """
+        select
+            coalesce(nullif(trim(u.nombre), ''), 'Profesional') as name,
+            coalesce(sum(si.subtotal), 0) as amount,
+            count(distinct s.sale_id) as count
+        from sale s
+        join sale_item si on si.sale_id = s.sale_id
+        join app_user u on u.user_id = si.barber_user_id
+        where s.tenant_id = :tenantId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
+          and (cast(:branchId as bigint) is null or s.branch_id = :branchId)
+          and coalesce(s.sale_date, s.fecha_creacion) >= :start
+          and coalesce(s.sale_date, s.fecha_creacion) < :end
+        group by u.user_id, u.nombre
+        order by coalesce(sum(si.subtotal), 0) desc
+        limit 1
+        """, nativeQuery = true)
+    List<DashboardLeaderProjection> getTopBarberForDashboard(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
     @Query("""
         select coalesce(sum(s.total), 0)
         from Sale s
