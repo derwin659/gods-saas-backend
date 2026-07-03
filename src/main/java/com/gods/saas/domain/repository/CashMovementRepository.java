@@ -134,6 +134,29 @@ order by cm.movementDate desc
     );
 
 
+    @Query("""
+    select coalesce(sum(
+        case
+          when cm.type in (com.gods.saas.domain.enums.CashMovementType.INCOME, com.gods.saas.domain.enums.CashMovementType.ADJUSTMENT)
+            then cm.amount
+          when cm.type in (com.gods.saas.domain.enums.CashMovementType.EXPENSE, com.gods.saas.domain.enums.CashMovementType.ADVANCE_BARBER, com.gods.saas.domain.enums.CashMovementType.PAYMENT_BARBER)
+            then -cm.amount
+          else 0
+        end
+    ), 0)
+    from CashMovement cm
+    where cm.tenant.id = :tenantId
+      and (:branchId is null or cm.branch.id = :branchId)
+      and cm.paymentMethod in (com.gods.saas.domain.enums.PaymentMethod.CASH, com.gods.saas.domain.enums.PaymentMethod.EFECTIVO)
+      and cm.movementDate >= :start
+      and cm.movementDate < :end
+    """)
+    BigDecimal sumNetCashMovementsByRange(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("start") java.time.LocalDateTime start,
+            @Param("end") java.time.LocalDateTime end
+    );
     @Query(value = """
     with days as (
         select generate_series(cast(:start as date), cast(:endDate as date), interval '1 day')::date as report_date

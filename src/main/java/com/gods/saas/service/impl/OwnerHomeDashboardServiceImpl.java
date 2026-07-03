@@ -1,15 +1,21 @@
 package com.gods.saas.service.impl;
 
+import com.gods.saas.domain.dto.response.BarberReportSummaryResponse;
 import com.gods.saas.domain.dto.response.BranchDashboardItemResponse;
+import com.gods.saas.domain.dto.response.DashboardAlertResponse;
+import com.gods.saas.domain.dto.response.DashboardLeaderResponse;
 import com.gods.saas.domain.dto.response.OwnerHomeDashboardResponse;
 import com.gods.saas.domain.dto.response.UpcomingAppointmentItemResponse;
 import com.gods.saas.domain.model.Appointment;
 import com.gods.saas.domain.model.Branch;
 import com.gods.saas.domain.repository.AppointmentRepository;
+import com.gods.saas.domain.repository.BarberPaymentRepository;
 import com.gods.saas.domain.repository.BranchRepository;
+import com.gods.saas.domain.repository.CashMovementRepository;
 import com.gods.saas.domain.repository.CustomerRepository;
 import com.gods.saas.domain.repository.SaleRepository;
 import com.gods.saas.domain.repository.UserTenantRoleRepository;
+import com.gods.saas.domain.repository.projection.TopServiceReportProjection;
 import com.gods.saas.service.impl.impl.OwnerHomeDashboardService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -19,7 +25,7 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.ZoneId;
+import java.util.ArrayList;
 import java.util.List;
 
 @Service
@@ -31,36 +37,41 @@ public class OwnerHomeDashboardServiceImpl implements OwnerHomeDashboardService 
     private final CustomerRepository customerRepository;
     private final UserTenantRoleRepository userTenantRolesRepository;
     private final BranchRepository branchRepository;
+    private final CashMovementRepository cashMovementRepository;
+    private final BarberPaymentRepository barberPaymentRepository;
     private final TenantTimeService tenantTimeService;
 
     @Override
     public OwnerHomeDashboardResponse getDashboard(Long tenantId, Long branchId) {
-
-        ZoneId zone = tenantTimeService.getZone(tenantId);
         LocalDate today = tenantTimeService.today(tenantId);
         LocalDateTime start = today.atStartOfDay();
         LocalDateTime end = today.plusDays(1).atStartOfDay();
         LocalTime now = tenantTimeService.currentTime(tenantId);
 
-        Long globalBranchId = branchId;
+        BigDecimal todaySales = nvl(saleRepository.sumSalesByDay(tenantId, branchId, start, end));
+        BigDecimal cashSales = nvl(saleRepository.getCashSalesByRange(tenantId, branchId, start, end));
+        BigDecimal cashMovements = nvl(cashMovementRepository.sumNetCashMovementsByRange(tenantId, branchId, start, end));
+        BigDecimal expectedCash = cashSales.add(cashMovements);
+        BigDecimal todayExpenses = nvl(cashMovementRepository.sumGeneralExpensesByRange(tenantId, branchId, start, end));
+        BigDecimal todayProfessionalPayments = nvl(cashMovementRepository.sumBarberPaymentsByRange(tenantId, branchId, start, end));
+        BigDecimal pendingProfessionalPayments = nvl(barberPaymentRepository.sumPendingAmount(tenantId, branchId));
 
-        BigDecimal todaySales = saleRepository.sumSalesByDay(tenantId, globalBranchId, start, end);
+        LocalDateTime yesterdayStart = today.minusDays(1).atStartOfDay();
+        BigDecimal yesterdaySales = nvl(saleRepository.sumSalesByDay(tenantId, branchId, yesterdayStart, start));
+        LocalDateTime previousWeekStart = today.minusWeeks(1).atStartOfDay();
+        BigDecimal previousWeekSales = nvl(saleRepository.sumSalesByDay(
+                tenantId, branchId, previousWeekStart, previousWeekStart.plusDays(1)));
 
         Integer todayAppointments = Math.toIntExact(
-                appointmentRepository.countTodayAppointments(tenantId, globalBranchId, today)
+                appointmentRepository.countTodayAppointments(tenantId, branchId, today)
         );
-
-        Integer activeBarbers = userTenantRolesRepository.countActiveBarbers(tenantId, globalBranchId);
+        Integer activeBarbers = userTenantRolesRepository.countActiveBarbers(tenantId, branchId);
         Integer newClients = customerRepository.countCustomers(tenantId);
-        BigDecimal averageTicket = saleRepository.averageTicketByDay(tenantId, globalBranchId, start, end);
-        BigDecimal todayExpenses = BigDecimal.ZERO;
+        BigDecimal averageTicket = nvl(saleRepository.averageTicketByDay(tenantId, branchId, start, end));
 
         List<UpcomingAppointmentItemResponse> upcomingAppointments =
                 appointmentRepository.findUpcomingAppointmentsForDashboard(
-                        tenantId,
-                        globalBranchId,
-                        today,
-                        now
+                        tenantId, branchId, today, now
                 ).stream().map(this::mapUpcoming).toList();
 
         List<BranchDashboardItemResponse> branches = branchRepository
@@ -70,13 +81,39 @@ public class OwnerHomeDashboardServiceImpl implements OwnerHomeDashboardService 
                 .map(branch -> mapBranchDashboard(branch, tenantId, today, start, end))
                 .toList();
 
+        DashboardLeaderResponse topBarber = saleRepository
+                .getBarberSummary(tenantId, branchId, start, end)
+                .stream()
+                .findFirst()
+                .map(this::mapTopBarber)
+                .orElse(null);
+
+        DashboardLeaderResponse topService = saleRepository
+                .getTopServicesReport(tenantId, branchId, start, end)
+                .stream()
+                .findFirst()
+                .map(this::mapTopService)
+                .orElse(null);
+
+        List<DashboardAlertResponse> alerts = buildAlerts(
+                expectedCash, pendingProfessionalPayments, branches
+        );
+
         return OwnerHomeDashboardResponse.builder()
-                .todaySales(nvl(todaySales))
+                .todaySales(todaySales)
+                .expectedCash(nvl(expectedCash))
                 .todayAppointments(nvl(todayAppointments))
                 .activeBarbers(nvl(activeBarbers))
                 .newClients(nvl(newClients))
-                .averageTicket(nvl(averageTicket))
-                .todayExpenses(nvl(todayExpenses))
+                .averageTicket(averageTicket)
+                .todayExpenses(todayExpenses)
+                .todayProfessionalPayments(todayProfessionalPayments)
+                .pendingProfessionalPayments(pendingProfessionalPayments)
+                .yesterdaySales(yesterdaySales)
+                .previousWeekSales(previousWeekSales)
+                .topBarber(topBarber)
+                .topService(topService)
+                .alerts(alerts)
                 .upcomingAppointments(upcomingAppointments)
                 .branches(branches)
                 .build();
@@ -90,19 +127,15 @@ public class OwnerHomeDashboardServiceImpl implements OwnerHomeDashboardService 
             LocalDateTime end
     ) {
         Long currentBranchId = branch.getId();
-
         BigDecimal branchTodaySales = saleRepository.sumSalesByDay(
                 tenantId, currentBranchId, start, end
         );
-
         Integer branchTodayAppointments = Math.toIntExact(
                 appointmentRepository.countTodayAppointments(tenantId, currentBranchId, today)
         );
-
         Integer branchActiveBarbers = userTenantRolesRepository.countActiveBarbers(
                 tenantId, currentBranchId
         );
-
         BigDecimal branchAverageTicket = saleRepository.averageTicketByDay(
                 tenantId, currentBranchId, start, end
         );
@@ -117,18 +150,71 @@ public class OwnerHomeDashboardServiceImpl implements OwnerHomeDashboardService 
                 .build();
     }
 
-    private UpcomingAppointmentItemResponse mapUpcoming(Appointment a) {
+    private DashboardLeaderResponse mapTopBarber(BarberReportSummaryResponse item) {
+        return DashboardLeaderResponse.builder()
+                .name(item.getBarberName())
+                .amount(nvl(item.getTotalSales()))
+                .count(item.getTotalServices() == null ? 0L : item.getTotalServices())
+                .build();
+    }
+
+    private DashboardLeaderResponse mapTopService(TopServiceReportProjection item) {
+        return DashboardLeaderResponse.builder()
+                .name(item.getServiceName())
+                .amount(nvl(item.getTotalAmount()))
+                .count(item.getTimesSold() == null ? 0L : item.getTimesSold())
+                .build();
+    }
+
+    private List<DashboardAlertResponse> buildAlerts(
+            BigDecimal expectedCash,
+            BigDecimal pendingProfessionalPayments,
+            List<BranchDashboardItemResponse> branches
+    ) {
+        List<DashboardAlertResponse> alerts = new ArrayList<>();
+        if (expectedCash.compareTo(BigDecimal.ZERO) < 0) {
+            alerts.add(DashboardAlertResponse.builder()
+                    .type("NEGATIVE_EXPECTED_CASH")
+                    .title("Caja esperada negativa")
+                    .message("Los egresos en efectivo superan los ingresos registrados hoy.")
+                    .severity("CRITICAL")
+                    .build());
+        }
+        if (pendingProfessionalPayments.compareTo(BigDecimal.ZERO) > 0) {
+            alerts.add(DashboardAlertResponse.builder()
+                    .type("PROFESSIONAL_PAYMENTS_PENDING")
+                    .title("Pagos profesionales pendientes")
+                    .message("Hay " + nvl(pendingProfessionalPayments) + " por completar.")
+                    .severity("WARNING")
+                    .build());
+        }
+        long branchesWithoutSales = branches.stream()
+                .filter(item -> nvl(item.getTodaySales()).compareTo(BigDecimal.ZERO) == 0)
+                .count();
+        if (branches.size() > 1 && branchesWithoutSales > 0) {
+            alerts.add(DashboardAlertResponse.builder()
+                    .type("BRANCH_WITHOUT_SALES")
+                    .title("Sede sin ventas hoy")
+                    .message(branchesWithoutSales + " sede(s) todavía no registran ventas.")
+                    .severity("INFO")
+                    .build());
+        }
+        return alerts;
+    }
+
+    private UpcomingAppointmentItemResponse mapUpcoming(Appointment appointment) {
         return UpcomingAppointmentItemResponse.builder()
-                .appointmentId(a.getId())
-                .time(a.getHoraInicio() != null ? a.getHoraInicio().toString() : "")
-                .customerName(a.getCustomer() != null ? a.getCustomer().getNombres() : "Cliente")
-                .serviceName(a.getService() != null ? a.getService().getNombre() : "Servicio")
-                .barberName(a.getUser() != null ? a.getUser().getNombre() : "")
+                .appointmentId(appointment.getId())
+                .time(appointment.getHoraInicio() != null ? appointment.getHoraInicio().toString() : "")
+                .customerName(appointment.getCustomer() != null ? appointment.getCustomer().getNombres() : "Cliente")
+                .serviceName(appointment.getService() != null ? appointment.getService().getNombre() : "Servicio")
+                .barberName(appointment.getUser() != null ? appointment.getUser().getNombre() : "")
                 .build();
     }
 
     private BigDecimal nvl(BigDecimal value) {
-        return value == null ? BigDecimal.ZERO : value.setScale(2, RoundingMode.HALF_UP);
+        return value == null ? BigDecimal.ZERO.setScale(2, RoundingMode.HALF_UP)
+                : value.setScale(2, RoundingMode.HALF_UP);
     }
 
     private Integer nvl(Integer value) {

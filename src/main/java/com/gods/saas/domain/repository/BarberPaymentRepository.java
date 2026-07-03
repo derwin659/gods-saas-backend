@@ -94,6 +94,20 @@ public interface BarberPaymentRepository extends JpaRepository<BarberPayment, Lo
             @Param("toDateTime") java.time.LocalDateTime toDateTime
     );
 
+    @Query("""
+        select coalesce(sum(bp.remainingAmount), 0)
+        from BarberPayment bp
+        where bp.tenant.id = :tenantId
+          and (:branchId is null or bp.branch.id = :branchId)
+          and bp.status in (
+            com.gods.saas.domain.enums.BarberPaymentStatus.PENDING,
+            com.gods.saas.domain.enums.BarberPaymentStatus.PARTIAL
+          )
+        """)
+    BigDecimal sumPendingAmount(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId
+    );
     boolean existsByCashMovement_Id(Long cashMovementId);
 
     Optional<BarberPayment> findByCashMovement_Id(Long cashMovementId);
