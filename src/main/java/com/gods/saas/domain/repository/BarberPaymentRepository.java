@@ -108,6 +108,27 @@ public interface BarberPaymentRepository extends JpaRepository<BarberPayment, Lo
             @Param("tenantId") Long tenantId,
             @Param("branchId") Long branchId
     );
+    @Query("""
+        select bp
+        from BarberPayment bp
+        join fetch bp.branch
+        join fetch bp.barberUser
+        where bp.tenant.id = :tenantId
+          and (:branchId is null or bp.branch.id = :branchId)
+          and (:barberUserId is null or bp.barberUser.id = :barberUserId)
+          and (:status is null or bp.status = :status)
+          and bp.periodFrom <= :periodTo
+          and bp.periodTo >= :periodFrom
+        order by bp.createdAt desc
+        """)
+    List<BarberPayment> findProfessionalPaymentReport(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("barberUserId") Long barberUserId,
+            @Param("status") BarberPaymentStatus status,
+            @Param("periodFrom") LocalDate periodFrom,
+            @Param("periodTo") LocalDate periodTo
+    );
     boolean existsByCashMovement_Id(Long cashMovementId);
 
     Optional<BarberPayment> findByCashMovement_Id(Long cashMovementId);

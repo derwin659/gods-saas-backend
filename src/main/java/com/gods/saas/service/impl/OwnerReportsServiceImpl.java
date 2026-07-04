@@ -4,6 +4,10 @@ import com.gods.saas.domain.dto.response.*;
 
 import com.gods.saas.domain.model.Subscription;
 import com.gods.saas.domain.model.CashMovement;
+import com.gods.saas.domain.model.BarberPayment;
+import com.gods.saas.domain.enums.BarberPaymentMode;
+import com.gods.saas.domain.enums.BarberPaymentStatus;
+import com.gods.saas.domain.repository.BarberPaymentRepository;
 import com.gods.saas.domain.enums.CashMovementType;
 import com.gods.saas.domain.repository.CashMovementRepository;
 import com.gods.saas.domain.repository.SaleRepository;
@@ -29,6 +33,7 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
     private final SaleRepository saleRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final CashMovementRepository cashMovementRepository;
+    private final BarberPaymentRepository barberPaymentRepository;
 
     @Override
     public ProfitabilityReportResponse getProfitabilityReport(
@@ -343,6 +348,59 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
     }
 
     @Override
+    public Map<String, Object> getProfessionalPaymentReport(
+            Long tenantId, Long branchId, Long barberUserId, String status,
+            LocalDate from, LocalDate to
+    ) {
+        validateAdvancedReportsAllowed(tenantId);
+        BarberPaymentStatus selectedStatus = status == null || status.isBlank()
+                ? null : BarberPaymentStatus.valueOf(status.trim().toUpperCase());
+        List<BarberPayment> payments = barberPaymentRepository.findProfessionalPaymentReport(
+                tenantId, branchId, barberUserId, selectedStatus, from, to
+        );
+        BigDecimal totalSalary = BigDecimal.ZERO;
+        BigDecimal totalCommissions = BigDecimal.ZERO;
+        BigDecimal totalTips = BigDecimal.ZERO;
+        BigDecimal totalAdvances = BigDecimal.ZERO;
+        BigDecimal totalPaid = BigDecimal.ZERO;
+        BigDecimal totalPending = BigDecimal.ZERO;
+        List<Map<String, Object>> items = new java.util.ArrayList<>();
+        for (BarberPayment payment : payments) {
+            LocalDateTime periodStart = payment.getPeriodFrom().atStartOfDay();
+            LocalDateTime periodEnd = payment.getPeriodTo().plusDays(1).atStartOfDay();
+            BigDecimal salary = nvl(payment.getSalaryAmount());
+            BigDecimal commissions = nvl(payment.getCommissionAmount());
+            BigDecimal tips = nvl(saleRepository.sumBarberTipsByRange(
+                    tenantId, payment.getBranch().getId(), payment.getBarberUser().getId(), periodStart, periodEnd
+            ));
+            BigDecimal advances = nvl(payment.getAdvancesApplied());
+            BigDecimal paid = nvl(payment.getAmountPaid());
+            BigDecimal pending = nvl(payment.getRemainingAmount());
+            totalSalary = totalSalary.add(salary); totalCommissions = totalCommissions.add(commissions);
+            totalTips = totalTips.add(tips); totalAdvances = totalAdvances.add(advances);
+            totalPaid = totalPaid.add(paid); totalPending = totalPending.add(pending);
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("paymentId", payment.getId()); item.put("barberUserId", payment.getBarberUser().getId());
+            item.put("barberName", (nvlText(payment.getBarberUser().getNombre()) + " " + nvlText(payment.getBarberUser().getApellido())).trim()); item.put("branchId", payment.getBranch().getId());
+            item.put("branchName", payment.getBranch().getNombre()); item.put("paymentMode", payment.getPaymentMode().name());
+            item.put("status", payment.getStatus().name()); item.put("periodFrom", payment.getPeriodFrom().toString());
+            item.put("periodTo", payment.getPeriodTo().toString()); item.put("salaryAmount", salary);
+            item.put("commissionAmount", commissions); item.put("tipsAmount", tips); item.put("advancesApplied", advances);
+            item.put("amountPaid", paid); item.put("remainingAmount", pending);
+            item.put("paymentMethod", payment.getPaymentMethod().name()); item.put("createdAt", payment.getCreatedAt().toString());
+            items.add(item);
+        }
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("from", from.toString()); response.put("to", to.toString());
+        response.put("branchId", branchId == null ? 0L : branchId); response.put("barberUserId", barberUserId == null ? 0L : barberUserId);
+        response.put("status", selectedStatus == null ? "ALL" : selectedStatus.name()); response.put("count", items.size());
+        response.put("totalSalary", totalSalary); response.put("totalCommissions", totalCommissions);
+        response.put("totalTips", totalTips); response.put("totalAdvances", totalAdvances);
+        response.put("totalPaid", totalPaid); response.put("totalPending", totalPending); response.put("items", items);
+        return response;
+    }
+
+    @Override
     public Map<String, Object> getProductReport(
             Long tenantId, Long branchId, LocalDate from, LocalDate to
     ) {
@@ -482,6 +540,9 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
         return total.divide(BigDecimal.valueOf(count), 2, RoundingMode.HALF_UP);
     }
 
+    private String nvlText(String value) {
+        return value == null ? "" : value;
+    }
     private BigDecimal nvl(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
     }
