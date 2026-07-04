@@ -150,7 +150,8 @@ public class OwnerAgendaController {
     public OwnerAgendaResponse cancelAppointment(
             @RequestHeader("Authorization") String authHeader,
             @PathVariable Long appointmentId,
-            @RequestParam(required = false) Long branchId
+            @RequestParam(required = false) Long branchId,
+            @RequestParam(required = false) String reason
     ) {
         adminPermissionService.checkPermission("AGENDA_ACCESS");
 
@@ -162,10 +163,28 @@ public class OwnerAgendaController {
         return protectPhone(ownerAgendaAppointmentService.cancelAppointment(
                 session.tenantId(),
                 branchIdFinal,
-                appointmentId
+                appointmentId,
+                reason
         ), canViewPhone);
     }
+    @PostMapping("/appointments/{appointmentId}/no-show")
+    public OwnerAgendaResponse markNoShow(
+            @RequestHeader("Authorization") String authHeader,
+            @PathVariable Long appointmentId,
+            @RequestParam(required = false) Long branchId,
+            @RequestBody(required = false) Map<String, Object> request
+    ) {
+        adminPermissionService.checkPermission("AGENDA_ACCESS");
 
+        SessionData session = readSession(authHeader);
+        Long branchIdFinal = resolveBranchId(branchId, session.branchId());
+        String reason = getString(request, "reason");
+        boolean canViewPhone = adminPermissionService.hasCurrentUserPermission("CUSTOMERS_VIEW_PHONE");
+
+        return protectPhone(ownerAgendaAppointmentService.markNoShow(
+                session.tenantId(), branchIdFinal, appointmentId, reason
+        ), canViewPhone);
+    }
     private SessionData readSession(String authHeader) {
         String token = authHeader.replace("Bearer ", "");
         Map<String, Object> claims = jwtService.extractAllClaims(token);

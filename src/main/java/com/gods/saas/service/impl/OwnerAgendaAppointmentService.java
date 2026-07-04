@@ -36,6 +36,7 @@ public class OwnerAgendaAppointmentService {
     private final UserTenantRoleRepository userTenantRoleRepository;
     private final NotificationService notificationService;
     private final BarberServiceAssignmentService barberServiceAssignmentService;
+    private final TenantTimeService tenantTimeService;
 
     @Transactional
     public OwnerAgendaResponse createAppointment(Long tenantId, Long branchId, CreateOwnerAppointmentRequest request) {
@@ -238,7 +239,7 @@ public class OwnerAgendaAppointmentService {
     }
 
     @Transactional
-    public OwnerAgendaResponse cancelAppointment(Long tenantId, Long branchId, Long appointmentId) {
+    public OwnerAgendaResponse cancelAppointment(Long tenantId, Long branchId, Long appointmentId, String reason) {
         Appointment appointment = appointmentRepository.findByIdAndTenant_Id(appointmentId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Cita no encontrada"));
 
@@ -246,11 +247,39 @@ public class OwnerAgendaAppointmentService {
             throw new RuntimeException("La cita no pertenece a la sede seleccionada");
         }
 
+        String cleanReason = clean(reason);
+        if (cleanReason == null) cleanReason = "Cancelación desde cliente anterior";
         appointment.setEstado("CANCELADO");
+        appointment.setNotas(appendStatusReason(appointment.getNotas(), "CANCELADO", cleanReason));
 
         return toAgendaResponse(appointmentRepository.save(appointment));
     }
 
+    @Transactional
+    public OwnerAgendaResponse markNoShow(Long tenantId, Long branchId, Long appointmentId, String reason) {
+        Appointment appointment = appointmentRepository.findByIdAndTenant_Id(appointmentId, tenantId)
+                .orElseThrow(() -> new RuntimeException("Cita no encontrada"));
+
+        if (branchId != null && appointment.getBranch() != null && !appointment.getBranch().getId().equals(branchId)) {
+            throw new RuntimeException("La cita no pertenece a la sede seleccionada");
+        }
+
+        String currentStatus = appointment.getEstado() == null ? "" : appointment.getEstado().trim().toUpperCase();
+        if (List.of("CANCELADO", "NO_SHOW", "ATENDIDO", "FINALIZADO", "COMPLETADO").contains(currentStatus)) {
+            throw new RuntimeException("La cita ya tiene un estado final");
+        }
+
+        LocalTime endTime = appointment.getHoraFin() != null ? appointment.getHoraFin() : appointment.getHoraInicio();
+        if (appointment.getFecha() == null || endTime == null
+                || !appointment.getFecha().atTime(endTime).isBefore(tenantTimeService.now(tenantId))) {
+            throw new RuntimeException("Solo puedes marcar no-show después de la hora de la cita");
+        }
+
+        String cleanReason = requireStatusReason(reason);
+        appointment.setEstado("NO_SHOW");
+        appointment.setNotas(appendStatusReason(appointment.getNotas(), "NO_SHOW", cleanReason));
+        return toAgendaResponse(appointmentRepository.save(appointment));
+    }
     @Transactional(readOnly = true)
     public OwnerAppointmentAvailabilityResponse getAvailability(
             Long tenantId,
@@ -574,6 +603,19 @@ public class OwnerAgendaAppointmentService {
                 .build();
     }
 
+    private String requireStatusReason(String reason) {
+        String cleanReason = clean(reason);
+        if (cleanReason == null || cleanReason.length() < 3) {
+            throw new IllegalArgumentException("El motivo debe tener al menos 3 caracteres");
+        }
+        return cleanReason;
+    }
+
+    private String appendStatusReason(String notes, String status, String reason) {
+        String marker = "[" + status + "] " + reason;
+        String cleanNotes = clean(notes);
+        return cleanNotes == null ? marker : cleanNotes + System.lineSeparator() + marker;
+    }
     private String resolveDepositMethod(Appointment appointment) {
         if (appointment == null) return null;
 
