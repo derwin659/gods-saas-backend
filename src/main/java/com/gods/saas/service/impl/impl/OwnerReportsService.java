@@ -80,6 +80,10 @@ public interface OwnerReportsService {
             LocalDate to
     );
 
+    Map<String, Object> getProductReport(
+            Long tenantId, Long branchId, LocalDate from, LocalDate to
+    );
+
     Map<String, Object> getExpenseReport(
             Long tenantId, Long branchId, LocalDate from, LocalDate to, String type
     );

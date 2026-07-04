@@ -114,6 +114,35 @@ ORDER BY MAX(COALESCE(s.sale_date, s.fecha_creacion)) ASC
     );
 
     @Query(value = """
+        select
+            p.product_id as productId,
+            coalesce(nullif(trim(p.nombre), ''), 'Producto') as productName,
+            coalesce(p.sku, '') as sku,
+            coalesce(p.categoria, 'Sin categoría') as category,
+            cast(coalesce(sum(coalesce(si.cantidad, 1)), 0) as bigint) as unitsSold,
+            count(distinct s.sale_id) as salesCount,
+            coalesce(sum(case when upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA') then 0 else coalesce(si.subtotal, 0) end), 0) as revenue,
+            coalesce(sum(coalesce(si.cantidad, 1) * coalesce(p.precio_compra, 0)), 0) as estimatedCost,
+            coalesce(sum(case when upper(trim(coalesce(s.metodo_pago, ''))) in ('GRATIS', 'FREE', 'CORTESIA', 'CORTESÍA') then 0 else coalesce(si.subtotal, 0) end), 0) - coalesce(sum(coalesce(si.cantidad, 1) * coalesce(p.precio_compra, 0)), 0) as estimatedMargin
+        from sale s
+        join sale_item si on si.sale_id = s.sale_id
+        join product p on p.product_id = si.product_id
+        where s.tenant_id = :tenantId
+          and p.tenant_id = :tenantId
+          and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
+          and (:branchId is null or s.branch_id = :branchId)
+          and coalesce(s.sale_date, s.fecha_creacion) >= :start
+          and coalesce(s.sale_date, s.fecha_creacion) < :end
+        group by p.product_id, p.nombre, p.sku, p.categoria
+        order by revenue desc, unitsSold desc, productName asc
+        """, nativeQuery = true)
+    List<ProductSalesReportProjection> getProductSalesReport(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+    @Query(value = """
     with payment_rows as (
         select
             s.sale_id as sale_id,

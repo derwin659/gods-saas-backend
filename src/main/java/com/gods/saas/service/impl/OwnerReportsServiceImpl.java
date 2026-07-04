@@ -343,6 +343,32 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
     }
 
     @Override
+    public Map<String, Object> getProductReport(
+            Long tenantId, Long branchId, LocalDate from, LocalDate to
+    ) {
+        validateAdvancedReportsAllowed(tenantId);
+        List<Map<String, Object>> items = saleRepository.getProductSalesReport(
+                tenantId, branchId, startOfDay(from), endInclusive(to)
+        ).stream().map(row -> {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("productId", row.getProductId()); item.put("productName", row.getProductName());
+            item.put("sku", row.getSku()); item.put("category", row.getCategory());
+            item.put("unitsSold", nvl(row.getUnitsSold())); item.put("salesCount", nvl(row.getSalesCount()));
+            item.put("revenue", nvl(row.getRevenue())); item.put("estimatedCost", nvl(row.getEstimatedCost()));
+            item.put("estimatedMargin", nvl(row.getEstimatedMargin()));
+            return item;
+        }).toList();
+        long unitsSold = items.stream().mapToLong(item -> ((Number) item.get("unitsSold")).longValue()).sum();
+        BigDecimal revenue = items.stream().map(item -> (BigDecimal) item.get("revenue")).reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal estimatedCost = items.stream().map(item -> (BigDecimal) item.get("estimatedCost")).reduce(BigDecimal.ZERO, BigDecimal::add);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("from", from.toString()); response.put("to", to.toString()); response.put("branchId", branchId == null ? 0L : branchId);
+        response.put("productCount", items.size()); response.put("unitsSold", unitsSold); response.put("revenue", revenue);
+        response.put("estimatedCost", estimatedCost); response.put("estimatedMargin", revenue.subtract(estimatedCost)); response.put("items", items);
+        return response;
+    }
+
+    @Override
     public Map<String, Object> getExpenseReport(
             Long tenantId, Long branchId, LocalDate from, LocalDate to, String type
     ) {
