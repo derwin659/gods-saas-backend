@@ -400,4 +400,26 @@ limit :limit
             @Param("tenantId") Long tenantId,
             @Param("branchId") Long branchId,
             @Param("date") LocalDate date
-    );}
+    );
+
+    @Query("""
+        select count(a) from Appointment a
+        where a.tenant.id = :tenantId and a.customer.id = :customerId
+          and upper(coalesce(a.estado, '')) in ('ATENDIDO', 'FINALIZADO', 'COMPLETADO', 'COMPLETED')
+        """)
+    long countCompletedCustomerVisits(@Param("tenantId") Long tenantId, @Param("customerId") Long customerId);
+
+    @Query("""
+        select count(a) from Appointment a
+        where a.tenant.id = :tenantId and a.customer.id = :customerId
+          and upper(coalesce(a.estado, '')) = 'NO_SHOW'
+        """)
+    long countCustomerNoShows(@Param("tenantId") Long tenantId, @Param("customerId") Long customerId);
+
+    @Query("""
+        select max(a.fecha) from Appointment a
+        where a.tenant.id = :tenantId and a.customer.id = :customerId
+          and upper(coalesce(a.estado, '')) in ('ATENDIDO', 'FINALIZADO', 'COMPLETADO', 'COMPLETED')
+        """)
+    LocalDate findLastCompletedCustomerVisit(@Param("tenantId") Long tenantId, @Param("customerId") Long customerId);
+}

@@ -49,7 +49,11 @@ public class OwnerLoyaltyServiceImpl implements OwnerLoyaltyService {
                 puntosDisponibles,
                 puntosAcumulados,
                 customer.getMigrated(),
-                customer.getAppActivated()
+                customer.getAppActivated(),
+                "NEW",
+                0L,
+                0L,
+                null
         );
     }
 

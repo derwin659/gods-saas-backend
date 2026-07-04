@@ -9,6 +9,10 @@ public record OwnerCustomerLoyaltyResponse(
         Integer puntosDisponibles,
         Integer puntosAcumulados,
         Boolean migrated,
-        Boolean appActivated
+        Boolean appActivated,
+        String customerStatus,
+        Long completedVisits,
+        Long noShows,
+        String lastVisit
 ) {
 }

@@ -624,6 +624,11 @@ public class CustomerService {
                 ? account.getPuntosAcumulados()
                 : 0;
 
+        long completedVisits = appointmentRepository.countCompletedCustomerVisits(tenantId, customerId);
+        long noShows = appointmentRepository.countCustomerNoShows(tenantId, customerId);
+        LocalDate lastVisit = appointmentRepository.findLastCompletedCustomerVisit(tenantId, customerId);
+        String customerStatus = resolveCustomerStatus(completedVisits, acumulados, lastVisit, tenantTimeService.today(tenantId));
+
         return new OwnerCustomerLoyaltyResponse(
                 customer.getId(),
                 customer.getNombres(),
@@ -632,7 +637,11 @@ public class CustomerService {
                 disponibles,
                 acumulados,
                 customer.getMigrated(),
-                customer.getAppActivated()
+                customer.getAppActivated(),
+                customerStatus,
+                completedVisits,
+                noShows,
+                lastVisit != null ? lastVisit.toString() : null
         );
     }
     public Integer obtenerPuntosAcumuladosReales(Long tenantId, Long customerId) {
@@ -733,5 +742,17 @@ public class CustomerService {
                         .ultimaVisita(item.getUltimaVisita())
                         .build())
                 .toList();
+    }
+
+    private String resolveCustomerStatus(
+            long completedVisits,
+            int accumulatedPoints,
+            LocalDate lastVisit,
+            LocalDate today
+    ) {
+        if (lastVisit != null && lastVisit.isBefore(today.minusDays(60))) return "INACTIVE";
+        if (completedVisits >= 10 || accumulatedPoints >= 500) return "VIP";
+        if (completedVisits >= 3) return "FREQUENT";
+        return "NEW";
     }
 }
