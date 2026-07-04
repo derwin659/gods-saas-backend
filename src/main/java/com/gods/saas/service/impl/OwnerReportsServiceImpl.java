@@ -3,6 +3,8 @@ package com.gods.saas.service.impl;
 import com.gods.saas.domain.dto.response.*;
 
 import com.gods.saas.domain.model.Subscription;
+import com.gods.saas.domain.model.CashMovement;
+import com.gods.saas.domain.enums.CashMovementType;
 import com.gods.saas.domain.repository.CashMovementRepository;
 import com.gods.saas.domain.repository.SaleRepository;
 import com.gods.saas.domain.repository.SubscriptionRepository;
@@ -17,6 +19,8 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
+import java.util.LinkedHashMap;
 
 @Service
 @RequiredArgsConstructor
@@ -336,6 +340,40 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
                         .totalAmount(nvl(p.getTotalAmount()))
                         .build())
                 .toList();
+    }
+
+    @Override
+    public Map<String, Object> getExpenseReport(
+            Long tenantId, Long branchId, LocalDate from, LocalDate to, String type
+    ) {
+        validateAdvancedReportsAllowed(tenantId);
+        CashMovementType selectedType = type == null || type.isBlank() ? null : CashMovementType.valueOf(type.trim().toUpperCase());
+        List<CashMovementType> expenseTypes = List.of(CashMovementType.EXPENSE, CashMovementType.ADVANCE_BARBER, CashMovementType.PAYMENT_BARBER);
+        if (selectedType != null && !expenseTypes.contains(selectedType)) throw new IllegalArgumentException("Tipo de gasto no válido");
+        List<CashMovement> movements = cashMovementRepository.findExpenseReportMovements(
+                tenantId, branchId, expenseTypes, selectedType, startOfDay(from), endInclusive(to)
+        );
+        Map<String, BigDecimal> totalsByType = new LinkedHashMap<>();
+        for (CashMovementType value : expenseTypes) totalsByType.put(value.name(), BigDecimal.ZERO);
+        List<Map<String, Object>> items = movements.stream().map(movement -> {
+            totalsByType.compute(movement.getType().name(), (key, total) -> nvl(total).add(nvl(movement.getAmount())));
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", movement.getId()); item.put("date", movement.getMovementDate().toString());
+            item.put("branchId", movement.getBranch().getId()); item.put("branchName", movement.getBranch().getNombre());
+            item.put("type", movement.getType().name()); item.put("amount", nvl(movement.getAmount()));
+            item.put("concept", movement.getConcept()); item.put("note", movement.getNote() == null ? "" : movement.getNote());
+            item.put("professional", movement.getBarberUser() == null ? "" : movement.getBarberUser().getNombre());
+            item.put("paymentMethod", movement.getPaymentMethod() == null ? "" : movement.getPaymentMethod().name());
+            return item;
+        }).toList();
+        BigDecimal total = totalsByType.values().stream().reduce(BigDecimal.ZERO, BigDecimal::add);
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("from", from.toString()); response.put("to", to.toString());
+        response.put("branchId", branchId == null ? 0L : branchId);
+        response.put("type", selectedType == null ? "ALL" : selectedType.name());
+        response.put("total", total); response.put("count", items.size());
+        response.put("totalsByType", totalsByType); response.put("items", items);
+        return response;
     }
 
     @Override

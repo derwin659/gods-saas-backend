@@ -146,6 +146,21 @@ public class OwnerReportsController {
         return ownerReportsService.getTopServices(tenantId, effectiveBranchIdForReports(authentication, branchId), from, to);
     }
 
+    @GetMapping("/expenses")
+    public Map<String, Object> getExpenseReport(
+            Authentication authentication,
+            @RequestParam(required = false) Long branchId,
+            @RequestParam(required = false) String type,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        adminPermissionService.checkPermission("REPORTS_PROFITABILITY");
+        Long tenantId = extractTenantId(authentication);
+        return ownerReportsService.getExpenseReport(
+                tenantId, effectiveBranchIdForReports(authentication, branchId), from, to, type
+        );
+    }
+
     @GetMapping("/payments/summary")
     public PaymentSummaryResponse getPaymentSummary(
             Authentication authentication,

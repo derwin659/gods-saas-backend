@@ -157,6 +157,25 @@ order by cm.movementDate desc
             @Param("start") java.time.LocalDateTime start,
             @Param("end") java.time.LocalDateTime end
     );
+    @Query("""
+        select cm from CashMovement cm
+        join fetch cm.branch b
+        left join fetch cm.barberUser bu
+        left join fetch cm.user u
+        where cm.tenant.id = :tenantId
+          and (:branchId is null or b.id = :branchId)
+          and cm.type in :expenseTypes
+          and (:type is null or cm.type = :type)
+          and cm.movementDate >= :start and cm.movementDate < :end
+        order by cm.movementDate desc
+        """)
+    List<CashMovement> findExpenseReportMovements(
+            @Param("tenantId") Long tenantId, @Param("branchId") Long branchId,
+            @Param("expenseTypes") List<com.gods.saas.domain.enums.CashMovementType> expenseTypes,
+            @Param("type") com.gods.saas.domain.enums.CashMovementType type,
+            @Param("start") java.time.LocalDateTime start, @Param("end") java.time.LocalDateTime end
+    );
+
     @Query(value = """
     with days as (
         select generate_series(cast(:start as date), cast(:endDate as date), interval '1 day')::date as report_date

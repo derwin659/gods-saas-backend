@@ -3,6 +3,7 @@ package com.gods.saas.service.impl.impl;
 import com.gods.saas.domain.dto.response.*;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 
 public interface OwnerReportsService {
 
@@ -77,6 +78,10 @@ public interface OwnerReportsService {
             Long branchId,
             LocalDate from,
             LocalDate to
+    );
+
+    Map<String, Object> getExpenseReport(
+            Long tenantId, Long branchId, LocalDate from, LocalDate to, String type
     );
 
     PaymentSummaryResponse getPaymentSummary(
