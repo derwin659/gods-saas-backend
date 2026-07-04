@@ -27,7 +27,7 @@ public class BranchAccessGuard {
         return isOwner() ? requestedBranchId : resolve(requestedBranchId, sessionBranchId);
     }
 
-    private boolean isOwner() {
+    public boolean isOwner() {
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
         return authentication != null && authentication.getAuthorities().stream()
                 .anyMatch(authority -> "ROLE_OWNER".equals(authority.getAuthority()));

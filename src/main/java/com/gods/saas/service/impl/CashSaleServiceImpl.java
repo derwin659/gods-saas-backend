@@ -75,6 +75,7 @@ public class CashSaleServiceImpl implements CashSaleService {
     private final CashAuditLogRepository cashAuditLogRepository;
     private final GeneralAuditService generalAuditService;
     private final BarberServiceCommissionService barberServiceCommissionService;
+    private final AdminPermissionService adminPermissionService;
 
     @Override
     public SaleResponse createCashSale(Long tenantId, Long branchId, Long userId, CreateCashSaleRequest request) {
@@ -314,6 +315,14 @@ public class CashSaleServiceImpl implements CashSaleService {
 
         if (sale.getCashRegister() == null) {
             throw new RuntimeException("La venta no pertenece a una caja");
+        }
+
+        LocalDateTime saleDate = sale.getSaleDate() != null ? sale.getSaleDate() : sale.getFechaCreacion();
+        boolean belongsToPastDate = saleDate != null
+                && saleDate.toLocalDate().isBefore(tenantTimeService.today(tenantId));
+        boolean belongsToClosedCash = sale.getCashRegister().getStatus() == CashRegisterStatus.CLOSED;
+        if (belongsToPastDate || belongsToClosedCash) {
+            adminPermissionService.checkPermission("CASH_EDIT_PAST_SALES");
         }
 
         String auditReason = requireAuditReason(request.getAuditReason());
