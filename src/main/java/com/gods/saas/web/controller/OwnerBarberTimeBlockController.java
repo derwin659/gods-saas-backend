@@ -6,6 +6,7 @@ import com.gods.saas.domain.dto.request.CreateBarberTimeBlockRequest;
 import com.gods.saas.domain.dto.response.BarberTimeBlockResponse;
 import com.gods.saas.service.impl.JwtService;
 import com.gods.saas.service.impl.OwnerBarberTimeBlockService;
+import com.gods.saas.service.impl.AdminPermissionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -21,6 +22,7 @@ public class OwnerBarberTimeBlockController {
     private final OwnerBarberTimeBlockService ownerBarberTimeBlockService;
     private final JwtService jwtService;
     private final BranchAccessGuard branchAccessGuard;
+    private final AdminPermissionService adminPermissionService;
 
     @PostMapping
     public ResponseEntity<Map<String, String>> createBlock(
@@ -33,6 +35,7 @@ public class OwnerBarberTimeBlockController {
         Long branchId = resolveBranchId(claims, branchIdParam);
         Long actorUserId = ((Number) claims.get("userId")).longValue();
 
+        adminPermissionService.checkPermission("CONFIG_SCHEDULES");
         ownerBarberTimeBlockService.createBlock(tenantId, branchId, actorUserId, request);
 
         return ResponseEntity.ok(Map.of("message", "Bloqueo creado correctamente"));
@@ -65,6 +68,7 @@ public class OwnerBarberTimeBlockController {
         Long branchId = resolveBranchId(claims, branchIdParam);
         Long actorUserId = ((Number) claims.get("userId")).longValue();
 
+        adminPermissionService.checkPermission("CONFIG_SCHEDULES");
         ownerBarberTimeBlockService.deleteBlock(tenantId, branchId, actorUserId, blockId);
 
         return ResponseEntity.ok(Map.of("message", "Bloqueo eliminado correctamente"));

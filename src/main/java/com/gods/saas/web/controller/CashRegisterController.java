@@ -9,6 +9,7 @@ import com.gods.saas.domain.dto.response.CashMovementResponse;
 import com.gods.saas.domain.dto.response.CashAuditLogResponse;
 import com.gods.saas.domain.dto.response.CashRegisterResponse;
 import com.gods.saas.service.impl.impl.CashRegisterService;
+import com.gods.saas.service.impl.AdminPermissionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
@@ -24,6 +25,7 @@ public class CashRegisterController {
 
     private final CashRegisterService cashRegisterService;
     private final BranchAccessGuard branchAccessGuard;
+    private final AdminPermissionService adminPermissionService;
 
     @PostMapping("/open")
     public CashRegisterResponse open(
@@ -33,6 +35,7 @@ public class CashRegisterController {
             @RequestParam(required = false) Long branchId,
             @RequestBody OpenCashRegisterRequest request
     ) {
+        adminPermissionService.checkPermission("CASH_OPEN");
         Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return cashRegisterService.open(tenantId, effectiveBranchId, userId, request);
     }
@@ -131,6 +134,7 @@ public class CashRegisterController {
             @RequestParam(required = false) Long branchId,
             @RequestParam(required = false) String auditReason
     ) {
+        adminPermissionService.checkPermission("CASH_DELETE_MOVEMENTS");
         Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         cashRegisterService.deleteMovement(tenantId, effectiveBranchId, movementId, userId, auditReason);
         return ResponseEntity.noContent().build();

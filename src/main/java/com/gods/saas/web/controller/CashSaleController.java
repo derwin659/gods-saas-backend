@@ -7,6 +7,7 @@ import com.gods.saas.domain.dto.request.RejectSalePaymentRequest;
 import com.gods.saas.domain.dto.request.UpdateSaleRequest;
 import com.gods.saas.domain.dto.response.SaleResponse;
 import com.gods.saas.service.impl.impl.CashSaleService;
+import com.gods.saas.service.impl.AdminPermissionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
@@ -21,6 +22,7 @@ public class CashSaleController {
 
     private final CashSaleService cashSaleService;
     private final BranchAccessGuard branchAccessGuard;
+    private final AdminPermissionService adminPermissionService;
 
     @PostMapping
     public SaleResponse create(
@@ -137,6 +139,7 @@ public class CashSaleController {
             @RequestParam(required = false) String auditReason
     ) {
         Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
+        adminPermissionService.checkPermission("CASH_DELETE_SALES");
         cashSaleService.deleteSale(tenantId, effectiveBranchId, userId, saleId, auditReason);
     }
 }
