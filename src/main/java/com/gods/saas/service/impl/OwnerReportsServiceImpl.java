@@ -15,6 +15,7 @@ import com.gods.saas.domain.repository.SubscriptionRepository;
 import com.gods.saas.domain.repository.projection.BarberSaleDetailProjection;
 import com.gods.saas.domain.repository.projection.BarberSalesSummaryProjection;
 import com.gods.saas.service.impl.impl.OwnerReportsService;
+import com.gods.saas.service.impl.impl.BarberPaymentService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -34,6 +35,7 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
     private final SubscriptionRepository subscriptionRepository;
     private final CashMovementRepository cashMovementRepository;
     private final BarberPaymentRepository barberPaymentRepository;
+    private final BarberPaymentService barberPaymentService;
 
     @Override
     public ProfitabilityReportResponse getProfitabilityReport(
@@ -390,7 +392,29 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
             item.put("paymentMethod", payment.getPaymentMethod().name()); item.put("createdAt", payment.getCreatedAt().toString());
             items.add(item);
         }
-        Map<String, Object> response = new LinkedHashMap<>();
+        if (branchId != null && (selectedStatus == null || selectedStatus == BarberPaymentStatus.PENDING)) {
+            saleRepository.getBarberSalesSummary(tenantId, branchId, startOfDay(from), endInclusive(to)).stream()
+                    .filter(barber -> barberUserId == null || barberUserId.equals(barber.getBarberId()))
+                    .forEach(barber -> {
+                        BarberPaymentPreviewResponse preview = barberPaymentService.preview(tenantId, branchId, barber.getBarberId(), from, to);
+                        if (nvl(preview.getPendingAmount()).compareTo(BigDecimal.ZERO) <= 0) return;
+                        Map<String, Object> item = new LinkedHashMap<>();
+                        item.put("paymentId", "pending-" + barber.getBarberId()); item.put("barberUserId", barber.getBarberId());
+                        item.put("barberName", barber.getBarberName()); item.put("branchId", branchId); item.put("branchName", "Sede seleccionada");
+                        item.put("paymentMode", preview.getPaymentMode()); item.put("status", "PENDING");
+                        item.put("periodFrom", preview.getPeriodFrom().toString()); item.put("periodTo", preview.getPeriodTo().toString());
+                        item.put("salaryAmount", nvl(preview.getSalaryAmount())); item.put("commissionAmount", nvl(preview.getCommissionAmount()));
+                        item.put("tipsAmount", nvl(preview.getTipsAmount())); item.put("advancesApplied", nvl(preview.getAdvancesApplied()));
+                        item.put("amountPaid", BigDecimal.ZERO); item.put("remainingAmount", nvl(preview.getPendingAmount()));
+                        item.put("paymentMethod", ""); item.put("createdAt", ""); items.add(item);
+                    });
+            totalSalary = items.stream().map(item -> (BigDecimal) item.get("salaryAmount")).reduce(BigDecimal.ZERO, BigDecimal::add);
+            totalCommissions = items.stream().map(item -> (BigDecimal) item.get("commissionAmount")).reduce(BigDecimal.ZERO, BigDecimal::add);
+            totalTips = items.stream().map(item -> (BigDecimal) item.get("tipsAmount")).reduce(BigDecimal.ZERO, BigDecimal::add);
+            totalAdvances = items.stream().map(item -> (BigDecimal) item.get("advancesApplied")).reduce(BigDecimal.ZERO, BigDecimal::add);
+            totalPaid = items.stream().map(item -> (BigDecimal) item.get("amountPaid")).reduce(BigDecimal.ZERO, BigDecimal::add);
+            totalPending = items.stream().map(item -> (BigDecimal) item.get("remainingAmount")).reduce(BigDecimal.ZERO, BigDecimal::add);
+        }        Map<String, Object> response = new LinkedHashMap<>();
         response.put("from", from.toString()); response.put("to", to.toString());
         response.put("branchId", branchId == null ? 0L : branchId); response.put("barberUserId", barberUserId == null ? 0L : barberUserId);
         response.put("status", selectedStatus == null ? "ALL" : selectedStatus.name()); response.put("count", items.size());
