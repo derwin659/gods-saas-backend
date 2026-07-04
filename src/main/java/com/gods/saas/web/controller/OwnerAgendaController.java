@@ -13,6 +13,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.Map;
 
@@ -71,6 +72,25 @@ public class OwnerAgendaController {
                 serviceId,
                 LocalDate.parse(fecha),
                 appointmentId
+        );
+    }
+
+    @GetMapping("/reassignment-suggestions")
+    public List<Map<String, Object>> getReassignmentSuggestions(
+            @RequestHeader("Authorization") String authHeader,
+            @RequestParam(required = false) Long branchId,
+            @RequestParam Long serviceId,
+            @RequestParam String fecha,
+            @RequestParam String horaInicio,
+            @RequestParam String horaFin
+    ) {
+        adminPermissionService.checkPermission("AGENDA_ACCESS");
+        SessionData session = readSession(authHeader);
+        Long branchIdFinal = resolveBranchId(branchId, session.branchId());
+        return ownerAgendaAppointmentService.getReassignmentSuggestions(
+                session.tenantId(), branchIdFinal, serviceId,
+                LocalDate.parse(fecha), LocalTime.parse(horaInicio), LocalTime.parse(horaFin),
+                branchAccessGuard.isOwner()
         );
     }
 

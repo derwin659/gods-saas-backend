@@ -17,6 +17,7 @@ import java.time.*;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -279,6 +280,55 @@ public class OwnerAgendaAppointmentService {
         appointment.setEstado("NO_SHOW");
         appointment.setNotas(appendStatusReason(appointment.getNotas(), "NO_SHOW", cleanReason));
         return toAgendaResponse(appointmentRepository.save(appointment));
+    }
+    @Transactional(readOnly = true)
+    public List<Map<String, Object>> getReassignmentSuggestions(
+            Long tenantId, Long requestedBranchId, Long serviceId,
+            LocalDate fecha, LocalTime horaInicio, LocalTime horaFin, boolean allowCrossBranch
+    ) {
+        if (serviceId == null || fecha == null || horaInicio == null || horaFin == null) {
+            throw new IllegalArgumentException("Servicio, fecha y horario son obligatorios");
+        }
+
+        List<Map<String, Object>> suggestions = new ArrayList<>();
+        List<Branch> branches = allowCrossBranch
+                ? branchRepository.findByTenant_IdAndActivoTrueOrderByNombreAsc(tenantId)
+                : List.of(getBranch(tenantId, requestedBranchId));
+
+        for (Branch branch : branches) {
+            List<AppUser> barbers = userTenantRoleRepository.findActiveUsersByTenantBranchAndRole(
+                    tenantId, branch.getId(), RoleType.BARBER
+            );
+            for (AppUser barber : barbers) {
+                if (!barberServiceAssignmentService.canPerform(tenantId, branch.getId(), barber.getId(), serviceId)) continue;
+                BarberAvailability availability = getWorkingAvailabilityOrNull(tenantId, branch.getId(), barber.getId(), fecha);
+                SlotStatus status = resolveSlotStatus(
+                        tenantId, branch.getId(), barber.getId(), fecha, horaInicio, horaFin, null, availability
+                );
+                if (!status.available()) continue;
+
+                int load = appointmentRepository.findActiveAppointmentsByBarberAndDate(
+                        tenantId, branch.getId(), barber.getId(), fecha
+                ).size();
+                suggestions.add(Map.of(
+                        "branchId", branch.getId(),
+                        "branchName", branch.getNombre(),
+                        "barberUserId", barber.getId(),
+                        "barberName", resolveUserName(barber),
+                        "sameBranch", branch.getId().equals(requestedBranchId),
+                        "appointmentsThatDay", load,
+                        "horaInicio", horaInicio.toString(),
+                        "horaFin", horaFin.toString()
+                ));
+            }
+        }
+
+        suggestions.sort((left, right) -> {
+            int sameBranch = Boolean.compare((Boolean) right.get("sameBranch"), (Boolean) left.get("sameBranch"));
+            if (sameBranch != 0) return sameBranch;
+            return Integer.compare((Integer) left.get("appointmentsThatDay"), (Integer) right.get("appointmentsThatDay"));
+        });
+        return suggestions.stream().limit(8).toList();
     }
     @Transactional(readOnly = true)
     public OwnerAppointmentAvailabilityResponse getAvailability(
