@@ -8,10 +8,13 @@ import com.gods.saas.domain.dto.response.UpcomingAppointmentItemResponse;
 import com.gods.saas.domain.model.Appointment;
 import com.gods.saas.domain.model.Branch;
 import com.gods.saas.domain.repository.AppointmentRepository;
+import com.gods.saas.domain.repository.BarberAvailabilityRepository;
 import com.gods.saas.domain.repository.BarberPaymentRepository;
 import com.gods.saas.domain.repository.BranchRepository;
 import com.gods.saas.domain.repository.CashMovementRepository;
+import com.gods.saas.domain.repository.CashRegisterRepository;
 import com.gods.saas.domain.repository.CustomerRepository;
+import com.gods.saas.domain.repository.ProductBranchStockRepository;
 import com.gods.saas.domain.repository.SaleRepository;
 import com.gods.saas.domain.repository.UserTenantRoleRepository;
 import com.gods.saas.domain.repository.projection.DashboardLeaderProjection;
@@ -34,10 +37,13 @@ public class OwnerHomeDashboardServiceImpl implements OwnerHomeDashboardService 
 
     private final SaleRepository saleRepository;
     private final AppointmentRepository appointmentRepository;
+    private final BarberAvailabilityRepository barberAvailabilityRepository;
     private final CustomerRepository customerRepository;
     private final UserTenantRoleRepository userTenantRolesRepository;
     private final BranchRepository branchRepository;
     private final CashMovementRepository cashMovementRepository;
+    private final CashRegisterRepository cashRegisterRepository;
+    private final ProductBranchStockRepository productBranchStockRepository;
     private final BarberPaymentRepository barberPaymentRepository;
     private final TenantTimeService tenantTimeService;
 
@@ -95,10 +101,19 @@ public class OwnerHomeDashboardServiceImpl implements OwnerHomeDashboardService 
                 .map(this::mapTopService)
                 .orElse(null);
 
-        List<DashboardAlertResponse> alerts = buildAlerts(
-                expectedCash, pendingProfessionalPayments, branches
-        );
+        long cashDifferences = cashRegisterRepository.countClosedWithDifference(
+                tenantId, branchId, start, end);
+        long lowStockProducts = productBranchStockRepository.countLowStock(tenantId, branchId);
+        long cancelledAppointments = appointmentRepository.countCancelledForDashboard(
+                tenantId, branchId, today);
+        long barbersWithoutSchedule = barberAvailabilityRepository
+                .countActiveBarbersWithoutSchedule(tenantId, branchId);
 
+        List<DashboardAlertResponse> alerts = buildAlerts(
+                expectedCash, pendingProfessionalPayments, todaySales,
+                yesterdaySales, previousWeekSales, cashDifferences,
+                lowStockProducts, cancelledAppointments, barbersWithoutSchedule, branches
+        );
         return OwnerHomeDashboardResponse.builder()
                 .todaySales(todaySales)
                 .expectedCash(nvl(expectedCash))
@@ -167,41 +182,66 @@ public class OwnerHomeDashboardServiceImpl implements OwnerHomeDashboardService 
     }
 
     private List<DashboardAlertResponse> buildAlerts(
-            BigDecimal expectedCash,
-            BigDecimal pendingProfessionalPayments,
-            List<BranchDashboardItemResponse> branches
+            BigDecimal expectedCash, BigDecimal pendingProfessionalPayments,
+            BigDecimal todaySales, BigDecimal yesterdaySales, BigDecimal previousWeekSales,
+            long cashDifferences, long lowStockProducts, long cancelledAppointments,
+            long barbersWithoutSchedule, List<BranchDashboardItemResponse> branches
     ) {
         List<DashboardAlertResponse> alerts = new ArrayList<>();
+        if (cashDifferences > 0) {
+            alerts.add(DashboardAlertResponse.builder().type("CASH_DIFFERENCE")
+                    .title("Caja con diferencia")
+                    .message(cashDifferences + " cierre(s) de hoy requieren revisión.")
+                    .severity("CRITICAL").build());
+        }
         if (expectedCash.compareTo(BigDecimal.ZERO) < 0) {
-            alerts.add(DashboardAlertResponse.builder()
-                    .type("NEGATIVE_EXPECTED_CASH")
+            alerts.add(DashboardAlertResponse.builder().type("NEGATIVE_EXPECTED_CASH")
                     .title("Caja esperada negativa")
                     .message("Los egresos en efectivo superan los ingresos registrados hoy.")
-                    .severity("CRITICAL")
-                    .build());
+                    .severity("CRITICAL").build());
+        }
+        if (lowStockProducts > 0) {
+            alerts.add(DashboardAlertResponse.builder().type("LOW_STOCK").title("Stock bajo")
+                    .message(lowStockProducts + " producto(s) llegaron a su nivel mínimo.")
+                    .severity("WARNING").build());
         }
         if (pendingProfessionalPayments.compareTo(BigDecimal.ZERO) > 0) {
-            alerts.add(DashboardAlertResponse.builder()
-                    .type("PROFESSIONAL_PAYMENTS_PENDING")
+            alerts.add(DashboardAlertResponse.builder().type("PROFESSIONAL_PAYMENTS_PENDING")
                     .title("Pagos profesionales pendientes")
                     .message("Hay " + nvl(pendingProfessionalPayments) + " por completar.")
-                    .severity("WARNING")
-                    .build());
+                    .severity("WARNING").build());
+        }
+        if (cancelledAppointments > 0) {
+            alerts.add(DashboardAlertResponse.builder().type("CANCELLED_APPOINTMENTS")
+                    .title("Citas canceladas hoy")
+                    .message(cancelledAppointments + " cita(s) fueron canceladas.")
+                    .severity("WARNING").build());
+        }
+        if (barbersWithoutSchedule > 0) {
+            alerts.add(DashboardAlertResponse.builder().type("BARBER_WITHOUT_SCHEDULE")
+                    .title("Profesional sin horario")
+                    .message(barbersWithoutSchedule + " profesional(es) activos no tienen horario configurado.")
+                    .severity("WARNING").build());
+        }
+        BigDecimal referenceSales = yesterdaySales.max(previousWeekSales);
+        if (todaySales.compareTo(BigDecimal.ZERO) > 0
+                && referenceSales.compareTo(BigDecimal.ZERO) > 0
+                && todaySales.compareTo(referenceSales.multiply(new BigDecimal("0.50"))) < 0) {
+            alerts.add(DashboardAlertResponse.builder().type("LOW_SALES")
+                    .title("Ventas por debajo de la referencia")
+                    .message("Las ventas de hoy están más de 50% por debajo del mejor periodo comparable.")
+                    .severity("INFO").build());
         }
         long branchesWithoutSales = branches.stream()
-                .filter(item -> nvl(item.getTodaySales()).compareTo(BigDecimal.ZERO) == 0)
-                .count();
+                .filter(item -> nvl(item.getTodaySales()).compareTo(BigDecimal.ZERO) == 0).count();
         if (branches.size() > 1 && branchesWithoutSales > 0) {
-            alerts.add(DashboardAlertResponse.builder()
-                    .type("BRANCH_WITHOUT_SALES")
+            alerts.add(DashboardAlertResponse.builder().type("BRANCH_WITHOUT_SALES")
                     .title("Sede sin ventas hoy")
                     .message(branchesWithoutSales + " sede(s) todavía no registran ventas.")
-                    .severity("INFO")
-                    .build());
+                    .severity("INFO").build());
         }
         return alerts;
     }
-
     private UpcomingAppointmentItemResponse mapUpcoming(Appointment appointment) {
         return UpcomingAppointmentItemResponse.builder()
                 .appointmentId(appointment.getId())

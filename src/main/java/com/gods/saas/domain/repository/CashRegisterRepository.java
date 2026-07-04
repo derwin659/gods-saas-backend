@@ -32,6 +32,22 @@ public interface CashRegisterRepository extends JpaRepository<CashRegister, Long
             LocalDateTime to
     );
     @Query("""
+        select count(cr)
+        from CashRegister cr
+        where cr.tenant.id = :tenantId
+          and (:branchId is null or cr.branch.id = :branchId)
+          and cr.status = com.gods.saas.domain.enums.CashRegisterStatus.CLOSED
+          and cr.closedAt >= :start
+          and cr.closedAt < :end
+          and abs(coalesce(cr.differenceAmount, 0)) >= 0.01
+        """)
+    long countClosedWithDifference(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+    @Query("""
         select distinct cr
         from CashRegister cr
         where cr.tenant.id = :tenantId

@@ -387,4 +387,17 @@ limit :limit
     List<Appointment> findByFecha(LocalDate fecha);
 
 
-}
+
+    @Query("""
+        select count(a)
+        from Appointment a
+        where a.tenant.id = :tenantId
+          and (:branchId is null or a.branch.id = :branchId)
+          and a.fecha = :date
+          and upper(coalesce(a.estado, '')) in ('CANCELADO', 'CANCELADA', 'CANCELLED')
+        """)
+    long countCancelledForDashboard(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("date") LocalDate date
+    );}

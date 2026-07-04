@@ -32,4 +32,18 @@ public interface ProductBranchStockRepository extends JpaRepository<ProductBranc
             @Param("branchId") Long branchId,
             @Param("activeOnly") Boolean activeOnly
     );
-}
+
+    @Query("""
+        select count(pbs)
+        from ProductBranchStock pbs
+        join pbs.product p
+        where pbs.tenant.id = :tenantId
+          and (:branchId is null or pbs.branch.id = :branchId)
+          and pbs.activo = true
+          and p.activo = true
+          and pbs.stockActual <= pbs.stockMinimo
+        """)
+    long countLowStock(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId
+    );}
