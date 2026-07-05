@@ -350,6 +350,48 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
     }
 
     @Override
+    public Map<String, Object> getPeriodComparison(Long tenantId, Long branchId, LocalDate from, LocalDate to) {
+        validateAdvancedReportsAllowed(tenantId);
+        if (from.isAfter(to)) throw new IllegalArgumentException("El rango de fechas no es válido");
+        long days = java.time.temporal.ChronoUnit.DAYS.between(from, to) + 1;
+        LocalDate previousTo = from.minusDays(1);
+        LocalDate previousFrom = previousTo.minusDays(days - 1);
+        Map<String, BigDecimal> current = periodMetrics(tenantId, branchId, from, to);
+        Map<String, BigDecimal> previous = periodMetrics(tenantId, branchId, previousFrom, previousTo);
+        Map<String, Object> metrics = new LinkedHashMap<>();
+        for (String key : List.of("sales", "expenses", "profit", "averageTicket", "professionalPayments")) {
+            BigDecimal currentValue = nvl(current.get(key)); BigDecimal previousValue = nvl(previous.get(key));
+            BigDecimal difference = currentValue.subtract(previousValue);
+            BigDecimal percentage = previousValue.compareTo(BigDecimal.ZERO) == 0
+                    ? (currentValue.compareTo(BigDecimal.ZERO) == 0 ? BigDecimal.ZERO : new BigDecimal("100"))
+                    : difference.multiply(new BigDecimal("100")).divide(previousValue.abs(), 2, RoundingMode.HALF_UP);
+            Map<String, Object> metric = new LinkedHashMap<>();
+            metric.put("current", currentValue); metric.put("previous", previousValue);
+            metric.put("difference", difference); metric.put("percentage", percentage); metrics.put(key, metric);
+        }
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("currentFrom", from.toString()); response.put("currentTo", to.toString());
+        response.put("previousFrom", previousFrom.toString()); response.put("previousTo", previousTo.toString());
+        response.put("branchId", branchId == null ? 0L : branchId); response.put("metrics", metrics);
+        return response;
+    }
+
+    private Map<String, BigDecimal> periodMetrics(Long tenantId, Long branchId, LocalDate from, LocalDate to) {
+        LocalDateTime start = startOfDay(from); LocalDateTime end = endInclusive(to);
+        BigDecimal sales = nvl(saleRepository.getTotalSalesByRange(tenantId, branchId, start, end));
+        BigDecimal expenses = nvl(cashMovementRepository.sumGeneralExpensesByRange(tenantId, branchId, start, end));
+        BigDecimal income = nvl(cashMovementRepository.sumAdditionalIncomeByRange(tenantId, branchId, start, end));
+        BigDecimal commissions = nvl(saleRepository.sumAccruedBarberCommissionsByRange(tenantId, branchId, start, end));
+        BigDecimal payments = nvl(barberPaymentRepository.sumTotalPaidByRange(tenantId, branchId, start, end));
+        Long paidCount = nvl(saleRepository.countPaidSalesByRange(tenantId, branchId, start, end));
+        Map<String, BigDecimal> values = new LinkedHashMap<>();
+        values.put("sales", sales); values.put("expenses", expenses);
+        values.put("profit", sales.add(income).subtract(expenses).subtract(commissions));
+        values.put("averageTicket", calculateAverage(sales, paidCount)); values.put("professionalPayments", payments);
+        return values;
+    }
+
+    @Override
     public Map<String, Object> getProfessionalPaymentReport(
             Long tenantId, Long branchId, Long barberUserId, String status,
             LocalDate from, LocalDate to

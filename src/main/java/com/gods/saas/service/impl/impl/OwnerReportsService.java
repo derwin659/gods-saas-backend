@@ -80,6 +80,9 @@ public interface OwnerReportsService {
             LocalDate to
     );
 
+    Map<String, Object> getPeriodComparison(
+            Long tenantId, Long branchId, LocalDate from, LocalDate to
+    );
     Map<String, Object> getProfessionalPaymentReport(
             Long tenantId, Long branchId, Long barberUserId, String status,
             LocalDate from, LocalDate to

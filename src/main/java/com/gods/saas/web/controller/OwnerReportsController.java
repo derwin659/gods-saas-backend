@@ -146,6 +146,19 @@ public class OwnerReportsController {
         return ownerReportsService.getTopServices(tenantId, effectiveBranchIdForReports(authentication, branchId), from, to);
     }
 
+    @GetMapping("/period-comparison")
+    public Map<String, Object> getPeriodComparison(
+            Authentication authentication,
+            @RequestParam(required = false) Long branchId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        adminPermissionService.checkPermission("REPORTS_PROFITABILITY");
+        Long tenantId = extractTenantId(authentication);
+        return ownerReportsService.getPeriodComparison(
+                tenantId, effectiveBranchIdForReports(authentication, branchId), from, to
+        );
+    }
     @GetMapping("/professional-payments")
     public Map<String, Object> getProfessionalPaymentReport(
             Authentication authentication,
