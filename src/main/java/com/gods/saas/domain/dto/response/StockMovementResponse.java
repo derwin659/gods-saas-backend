@@ -46,7 +46,7 @@ public class StockMovementResponse {
                 .productId(movement.getProduct() != null ? movement.getProduct().getId() : null)
                 .productName(movement.getProduct() != null ? movement.getProduct().getNombre() : null)
                 .branchId(movement.getBranch() != null ? movement.getBranch().getId() : null)
-                .branchName(null)
+                .branchName(movement.getBranch() != null ? movement.getBranch().getNombre() : null)
                 .userId(movement.getUser() != null ? movement.getUser().getId() : null)
                 .userName(resolveUserName(movement.getUser()))
                 .tipoMovimiento(movement.getTipoMovimiento())
