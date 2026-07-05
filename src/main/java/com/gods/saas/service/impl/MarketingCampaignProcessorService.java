@@ -92,6 +92,10 @@ public class MarketingCampaignProcessorService {
                 continue;
             }
 
+            if (campaign.isChannelWhatsapp() && (!Boolean.TRUE.equals(customer.getWhatsappMarketingEnabled()) || customer.getWhatsappOptedOutAt() != null)) {
+                continue;
+            }
+
             createCampaignNotification(campaign, customer, customerProjection);
             registerCampaignDelivery(campaign, customer);
         }

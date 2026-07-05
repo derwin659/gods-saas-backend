@@ -89,6 +89,16 @@ public class Customer {
     private Boolean activationBonusGranted = false;
 
     @Builder.Default
+    @Column(name = "whatsapp_transactional_enabled", nullable = false)
+    private Boolean whatsappTransactionalEnabled = true;
+
+    @Builder.Default
+    @Column(name = "whatsapp_marketing_enabled", nullable = false)
+    private Boolean whatsappMarketingEnabled = false;
+
+    @Column(name = "whatsapp_opted_out_at")
+    private LocalDateTime whatsappOptedOutAt;
+    @Builder.Default
     @Column(name = "activo", nullable = false)
     private Boolean activo = true;
 
@@ -117,6 +127,9 @@ public class Customer {
             activationBonusGranted = false;
         }
 
+        if (whatsappTransactionalEnabled == null) whatsappTransactionalEnabled = true;
+        if (whatsappMarketingEnabled == null) whatsappMarketingEnabled = false;
+
         if (activo == null) {
             activo = true;
         }
@@ -124,6 +137,8 @@ public class Customer {
 
     @PreUpdate
     void preUpdate() {
+        if (whatsappTransactionalEnabled == null) whatsappTransactionalEnabled = true;
+        if (whatsappMarketingEnabled == null) whatsappMarketingEnabled = false;
         if (activo == null) {
             activo = true;
         }

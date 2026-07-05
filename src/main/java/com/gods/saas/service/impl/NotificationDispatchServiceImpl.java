@@ -142,6 +142,14 @@ public class NotificationDispatchServiceImpl implements NotificationDispatchServ
             return;
         }
 
+        if (notification.getCustomer() != null
+                && (notification.getCustomer().getWhatsappOptedOutAt() != null
+                || !Boolean.TRUE.equals(notification.getCustomer().getWhatsappTransactionalEnabled()))) {
+            delivery.setStatus(NotificationDeliveryStatus.SKIPPED);
+            delivery.setErrorMessage("Cliente sin consentimiento transaccional de WhatsApp");
+            notificationDeliveryRepository.save(delivery);
+            return;
+        }
         Long tenantId = notification.getTenant().getId();
 
         if (!isGrowthOrHigher(tenantId)) {
