@@ -15,6 +15,9 @@ public class ClienteResponse {
     private String origenCliente;
     private Integer puntosDisponibles;
     private String photoUrl;
+    private Boolean whatsappTransactionalEnabled;
+    private Boolean whatsappMarketingEnabled;
+    private java.time.LocalDateTime whatsappOptedOutAt;
 
     public static ClienteResponse fromEntity(Customer u) {
         ClienteResponse r = new ClienteResponse();
@@ -27,6 +30,9 @@ public class ClienteResponse {
         r.setOrigenCliente(u.getOrigenCliente());
         r.setPuntosDisponibles(u.getPuntosDisponibles() != null ? u.getPuntosDisponibles() : 0);
         r.setPhotoUrl(u.getPhotoUrl());
+        r.setWhatsappTransactionalEnabled(u.getWhatsappTransactionalEnabled());
+        r.setWhatsappMarketingEnabled(u.getWhatsappMarketingEnabled());
+        r.setWhatsappOptedOutAt(u.getWhatsappOptedOutAt());
         return r;
     }
 

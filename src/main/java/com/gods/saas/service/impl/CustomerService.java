@@ -248,6 +248,24 @@ public class CustomerService {
         return customerRepository.searchByNameOrPhone(tenantId, q.strip(), pageable);
     }
 
+    @Transactional
+    public Customer actualizarConsentimientoWhatsapp(
+            Long tenantId, Long customerId, Boolean transactionalEnabled,
+            Boolean marketingEnabled, Boolean optedOut
+    ) {
+        Customer customer = obtenerClienteOwner(tenantId, customerId);
+        if (Boolean.TRUE.equals(optedOut)) {
+            customer.setWhatsappTransactionalEnabled(false);
+            customer.setWhatsappMarketingEnabled(false);
+            customer.setWhatsappOptedOutAt(LocalDateTime.now());
+        } else {
+            customer.setWhatsappOptedOutAt(null);
+            if (transactionalEnabled != null) customer.setWhatsappTransactionalEnabled(transactionalEnabled);
+            if (marketingEnabled != null) customer.setWhatsappMarketingEnabled(marketingEnabled);
+        }
+        customer.setFechaActualizacion(LocalDateTime.now());
+        return customerRepository.save(customer);
+    }
     public Customer obtenerClienteOwner(Long tenantId, Long customerId) {
         return customerRepository.findByIdAndTenant_IdAndActivoTrue(customerId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));

@@ -4,6 +4,7 @@ import com.gods.saas.domain.dto.ActualizarClienteRequest;
 import com.gods.saas.domain.dto.ClienteResponse;
 import com.gods.saas.domain.dto.VentaRapidaRequest;
 import com.gods.saas.domain.dto.response.InactiveCustomerResponse;
+import com.gods.saas.domain.dto.request.WhatsappConsentRequest;
 import com.gods.saas.domain.dto.response.OwnerCustomerHistoryResponse;
 import com.gods.saas.domain.dto.response.OwnerCustomerLoyaltyResponse;
 import com.gods.saas.domain.model.Customer;
@@ -158,6 +159,21 @@ public class OwnerCustomerController {
         return ResponseEntity.ok(protectPhone(ClienteResponse.fromEntity(customer), canViewPhone));
     }
 
+    @PatchMapping("/{customerId}/whatsapp-consent")
+    public ResponseEntity<ClienteResponse> updateWhatsappConsent(
+            @RequestHeader("Authorization") String authHeader,
+            @PathVariable Long customerId,
+            @RequestBody WhatsappConsentRequest request
+    ) {
+        adminPermissionService.checkPermission("CUSTOMERS_ACCESS");
+        Long tenantId = extractTenantId(authHeader);
+        Customer customer = customerService.actualizarConsentimientoWhatsapp(
+                tenantId, customerId, request.getTransactionalEnabled(),
+                request.getMarketingEnabled(), request.getOptedOut()
+        );
+        boolean canViewPhone = adminPermissionService.hasCurrentUserPermission("CUSTOMERS_VIEW_PHONE");
+        return ResponseEntity.ok(protectPhone(ClienteResponse.fromEntity(customer), canViewPhone));
+    }
     @Operation(summary = "Eliminar lógicamente cliente desde owner/admin")
     @SecurityRequirement(name = "bearerAuth")
     @DeleteMapping("/{customerId}")
