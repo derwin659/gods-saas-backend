@@ -7,6 +7,7 @@ import com.gods.saas.domain.dto.response.InactiveCustomerResponse;
 import com.gods.saas.domain.dto.request.WhatsappConsentRequest;
 import com.gods.saas.domain.dto.response.OwnerCustomerHistoryResponse;
 import com.gods.saas.domain.dto.response.OwnerCustomerLoyaltyResponse;
+import com.gods.saas.domain.dto.response.OwnerCustomerReportResponse;
 import com.gods.saas.domain.model.Customer;
 import com.gods.saas.service.impl.AdminPermissionService;
 import com.gods.saas.service.impl.CustomerService;
@@ -17,8 +18,10 @@ import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -58,6 +61,32 @@ public class OwnerCustomerController {
         return ResponseEntity.ok(response);
     }
 
+
+    @Operation(summary = "Reporte segmentado de clientes para owner/admin")
+    @SecurityRequirement(name = "bearerAuth")
+    @GetMapping("/report")
+    public ResponseEntity<OwnerCustomerReportResponse> report(
+            @RequestHeader("Authorization") String authHeader,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @RequestParam(required = false) Long branchId,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate lastVisitFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate lastVisitTo,
+            @RequestParam(required = false) String q,
+            @RequestParam(defaultValue = "200") int limit
+    ) {
+        adminPermissionService.checkPermission("CUSTOMERS_ACCESS");
+
+        Long tenantId = extractTenantId(authHeader);
+        boolean canViewPhone = adminPermissionService.hasCurrentUserPermission("CUSTOMERS_VIEW_PHONE");
+
+        OwnerCustomerReportResponse response = customerService.obtenerReporteClientesOwner(
+                tenantId, from, to, branchId, status, lastVisitFrom, lastVisitTo, q, limit
+        );
+
+        return ResponseEntity.ok(protectPhone(response, canViewPhone));
+    }
     @Operation(summary = "Listar clientes inactivos para campañas")
     @SecurityRequirement(name = "bearerAuth")
     @GetMapping("/inactive")
@@ -247,6 +276,41 @@ public class OwnerCustomerController {
                 .build();
     }
 
+
+    private OwnerCustomerReportResponse protectPhone(OwnerCustomerReportResponse response, boolean canViewPhone) {
+        if (canViewPhone || response == null || response.items() == null) {
+            return response;
+        }
+
+        List<OwnerCustomerReportResponse.Item> protectedItems = response.items().stream()
+                .map(item -> new OwnerCustomerReportResponse.Item(
+                        item.customerId(),
+                        item.fullName(),
+                        maskPhone(item.phone()),
+                        item.email(),
+                        item.registeredAt(),
+                        item.lastVisit(),
+                        item.branchId(),
+                        item.branchName(),
+                        item.visits(),
+                        item.totalSpent(),
+                        item.points(),
+                        item.status(),
+                        item.whatsappTransactionalEnabled(),
+                        item.whatsappMarketingEnabled(),
+                        item.whatsappOptedOut()
+                ))
+                .toList();
+
+        return new OwnerCustomerReportResponse(
+                response.from(),
+                response.to(),
+                response.previousFrom(),
+                response.previousTo(),
+                response.summary(),
+                protectedItems
+        );
+    }
     private String maskPhone(String phone) {
         if (phone == null || phone.isBlank()) {
             return "";

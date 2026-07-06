@@ -12,6 +12,7 @@ import com.gods.saas.domain.model.Tenant;
 import com.gods.saas.domain.repository.*;
 import com.gods.saas.domain.repository.projection.LastVisitProjection;
 import com.gods.saas.domain.repository.projection.CustomerHistorySaleItemProjection;
+import com.gods.saas.domain.repository.projection.CustomerReportProjection;
 import com.gods.saas.service.impl.impl.LoyaltyService;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
@@ -762,6 +763,146 @@ public class CustomerService {
                 .toList();
     }
 
+
+    public OwnerCustomerReportResponse obtenerReporteClientesOwner(
+            Long tenantId,
+            LocalDate from,
+            LocalDate to,
+            Long branchId,
+            String status,
+            LocalDate lastVisitFrom,
+            LocalDate lastVisitTo,
+            String q,
+            int limit
+    ) {
+        LocalDate today = tenantTimeService.today(tenantId);
+        LocalDate safeTo = to != null ? to : today;
+        LocalDate safeFrom = from != null ? from : safeTo.minusDays(30);
+        if (safeFrom.isAfter(safeTo)) {
+            LocalDate tmp = safeFrom;
+            safeFrom = safeTo;
+            safeTo = tmp;
+        }
+
+        LocalDate exclusiveTo = safeTo.plusDays(1);
+        long days = Math.max(1, java.time.temporal.ChronoUnit.DAYS.between(safeFrom, exclusiveTo));
+        LocalDate previousTo = safeFrom.minusDays(1);
+        LocalDate previousFrom = previousTo.minusDays(days - 1);
+
+        LocalDateTime registeredFrom = safeFrom.atStartOfDay();
+        LocalDateTime registeredTo = exclusiveTo.atStartOfDay();
+        LocalDateTime previousFromAt = previousFrom.atStartOfDay();
+        LocalDateTime previousToAt = previousTo.plusDays(1).atStartOfDay();
+        LocalDateTime lastFromAt = lastVisitFrom != null ? lastVisitFrom.atStartOfDay() : null;
+        LocalDateTime lastToAt = lastVisitTo != null ? lastVisitTo.plusDays(1).atStartOfDay() : null;
+        int safeLimit = Math.min(Math.max(limit, 1), 500);
+        String normalizedStatus = normalizeCustomerStatus(status);
+
+        List<CustomerReportProjection> rows = customerRepository.findCustomerReportRows(
+                tenantId,
+                q == null ? null : q.trim(),
+                registeredFrom,
+                registeredTo,
+                branchId,
+                lastFromAt,
+                lastToAt,
+                safeLimit
+        );
+
+        List<OwnerCustomerReportResponse.Item> items = rows.stream()
+                .map(row -> toCustomerReportItem(row, today))
+                .filter(item -> normalizedStatus == null || normalizedStatus.equals(item.status()))
+                .toList();
+
+        BigDecimal totalSpent = items.stream()
+                .map(item -> item.totalSpent() != null ? item.totalSpent() : BigDecimal.ZERO)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal averageSpent = items.isEmpty()
+                ? BigDecimal.ZERO
+                : totalSpent.divide(BigDecimal.valueOf(items.size()), 2, java.math.RoundingMode.HALF_UP);
+
+        int active = (int) items.stream().filter(item -> !"INACTIVE".equals(item.status())).count();
+        int inactive = (int) items.stream().filter(item -> "INACTIVE".equals(item.status())).count();
+        int vip = (int) items.stream().filter(item -> "VIP".equals(item.status())).count();
+        int frequent = (int) items.stream().filter(item -> "FREQUENT".equals(item.status())).count();
+        int newCustomers = (int) items.stream().filter(item -> "NEW".equals(item.status())).count();
+        int withMarketingWhatsapp = (int) items.stream()
+                .filter(item -> Boolean.TRUE.equals(item.whatsappMarketingEnabled()) && !Boolean.TRUE.equals(item.whatsappOptedOut()))
+                .count();
+        int optedOut = (int) items.stream().filter(item -> Boolean.TRUE.equals(item.whatsappOptedOut())).count();
+
+        long totalRegistered = customerRepository.countRegisteredBetween(tenantId, registeredFrom, registeredTo);
+        long previousRegistered = customerRepository.countRegisteredBetween(tenantId, previousFromAt, previousToAt);
+
+        OwnerCustomerReportResponse.Summary summary = new OwnerCustomerReportResponse.Summary(
+                Math.toIntExact(totalRegistered),
+                Math.toIntExact(previousRegistered),
+                variationPercent(totalRegistered, previousRegistered),
+                items.size(),
+                active,
+                inactive,
+                vip,
+                frequent,
+                newCustomers,
+                withMarketingWhatsapp,
+                optedOut,
+                totalSpent,
+                averageSpent
+        );
+
+        return new OwnerCustomerReportResponse(
+                safeFrom.toString(),
+                safeTo.toString(),
+                previousFrom.toString(),
+                previousTo.toString(),
+                summary,
+                items
+        );
+    }
+
+    private OwnerCustomerReportResponse.Item toCustomerReportItem(CustomerReportProjection row, LocalDate today) {
+        Long visits = row.getVisits() != null ? row.getVisits() : 0L;
+        Integer points = row.getPuntos() != null ? row.getPuntos() : 0;
+        LocalDate lastVisit = row.getUltimaVisita() != null ? row.getUltimaVisita().toLocalDate() : null;
+        String status = resolveCustomerStatus(visits, points, lastVisit, today);
+        String fullName = ((row.getNombres() != null ? row.getNombres().trim() : "") + " "
+                + (row.getApellidos() != null ? row.getApellidos().trim() : "")).trim();
+        if (fullName.isBlank()) fullName = "Cliente";
+
+        return new OwnerCustomerReportResponse.Item(
+                row.getCustomerId(),
+                fullName,
+                row.getTelefono(),
+                row.getEmail(),
+                row.getFechaRegistro() != null ? row.getFechaRegistro().toString() : null,
+                row.getUltimaVisita() != null ? row.getUltimaVisita().toString() : null,
+                row.getBranchId(),
+                row.getBranchName(),
+                visits,
+                row.getTotalSpent() != null ? row.getTotalSpent() : BigDecimal.ZERO,
+                points,
+                status,
+                Boolean.TRUE.equals(row.getWhatsappTransactionalEnabled()),
+                Boolean.TRUE.equals(row.getWhatsappMarketingEnabled()),
+                Boolean.TRUE.equals(row.getWhatsappOptedOut())
+        );
+    }
+
+    private String normalizeCustomerStatus(String status) {
+        if (status == null || status.isBlank() || "ALL".equalsIgnoreCase(status)) return null;
+        String value = status.trim().toUpperCase();
+        return switch (value) {
+            case "NEW", "FREQUENT", "VIP", "INACTIVE" -> value;
+            default -> null;
+        };
+    }
+
+    private Double variationPercent(long current, long previous) {
+        if (previous == 0) {
+            return current == 0 ? 0.0 : 100.0;
+        }
+        return ((double) (current - previous) / (double) previous) * 100.0;
+    }
     private String resolveCustomerStatus(
             long completedVisits,
             int accumulatedPoints,
