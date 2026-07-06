@@ -18,6 +18,7 @@ public class MarketingCampaignAdminController {
 
     private final MarketingCampaignService marketingCampaignService;
     private final MarketingCampaignProcessorService marketingCampaignProcessorService;
+    private final com.gods.saas.service.impl.CampaignOperationsService campaignOperationsService;
 
     @GetMapping
     public List<MarketingCampaignResponse> findAll(Authentication authentication) {
@@ -70,6 +71,24 @@ public class MarketingCampaignAdminController {
         return Map.of("message", "Campañas ejecutadas correctamente");
     }
 
+    @GetMapping("/preview")
+    public Map<String, Object> preview(Authentication authentication) {
+        return campaignOperationsService.preview(tenantId(authentication));
+    }
+
+    @PostMapping("/run-confirmed")
+    public Map<String, Object> runConfirmed(
+            @RequestBody(required = false) Map<String, Object> body,
+            Authentication authentication
+    ) {
+        boolean confirmed = body != null && Boolean.TRUE.equals(body.get("confirmed"));
+        return campaignOperationsService.run(tenantId(authentication), confirmed);
+    }
+
+    @GetMapping("/history")
+    public List<Map<String, Object>> history(Authentication authentication) {
+        return campaignOperationsService.history(tenantId(authentication));
+    }
     private Long tenantId(Authentication authentication) {
         Map<String, Object> details = (Map<String, Object>) authentication.getDetails();
         return Long.valueOf(details.get("tenantId").toString());

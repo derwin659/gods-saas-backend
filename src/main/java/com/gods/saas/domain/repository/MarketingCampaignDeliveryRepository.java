@@ -5,6 +5,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 
 import java.time.LocalDateTime;
+import java.util.List;
 
 public interface MarketingCampaignDeliveryRepository extends JpaRepository<MarketingCampaignDelivery, Long> {
 
@@ -17,4 +18,8 @@ public interface MarketingCampaignDeliveryRepository extends JpaRepository<Marke
           and d.sentAt >= :since
     """)
     boolean existsRecently(Long tenantId, Long customerId, String campaignCode, LocalDateTime since);
+
+    long countByTenant_Id(Long tenantId);
+
+    List<MarketingCampaignDelivery> findTop100ByTenant_IdOrderBySentAtDesc(Long tenantId);
 }
