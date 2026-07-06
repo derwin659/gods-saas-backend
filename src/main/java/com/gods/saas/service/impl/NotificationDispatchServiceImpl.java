@@ -142,11 +142,16 @@ public class NotificationDispatchServiceImpl implements NotificationDispatchServ
             return;
         }
 
+        boolean marketingMessage = isMarketingWhatsapp(notification);
         if (notification.getCustomer() != null
                 && (notification.getCustomer().getWhatsappOptedOutAt() != null
-                || !Boolean.TRUE.equals(notification.getCustomer().getWhatsappTransactionalEnabled()))) {
+                || (marketingMessage
+                    ? !Boolean.TRUE.equals(notification.getCustomer().getWhatsappMarketingEnabled())
+                    : !Boolean.TRUE.equals(notification.getCustomer().getWhatsappTransactionalEnabled())))) {
             delivery.setStatus(NotificationDeliveryStatus.SKIPPED);
-            delivery.setErrorMessage("Cliente sin consentimiento transaccional de WhatsApp");
+            delivery.setErrorMessage(marketingMessage
+                    ? "Cliente sin consentimiento de marketing por WhatsApp"
+                    : "Cliente sin consentimiento transaccional de WhatsApp");
             notificationDeliveryRepository.save(delivery);
             return;
         }
@@ -180,6 +185,13 @@ public class NotificationDispatchServiceImpl implements NotificationDispatchServ
         notificationDeliveryRepository.save(delivery);
     }
 
+    private boolean isMarketingWhatsapp(Notification notification) {
+        if (notification == null || notification.getType() == null) return false;
+        return switch (notification.getType()) {
+            case PROMOTION_CREATED, REWARD_CREATED, CAMPAIGN_INACTIVE_15, CAMPAIGN_INACTIVE_30 -> true;
+            default -> false;
+        };
+    }
     private boolean canUsePushForType(Long tenantId, String type) {
         if (BASIC_PUSH_TYPES.contains(type)) {
             return true;
