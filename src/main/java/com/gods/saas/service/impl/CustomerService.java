@@ -242,11 +242,15 @@ public class CustomerService {
         int safeLimit = Math.min(Math.max(limit, 1), 100);
         PageRequest pageable = PageRequest.of(0, safeLimit);
 
-        if (q == null || q.isBlank()) {
-            return customerRepository.findByTenant_IdAndActivoTrueOrderByFechaRegistroDesc(tenantId, pageable);
-        }
+        List<Customer> customers = (q == null || q.isBlank())
+                ? customerRepository.findByTenant_IdAndActivoTrueOrderByFechaRegistroDesc(tenantId, pageable)
+                : customerRepository.searchByNameOrPhone(tenantId, q.strip(), pageable);
 
-        return customerRepository.searchByNameOrPhone(tenantId, q.strip(), pageable);
+        customers.forEach(customer -> loyaltyAccountRepository
+                .findByTenant_IdAndCustomer_Id(tenantId, customer.getId())
+                .ifPresent(account -> customer.setPuntosDisponibles(safeInt(account.getPuntosDisponibles()))));
+
+        return customers;
     }
 
     @Transactional
@@ -806,6 +810,8 @@ public class CustomerService {
                 branchId,
                 lastFromAt,
                 lastToAt,
+                normalizedStatus,
+                today.minusDays(60).atStartOfDay(),
                 safeLimit
         );
 
@@ -913,5 +919,8 @@ public class CustomerService {
         if (completedVisits >= 10 || accumulatedPoints >= 500) return "VIP";
         if (completedVisits >= 3) return "FREQUENT";
         return "NEW";
+    }
+    private int safeInt(Integer value) {
+        return value != null ? value : 0;
     }
 }

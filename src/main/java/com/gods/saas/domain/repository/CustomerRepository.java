@@ -158,7 +158,7 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
                lb.branch_name as branchName,
                coalesce(sa.visits, 0) as visits,
                coalesce(sa.total_spent, 0) as totalSpent,
-               coalesce(c.puntos_disponibles, 0) as puntos,
+               coalesce(la.puntos_acumulados, la.puntos_disponibles, c.puntos_disponibles, 0) as puntos,
                coalesce(c.whatsapp_transactional_enabled, true) as whatsappTransactionalEnabled,
                coalesce(c.whatsapp_marketing_enabled, false) as whatsappMarketingEnabled,
                (c.whatsapp_opted_out_at is not null) as whatsappOptedOut
@@ -173,6 +173,16 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
            and (:branchId is null or lb.branch_id = :branchId)
            and (cast(:lastVisitFrom as timestamp) is null or sa.ultima_visita >= :lastVisitFrom)
            and (cast(:lastVisitTo as timestamp) is null or sa.ultima_visita < :lastVisitTo)
+           and (
+               :status is null
+               or :status = ''
+               or case
+                    when sa.ultima_visita is not null and sa.ultima_visita < :inactiveCutoff then 'INACTIVE'
+                    when coalesce(sa.visits, 0) >= 10 or coalesce(la.puntos_acumulados, la.puntos_disponibles, c.puntos_disponibles, 0) >= 500 then 'VIP'
+                    when coalesce(sa.visits, 0) >= 3 then 'FREQUENT'
+                    else 'NEW'
+                  end = :status
+           )
          order by c.fecha_registro desc nulls last, c.nombres asc
          limit :limit
         """, nativeQuery = true)
@@ -184,6 +194,8 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
             @Param("branchId") Long branchId,
             @Param("lastVisitFrom") LocalDateTime lastVisitFrom,
             @Param("lastVisitTo") LocalDateTime lastVisitTo,
+            @Param("status") String status,
+            @Param("inactiveCutoff") LocalDateTime inactiveCutoff,
             @Param("limit") int limit
     );
 
