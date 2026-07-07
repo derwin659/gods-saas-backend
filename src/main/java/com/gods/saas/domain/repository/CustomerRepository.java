@@ -165,6 +165,7 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
           from customer c
           left join sales_agg sa on sa.customer_id = c.customer_id
           left join last_branch lb on lb.customer_id = c.customer_id
+          left join loyalty_account la on la.tenant_id = c.tenant_id and la.customer_id = c.customer_id
          where c.tenant_id = :tenantId
            and coalesce(c.activo, true) = true
            and (:q is null or :q = '' or lower(coalesce(c.nombres, '') || ' ' || coalesce(c.apellidos, '') || ' ' || coalesce(c.telefono, '')) like lower(concat('%', :q, '%')))
