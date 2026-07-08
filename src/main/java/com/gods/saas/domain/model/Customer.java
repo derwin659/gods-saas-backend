@@ -98,6 +98,21 @@ public class Customer {
 
     @Column(name = "whatsapp_opted_out_at")
     private LocalDateTime whatsappOptedOutAt;
+
+    @Column(name = "customer_notes", columnDefinition = "TEXT")
+    private String customerNotes;
+
+    @Column(name = "preferred_services", columnDefinition = "TEXT")
+    private String preferredServices;
+
+    @Column(name = "customer_restrictions", columnDefinition = "TEXT")
+    private String customerRestrictions;
+
+    @Column(name = "preferred_contact_channel", length = 30)
+    private String preferredContactChannel;
+
+    @Column(name = "favorite_barber_name", length = 150)
+    private String favoriteBarberName;
     @Builder.Default
     @Column(name = "activo", nullable = false)
     private Boolean activo = true;

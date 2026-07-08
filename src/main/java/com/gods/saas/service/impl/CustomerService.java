@@ -158,6 +158,22 @@ public class CustomerService {
             customer.setFechaNacimiento(req.getFechaNacimiento());
         }
 
+        if (req.getCustomerNotes() != null) {
+            customer.setCustomerNotes(cleanNullable(req.getCustomerNotes()));
+        }
+        if (req.getPreferredServices() != null) {
+            customer.setPreferredServices(cleanNullable(req.getPreferredServices()));
+        }
+        if (req.getCustomerRestrictions() != null) {
+            customer.setCustomerRestrictions(cleanNullable(req.getCustomerRestrictions()));
+        }
+        if (req.getPreferredContactChannel() != null) {
+            customer.setPreferredContactChannel(cleanNullable(req.getPreferredContactChannel()));
+        }
+        if (req.getFavoriteBarberName() != null) {
+            customer.setFavoriteBarberName(cleanNullable(req.getFavoriteBarberName()));
+        }
+
         customer.setFechaActualizacion(LocalDateTime.now());
         return customerRepository.save(customer);
     }
@@ -551,6 +567,12 @@ public class CustomerService {
                 .lastVisits(lastVisits)
                 .benefits(benefits)
                 .build();
+    }
+
+    private String cleanNullable(String value) {
+        if (value == null) return null;
+        String cleaned = value.trim();
+        return cleaned.isEmpty() ? null : cleaned;
     }
 
     private String normalizeCurrency(String currency) {

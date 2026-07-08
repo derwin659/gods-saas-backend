@@ -18,6 +18,11 @@ public class ClienteResponse {
     private Boolean whatsappTransactionalEnabled;
     private Boolean whatsappMarketingEnabled;
     private java.time.LocalDateTime whatsappOptedOutAt;
+    private String customerNotes;
+    private String preferredServices;
+    private String customerRestrictions;
+    private String preferredContactChannel;
+    private String favoriteBarberName;
 
     public static ClienteResponse fromEntity(Customer u) {
         ClienteResponse r = new ClienteResponse();
@@ -33,6 +38,11 @@ public class ClienteResponse {
         r.setWhatsappTransactionalEnabled(u.getWhatsappTransactionalEnabled());
         r.setWhatsappMarketingEnabled(u.getWhatsappMarketingEnabled());
         r.setWhatsappOptedOutAt(u.getWhatsappOptedOutAt());
+        r.setCustomerNotes(u.getCustomerNotes());
+        r.setPreferredServices(u.getPreferredServices());
+        r.setCustomerRestrictions(u.getCustomerRestrictions());
+        r.setPreferredContactChannel(u.getPreferredContactChannel());
+        r.setFavoriteBarberName(u.getFavoriteBarberName());
         return r;
     }
 
