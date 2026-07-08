@@ -15,6 +15,8 @@ public class AppUserResponse {
     private String phone;
     private String rol;
     private Boolean activo;
+    private Boolean canSell;
+    private Boolean professionalProfileEnabled;
     private Long branchId;
     private List<Long> branchIds;
     private List<String> branchNames;
@@ -28,6 +30,8 @@ public class AppUserResponse {
                 .phone(user.getPhone())
                 .rol(user.getRol())
                 .activo(user.getActivo())
+                .canSell(user.getCanSell())
+                .professionalProfileEnabled(false)
                 .branchId(
                         user.getBranch() != null ? user.getBranch().getId() : null
                 )

@@ -60,18 +60,19 @@ public class UserController {
             @PathVariable Long id,
             @RequestBody ActualizarUsuarioInternoRequest req) {
 
-        return ResponseEntity.ok(
-                AppUserResponse.from(
-                        userService.actualizarUsuario(
-                                id,
-                                req.getNombre(),
-                                req.getApellido(),
-                                req.getPhone(),
-                                req.getBranchId(),
-                                req.getRol()
-                        )
-                )
+        userService.actualizarUsuario(
+                id,
+                req.getNombre(),
+                req.getApellido(),
+                req.getPhone(),
+                req.getBranchId(),
+                req.getRol(),
+                Boolean.TRUE.equals(req.getPreserveProfessionalProfile()) || Boolean.TRUE.equals(req.getProfessionalProfileEnabled()),
+                req.getProfessionalBranchIds(),
+                req.getCanSell()
         );
+
+        return ResponseEntity.ok(userService.getUser(id));
     }
 
     // =====================================================

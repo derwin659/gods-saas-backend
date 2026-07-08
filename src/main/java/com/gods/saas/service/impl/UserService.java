@@ -22,6 +22,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
@@ -179,6 +180,11 @@ public class UserService {
 
     @Transactional
     public AppUser actualizarUsuario(Long userId, String nombre, String apellido, String phone, Long branchId, String rol) {
+        return actualizarUsuario(userId, nombre, apellido, phone, branchId, rol, false, null, null);
+    }
+
+    @Transactional
+    public AppUser actualizarUsuario(Long userId, String nombre, String apellido, String phone, Long branchId, String rol, boolean preserveProfessionalProfile, List<Long> professionalBranchIds, Boolean canSell) {
         validarOwner();
         Long tenantId = TenantContext.getTenantId();
         AppUser user = userRepository.findByIdAndTenantId(userId, tenantId)
@@ -196,6 +202,9 @@ public class UserService {
         if (apellido != null) user.setApellido(apellido.trim());
         if (phone != null) user.setPhone(phone.trim());
         user.setRol(newRole);
+        if (preserveProfessionalProfile || canSell != null) {
+            user.setCanSell(canSell == null ? true : canSell);
+        }
 
         Branch branch = null;
         if (branchId != null) {
@@ -207,11 +216,16 @@ public class UserService {
         user.setFechaActualizacion(LocalDateTime.now());
         AppUser saved = userRepository.save(user);
 
-        UserTenantRole utr = userTenantRoleRepository.findFirstByUser_IdAndTenant_IdOrderByIdAsc(userId, tenantId).orElse(null);
-        if (utr != null) {
-            utr.setRole(RoleType.valueOf(newRole));
-            if (branchId != null) utr.setBranch(branch);
-            userTenantRoleRepository.save(utr);
+        if (preserveProfessionalProfile && ("ADMIN".equals(newRole) || "CASHIER".equals(newRole))) {
+            ensureProfessionalProfileRoles(saved, tenantId, professionalBranchIds, branch);
+            ensureUserRoleForBranch(saved, tenantId, RoleType.valueOf(newRole), branch);
+        } else {
+            UserTenantRole utr = userTenantRoleRepository.findFirstByUser_IdAndTenant_IdOrderByIdAsc(userId, tenantId).orElse(null);
+            if (utr != null) {
+                utr.setRole(RoleType.valueOf(newRole));
+                if (branchId != null) utr.setBranch(branch);
+                userTenantRoleRepository.save(utr);
+            }
         }
 
         return saved;
@@ -257,7 +271,54 @@ public class UserService {
         List<UserTenantRole> roles = userTenantRoleRepository.findByUserIdAndTenantIdAndRoleWithBranch(user.getId(), tenantId, role);
         response.setBranchIds(roles.stream().map(UserTenantRole::getBranch).filter(Objects::nonNull).map(Branch::getId).distinct().toList());
         response.setBranchNames(roles.stream().map(UserTenantRole::getBranch).filter(Objects::nonNull).map(Branch::getNombre).filter(Objects::nonNull).distinct().toList());
+        response.setProfessionalProfileEnabled(userTenantRoleRepository.existsByUser_IdAndTenant_IdAndRole(user.getId(), tenantId, RoleType.BARBER));
         return response;
+    }
+
+    private void ensureProfessionalProfileRoles(AppUser user, Long tenantId, List<Long> requestedBranchIds, Branch fallbackBranch) {
+        List<Long> cleanIds = requestedBranchIds == null ? List.of() : requestedBranchIds.stream()
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+
+        List<Branch> branches = new ArrayList<>();
+        if (!cleanIds.isEmpty()) {
+            branches = branchRepository.findAllById(cleanIds).stream()
+                    .filter(branch -> branch.getTenant() != null && tenantId.equals(branch.getTenant().getId()))
+                    .toList();
+            if (branches.size() != cleanIds.size()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Una o mas sedes profesionales no pertenecen al negocio");
+            }
+        } else if (fallbackBranch != null) {
+            branches = List.of(fallbackBranch);
+        } else if (user.getBranch() != null) {
+            branches = List.of(user.getBranch());
+        }
+
+        if (branches.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Selecciona al menos una sede profesional");
+        }
+
+        for (Branch branch : branches) {
+            ensureUserRoleForBranch(user, tenantId, RoleType.BARBER, branch);
+        }
+    }
+
+    private void ensureUserRoleForBranch(AppUser user, Long tenantId, RoleType role, Branch branch) {
+        if (branch == null || branch.getId() == null) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La sede es obligatoria para asignar el rol");
+        }
+        boolean exists = userTenantRoleRepository.existsByUser_IdAndTenant_IdAndBranch_IdAndRole(
+                user.getId(), tenantId, branch.getId(), role
+        );
+        if (!exists) {
+            userTenantRoleRepository.save(UserTenantRole.builder()
+                    .user(user)
+                    .tenant(new Tenant(tenantId))
+                    .branch(branch)
+                    .role(role)
+                    .build());
+        }
     }
 
     public void cambiarPassword(Long userId, String newPasswordHash) {

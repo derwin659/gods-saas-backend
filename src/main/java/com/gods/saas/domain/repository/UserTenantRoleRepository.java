@@ -101,6 +101,8 @@ public interface UserTenantRoleRepository extends JpaRepository<UserTenantRole, 
 
     boolean existsByUser_IdAndTenant_IdAndBranch_Id(Long userId, Long tenantId, Long branchId);
 
+    boolean existsByUser_IdAndTenant_IdAndBranch_IdAndRole(Long userId, Long tenantId, Long branchId, RoleType role);
+
 
     @Query("""
     select distinct r.user

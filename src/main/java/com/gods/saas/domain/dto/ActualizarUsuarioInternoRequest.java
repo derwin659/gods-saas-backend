@@ -9,5 +9,9 @@ public class ActualizarUsuarioInternoRequest {
     private String phone;
     private Long branchId;
     private String rol;
+    private Boolean preserveProfessionalProfile;
+    private Boolean professionalProfileEnabled;
+    private Boolean canSell;
+    private java.util.List<Long> professionalBranchIds;
 }
 
