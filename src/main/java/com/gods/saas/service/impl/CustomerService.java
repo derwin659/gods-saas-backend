@@ -242,9 +242,19 @@ public class CustomerService {
         int safeLimit = Math.min(Math.max(limit, 1), 100);
         PageRequest pageable = PageRequest.of(0, safeLimit);
 
-        List<Customer> customers = (q == null || q.isBlank())
-                ? customerRepository.findByTenant_IdAndActivoTrueOrderByFechaRegistroDesc(tenantId, pageable)
-                : customerRepository.searchByNameOrPhone(tenantId, q.strip(), pageable);
+        String normalizedQuery = q == null ? "" : q.strip();
+        List<Customer> customers;
+        if (normalizedQuery.isBlank()) {
+            customers = customerRepository.findByTenant_IdAndActivoTrueOrderByFechaRegistroDesc(tenantId, pageable);
+        } else if (normalizedQuery.replaceAll("\\D", "").length() >= 6) {
+            String digits = normalizedQuery.replaceAll("\\D", "");
+            customers = customerRepository.findByTenant_IdAndTelefono(tenantId, digits)
+                    .filter(customer -> Boolean.TRUE.equals(customer.getActivo()) || customer.getActivo() == null)
+                    .map(List::of)
+                    .orElseGet(() -> customerRepository.searchByNameOrPhone(tenantId, normalizedQuery, pageable));
+        } else {
+            customers = customerRepository.searchByNameOrPhone(tenantId, normalizedQuery, pageable);
+        }
 
         customers.forEach(customer -> loyaltyAccountRepository
                 .findByTenant_IdAndCustomer_Id(tenantId, customer.getId())
