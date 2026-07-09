@@ -60,6 +60,11 @@ public class UserController {
             @PathVariable Long id,
             @RequestBody ActualizarUsuarioInternoRequest req) {
 
+        Boolean professionalProfileEnabled = req.getProfessionalProfileEnabled();
+        if (professionalProfileEnabled == null && Boolean.TRUE.equals(req.getPreserveProfessionalProfile())) {
+            professionalProfileEnabled = Boolean.TRUE;
+        }
+
         userService.actualizarUsuario(
                 id,
                 req.getNombre(),
@@ -67,7 +72,7 @@ public class UserController {
                 req.getPhone(),
                 req.getBranchId(),
                 req.getRol(),
-                Boolean.TRUE.equals(req.getPreserveProfessionalProfile()) || Boolean.TRUE.equals(req.getProfessionalProfileEnabled()),
+                professionalProfileEnabled,
                 req.getProfessionalBranchIds(),
                 req.getCanSell()
         );

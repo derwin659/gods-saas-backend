@@ -185,6 +185,14 @@ public class UserService {
 
     @Transactional
     public AppUser actualizarUsuario(Long userId, String nombre, String apellido, String phone, Long branchId, String rol, boolean preserveProfessionalProfile, List<Long> professionalBranchIds, Boolean canSell) {
+        return actualizarUsuario(userId, nombre, apellido, phone, branchId, rol,
+                preserveProfessionalProfile ? Boolean.TRUE : null,
+                professionalBranchIds,
+                canSell);
+    }
+
+    @Transactional
+    public AppUser actualizarUsuario(Long userId, String nombre, String apellido, String phone, Long branchId, String rol, Boolean professionalProfileEnabled, List<Long> professionalBranchIds, Boolean canSell) {
         validarOwner();
         Long tenantId = TenantContext.getTenantId();
         AppUser user = userRepository.findByIdAndTenantId(userId, tenantId)
@@ -198,12 +206,18 @@ public class UserService {
             }
         }
 
+        boolean hasProfessionalProfile = userTenantRoleRepository.existsByUser_IdAndTenant_IdAndRole(user.getId(), tenantId, RoleType.BARBER);
+        boolean supportsProfessionalProfile = "ADMIN".equals(newRole) || "CASHIER".equals(newRole);
+        boolean enableProfessionalProfile = Boolean.TRUE.equals(professionalProfileEnabled)
+                || (professionalProfileEnabled == null && hasProfessionalProfile && supportsProfessionalProfile);
+        boolean disableProfessionalProfile = Boolean.FALSE.equals(professionalProfileEnabled);
+
         if (nombre != null) user.setNombre(nombre.trim());
         if (apellido != null) user.setApellido(apellido.trim());
         if (phone != null) user.setPhone(phone.trim());
         user.setRol(newRole);
-        if (preserveProfessionalProfile || canSell != null) {
-            user.setCanSell(canSell == null ? true : canSell);
+        if (professionalProfileEnabled != null || canSell != null) {
+            user.setCanSell(canSell == null ? enableProfessionalProfile : canSell);
         }
 
         Branch branch = null;
@@ -216,8 +230,11 @@ public class UserService {
         user.setFechaActualizacion(LocalDateTime.now());
         AppUser saved = userRepository.save(user);
 
-        if (preserveProfessionalProfile && ("ADMIN".equals(newRole) || "CASHIER".equals(newRole))) {
+        if (enableProfessionalProfile && supportsProfessionalProfile) {
             ensureProfessionalProfileRoles(saved, tenantId, professionalBranchIds, branch);
+            ensureUserRoleForBranch(saved, tenantId, RoleType.valueOf(newRole), branch);
+        } else if (disableProfessionalProfile) {
+            removeProfessionalProfileRoles(saved.getId(), tenantId);
             ensureUserRoleForBranch(saved, tenantId, RoleType.valueOf(newRole), branch);
         } else {
             UserTenantRole utr = userTenantRoleRepository.findFirstByUser_IdAndTenant_IdOrderByIdAsc(userId, tenantId).orElse(null);
@@ -304,6 +321,11 @@ public class UserService {
         }
     }
 
+    private void removeProfessionalProfileRoles(Long userId, Long tenantId) {
+        List<UserTenantRole> previous = userTenantRoleRepository.findByUserIdAndTenantIdAndRoleWithBranch(userId, tenantId, RoleType.BARBER);
+        userTenantRoleRepository.deleteAllInBatch(previous);
+        userTenantRoleRepository.flush();
+    }
     private void ensureUserRoleForBranch(AppUser user, Long tenantId, RoleType role, Branch branch) {
         if (branch == null || branch.getId() == null) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La sede es obligatoria para asignar el rol");
@@ -377,6 +399,9 @@ public class UserService {
             throw new RuntimeException("Email ya existe en esta barbería");
         }
 
+        boolean professionalProfileRequested = Boolean.TRUE.equals(req.getPreserveProfessionalProfile())
+                || Boolean.TRUE.equals(req.getProfessionalProfileEnabled());
+
         AppUser user = AppUser.builder()
                 .nombre(required(req.getNombre(), "El nombre es obligatorio"))
                 .apellido(req.getApellido() == null ? "" : req.getApellido().trim())
@@ -388,6 +413,10 @@ public class UserService {
                 .tenant(new Tenant(tenantId))
                 .fechaCreacion(LocalDateTime.now())
                 .build();
+
+        if (professionalProfileRequested || req.getCanSell() != null) {
+            user.setCanSell(req.getCanSell() == null ? true : req.getCanSell());
+        }
 
         if (req.getBranchId() != null) {
             Branch branch = branchRepository.findByIdAndTenant_Id(req.getBranchId(), tenantId)
@@ -405,11 +434,15 @@ public class UserService {
                 .build();
         userTenantRoleRepository.save(userTenantRole);
 
+        if (professionalProfileRequested && ("ADMIN".equals(role) || "CASHIER".equals(role))) {
+            ensureProfessionalProfileRoles(user, tenantId, req.getProfessionalBranchIds(), user.getBranch());
+        }
+
         if ("ADMIN".equals(role) || "CASHIER".equals(role)) {
             adminPermissionService.createDefaultPermissionsForNewAdmin(tenantId, user.getId());
         }
 
-        return AppUserResponse.from(user);
+        return responseWithBranches(user, tenantId);
     }
 
     @Transactional
