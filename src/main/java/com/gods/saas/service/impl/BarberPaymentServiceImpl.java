@@ -495,13 +495,14 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
         AppUser barber = appUserRepository.findByIdAndTenant_Id(barberUserId, tenantId)
                 .orElseThrow(() -> new IllegalStateException("Barbero no encontrado."));
 
-        String role = barber.getRol() == null ? "" : barber.getRol().trim().toUpperCase(Locale.ROOT);
-        if (!"BARBER".equals(role)) {
-            throw new IllegalStateException("El usuario seleccionado no es un barbero válido.");
-        }
-
-        if (barber.getBranch() != null && !barber.getBranch().getId().equals(branchId)) {
-            throw new IllegalStateException("El barbero no pertenece a esta sede.");
+        boolean hasBarberRoleInBranch = userTenantRoleRepository.existsByUser_IdAndTenant_IdAndBranch_IdAndRole(
+                barberUserId,
+                tenantId,
+                branchId,
+                RoleType.BARBER
+        );
+        if (!hasBarberRoleInBranch) {
+            throw new IllegalStateException("El usuario seleccionado no es un barbero valido.");
         }
 
         return barber;
