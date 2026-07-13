@@ -34,6 +34,30 @@ public class MarketingCampaignDelivery {
     @Column(name = "campaign_code", nullable = false, length = 50)
     private String campaignCode;
 
+    @Column(name = "actor_user_id")
+    private Long actorUserId;
+
+    @Column(name = "title", length = 150)
+    private String title;
+
+    @Column(name = "message", length = 500)
+    private String message;
+
+    @Column(name = "channel_whatsapp")
+    private Boolean channelWhatsapp;
+
+    @Column(name = "delivery_status", length = 30)
+    private String deliveryStatus;
+
+    @Column(name = "phone", length = 50)
+    private String phone;
+
+    @Column(name = "filter_snapshot", columnDefinition = "TEXT")
+    private String filterSnapshot;
+
+    @Column(name = "error_message", length = 500)
+    private String errorMessage;
+
     @Column(name = "sent_at", nullable = false)
     private LocalDateTime sentAt;
 }

@@ -1,6 +1,7 @@
 package com.gods.saas.web.controller;
 
 import com.gods.saas.domain.dto.request.MarketingCampaignRequest;
+import com.gods.saas.domain.dto.request.SegmentCampaignRunRequest;
 import com.gods.saas.domain.dto.response.MarketingCampaignResponse;
 import com.gods.saas.service.impl.MarketingCampaignProcessorService;
 import com.gods.saas.service.impl.impl.MarketingCampaignService;
@@ -61,14 +62,14 @@ public class MarketingCampaignAdminController {
     ) {
         Long tenantId = tenantId(authentication);
         marketingCampaignService.delete(tenantId, id);
-        return Map.of("message", "Campaña eliminada correctamente");
+        return Map.of("message", "Campana eliminada correctamente");
     }
 
     @PostMapping("/run")
     public Map<String, String> runNow(Authentication authentication) {
         Long tenantId = tenantId(authentication);
         marketingCampaignProcessorService.processTenantCampaigns(tenantId);
-        return Map.of("message", "Campañas ejecutadas correctamente");
+        return Map.of("message", "Campanas ejecutadas correctamente");
     }
 
     @GetMapping("/preview")
@@ -85,10 +86,29 @@ public class MarketingCampaignAdminController {
         return campaignOperationsService.run(tenantId(authentication), confirmed);
     }
 
+    @PostMapping("/segment/run-confirmed")
+    public Map<String, Object> runSegmentConfirmed(
+            @RequestBody SegmentCampaignRunRequest request,
+            Authentication authentication
+    ) {
+        return campaignOperationsService.runSegment(
+                tenantId(authentication),
+                userId(authentication),
+                request
+        );
+    }
+
     @GetMapping("/history")
     public List<Map<String, Object>> history(Authentication authentication) {
         return campaignOperationsService.history(tenantId(authentication));
     }
+
+    private Long userId(Authentication authentication) {
+        Object principal = authentication.getPrincipal();
+        if (principal instanceof Number n) return n.longValue();
+        return Long.valueOf(principal.toString());
+    }
+
     private Long tenantId(Authentication authentication) {
         Map<String, Object> details = (Map<String, Object>) authentication.getDetails();
         return Long.valueOf(details.get("tenantId").toString());
