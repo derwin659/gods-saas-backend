@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @CrossOrigin(origins = "http://localhost:5173")
@@ -153,6 +154,16 @@ public class AuthController {
         List<UserTenantRole> tenantRoles = userTenantRoleRepository.findByUserIdWithRelations(req.getUserId()).stream()
                 .filter(role -> role.getTenant() != null && req.getTenantId().equals(role.getTenant().getId()))
                 .toList();
+
+        RoleType requestedRole = null;
+        if (req.getRole() != null && !req.getRole().isBlank()) {
+            try {
+                requestedRole = RoleType.valueOf(req.getRole().trim().toUpperCase(Locale.ROOT));
+            } catch (IllegalArgumentException ex) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Rol invalido para este acceso");
+            }
+        }
+
         UserTenantRole ownerRole = tenantRoles.stream()
                 .filter(role -> role.getRole() == RoleType.OWNER)
                 .findFirst()
@@ -161,20 +172,30 @@ public class AuthController {
         UserTenantRole utr;
         Branch selectedOwnerBranch = null;
         if (req.getBranchId() == null) {
-            utr = ownerRole != null
-                    ? ownerRole
-                    : tenantRoles.stream().findFirst()
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No tienes acceso a esta barberia"));
-        } else if (ownerRole != null) {
+            if (requestedRole != null) {
+                RoleType selectedRole = requestedRole;
+                utr = tenantRoles.stream()
+                        .filter(role -> role.getRole() == selectedRole)
+                        .findFirst()
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "No tienes acceso con el rol seleccionado"));
+            } else {
+                utr = ownerRole != null
+                        ? ownerRole
+                        : tenantRoles.stream().findFirst()
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "No tienes acceso a esta barberia"));
+            }
+        } else if (ownerRole != null && (requestedRole == null || requestedRole == RoleType.OWNER)) {
             utr = ownerRole;
             selectedOwnerBranch = branchRepository.findByIdAndTenant_Id(req.getBranchId(), req.getTenantId())
                     .filter(branch -> Boolean.TRUE.equals(branch.getActivo()))
                     .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "La sede seleccionada no esta activa en este negocio"));
         } else {
+            RoleType selectedRole = requestedRole;
             utr = tenantRoles.stream()
                     .filter(role -> role.getBranch() != null && req.getBranchId().equals(role.getBranch().getId()))
+                    .filter(role -> selectedRole == null || role.getRole() == selectedRole)
                     .findFirst()
-                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "No tienes acceso a la sede seleccionada"));
+                    .orElseThrow(() -> new ResponseStatusException(HttpStatus.FORBIDDEN, "No tienes acceso a la sede seleccionada con el rol seleccionado"));
         }
 
         if (utr.getBranch() == null && selectedOwnerBranch == null) {

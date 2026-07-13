@@ -8,5 +8,5 @@ public class LoginFinalRequest {
     private Long tenantId;
     private Long branchId;
     private String mode; // TENANT | SUPER_ADMIN
+    private String role; // OWNER | ADMIN | CASHIER | BARBER (rol elegido en el acceso)
 }
-
