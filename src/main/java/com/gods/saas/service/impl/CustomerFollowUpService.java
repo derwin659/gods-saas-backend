@@ -84,10 +84,10 @@ public class CustomerFollowUpService {
         String clean = clean(value);
         if (clean == null) return "WHATSAPP";
         String upper = clean.toUpperCase();
-        if (!upper.equals("WHATSAPP") && !upper.equals("PUSH") && !upper.equals("PHONE") && !upper.equals("MANUAL")) {
+        if (!upper.equals("WHATSAPP") && !upper.equals("PUSH") && !upper.equals("BOTH") && !upper.equals("WHATSAPP_PUSH") && !upper.equals("PHONE") && !upper.equals("MANUAL")) {
             return "WHATSAPP";
         }
-        return upper;
+        return "WHATSAPP_PUSH".equals(upper) ? "BOTH" : upper;
     }
 
     private String normalizeStatus(String value) {

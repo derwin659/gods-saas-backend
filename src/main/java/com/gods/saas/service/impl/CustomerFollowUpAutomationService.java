@@ -24,7 +24,7 @@ import java.util.List;
 @Slf4j
 public class CustomerFollowUpAutomationService {
 
-    private static final List<String> AUTOMATIC_CHANNELS = List.of("WHATSAPP", "PUSH");
+    private static final List<String> AUTOMATIC_CHANNELS = List.of("WHATSAPP", "PUSH", "BOTH", "WHATSAPP_PUSH");
 
     private final CustomerFollowUpRepository followUpRepository;
     private final NotificationRepository notificationRepository;
@@ -59,14 +59,22 @@ public class CustomerFollowUpAutomationService {
 
         String channel = normalizeChannel(item.getChannel());
         Customer customer = item.getCustomer();
+        boolean sendPush = shouldSendPush(channel);
+        boolean sendWhatsapp = shouldSendWhatsapp(channel);
+        String whatsappSkipReason = null;
 
-        if ("WHATSAPP".equals(channel) && !canSendRetentionWhatsapp(customer)) {
-            markSkipped(item, "Cliente sin permiso marketing WhatsApp o con baja total");
-            return;
+        if (sendWhatsapp && !canSendRetentionWhatsapp(customer)) {
+            whatsappSkipReason = "Cliente sin permiso marketing WhatsApp o con baja total";
+            sendWhatsapp = false;
         }
 
-        if ("WHATSAPP".equals(channel) && cleanPhone(customer.getTelefono()).isBlank()) {
-            markSkipped(item, "Cliente sin telefono valido para WhatsApp");
+        if (sendWhatsapp && cleanPhone(customer.getTelefono()).isBlank()) {
+            whatsappSkipReason = "Cliente sin telefono valido para WhatsApp";
+            sendWhatsapp = false;
+        }
+
+        if (!sendPush && !sendWhatsapp) {
+            markSkipped(item, whatsappSkipReason != null ? whatsappSkipReason : "Sin canales automaticos disponibles");
             return;
         }
 
@@ -78,7 +86,7 @@ public class CustomerFollowUpAutomationService {
             item.setStatus("SENT");
             item.setProcessedAt(LocalDateTime.now());
             item.setCompletedAt(LocalDateTime.now());
-            item.setLastError(null);
+            item.setLastError(whatsappSkipReason != null ? limit(whatsappSkipReason, 500) : null);
             followUpRepository.save(item);
             return;
         }
@@ -108,19 +116,19 @@ public class CustomerFollowUpAutomationService {
                 .createdAt(LocalDateTime.now())
                 .build());
 
-        notificationDeliveryRepository.save(NotificationDelivery.builder()
-                .notification(notification)
-                .channel("PUSH".equals(channel) ? NotificationChannel.PUSH : NotificationChannel.WHATSAPP)
-                .status(NotificationDeliveryStatus.PENDING)
-                .attempts(0)
-                .createdAt(LocalDateTime.now())
-                .build());
+        if (sendPush) {
+            createPendingDelivery(notification, NotificationChannel.PUSH);
+        }
+
+        if (sendWhatsapp) {
+            createPendingDelivery(notification, NotificationChannel.WHATSAPP);
+        }
 
         item.setNotification(notification);
         item.setStatus("SENT");
         item.setProcessedAt(LocalDateTime.now());
         item.setCompletedAt(LocalDateTime.now());
-        item.setLastError(null);
+        item.setLastError(whatsappSkipReason != null ? limit(whatsappSkipReason, 500) : null);
         followUpRepository.save(item);
     }
 
@@ -128,6 +136,24 @@ public class CustomerFollowUpAutomationService {
         if (customer == null) return false;
         if (customer.getWhatsappOptedOutAt() != null) return false;
         return Boolean.TRUE.equals(customer.getWhatsappMarketingEnabled());
+    }
+
+    private boolean shouldSendPush(String channel) {
+        return "PUSH".equals(channel) || "BOTH".equals(channel) || "WHATSAPP_PUSH".equals(channel);
+    }
+
+    private boolean shouldSendWhatsapp(String channel) {
+        return "WHATSAPP".equals(channel) || "BOTH".equals(channel) || "WHATSAPP_PUSH".equals(channel);
+    }
+
+    private void createPendingDelivery(Notification notification, NotificationChannel channel) {
+        notificationDeliveryRepository.save(NotificationDelivery.builder()
+                .notification(notification)
+                .channel(channel)
+                .status(NotificationDeliveryStatus.PENDING)
+                .attempts(0)
+                .createdAt(LocalDateTime.now())
+                .build());
     }
 
     private String normalizeChannel(String value) {
