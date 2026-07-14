@@ -49,6 +49,16 @@ public class CustomerFollowUp {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "notification_id")
+    private Notification notification;
+
+    @Column(name = "processed_at")
+    private LocalDateTime processedAt;
+
+    @Column(name = "last_error", length = 500)
+    private String lastError;
+
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
 

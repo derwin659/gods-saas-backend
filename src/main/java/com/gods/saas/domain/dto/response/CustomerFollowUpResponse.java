@@ -15,6 +15,9 @@ public record CustomerFollowUpResponse(
         String status,
         LocalDateTime scheduledAt,
         LocalDateTime completedAt,
+        LocalDateTime processedAt,
+        String lastError,
+        Long notificationId,
         LocalDateTime createdAt,
         LocalDateTime updatedAt
 ) {
@@ -39,6 +42,9 @@ public record CustomerFollowUpResponse(
                 item.getStatus(),
                 item.getScheduledAt(),
                 item.getCompletedAt(),
+                item.getProcessedAt(),
+                item.getLastError(),
+                item.getNotification() != null ? item.getNotification().getId() : null,
                 item.getCreatedAt(),
                 item.getUpdatedAt()
         );

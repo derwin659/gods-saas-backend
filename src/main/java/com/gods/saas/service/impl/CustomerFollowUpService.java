@@ -66,7 +66,7 @@ public class CustomerFollowUpService {
 
         String normalized = normalizeStatus(status);
         item.setStatus(normalized);
-        if ("DONE".equals(normalized) || "SENT".equals(normalized)) {
+        if ("DONE".equals(normalized) || "SENT".equals(normalized) || "SKIPPED".equals(normalized) || "FAILED".equals(normalized)) {
             item.setCompletedAt(LocalDateTime.now());
         } else if ("PENDING".equals(normalized)) {
             item.setCompletedAt(null);
@@ -94,7 +94,7 @@ public class CustomerFollowUpService {
         String clean = clean(value);
         if (clean == null) return "PENDING";
         String upper = clean.toUpperCase();
-        if (!upper.equals("PENDING") && !upper.equals("DONE") && !upper.equals("SENT") && !upper.equals("CANCELLED")) {
+        if (!upper.equals("PENDING") && !upper.equals("DONE") && !upper.equals("SENT") && !upper.equals("CANCELLED") && !upper.equals("SKIPPED") && !upper.equals("FAILED")) {
             throw new RuntimeException("Estado de seguimiento invalido");
         }
         return upper;
