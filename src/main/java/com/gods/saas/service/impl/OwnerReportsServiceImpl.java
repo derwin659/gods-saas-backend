@@ -7,11 +7,13 @@ import com.gods.saas.domain.model.CashMovement;
 import com.gods.saas.domain.model.BarberPayment;
 import com.gods.saas.domain.enums.BarberPaymentMode;
 import com.gods.saas.domain.enums.BarberPaymentStatus;
+import com.gods.saas.domain.model.RoleType;
 import com.gods.saas.domain.repository.BarberPaymentRepository;
 import com.gods.saas.domain.enums.CashMovementType;
 import com.gods.saas.domain.repository.CashMovementRepository;
 import com.gods.saas.domain.repository.SaleRepository;
 import com.gods.saas.domain.repository.SubscriptionRepository;
+import com.gods.saas.domain.repository.UserTenantRoleRepository;
 import com.gods.saas.domain.repository.projection.BarberSaleDetailProjection;
 import com.gods.saas.domain.repository.projection.BarberSalesSummaryProjection;
 import com.gods.saas.service.impl.impl.OwnerReportsService;
@@ -36,6 +38,7 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
     private final CashMovementRepository cashMovementRepository;
     private final BarberPaymentRepository barberPaymentRepository;
     private final BarberPaymentService barberPaymentService;
+    private final UserTenantRoleRepository userTenantRoleRepository;
 
     @Override
     public ProfitabilityReportResponse getProfitabilityReport(
@@ -437,6 +440,9 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
         if (branchId != null && (selectedStatus == null || selectedStatus == BarberPaymentStatus.PENDING)) {
             saleRepository.getBarberSalesSummary(tenantId, branchId, startOfDay(from), endInclusive(to)).stream()
                     .filter(barber -> barberUserId == null || barberUserId.equals(barber.getBarberId()))
+                    .filter(barber -> userTenantRoleRepository.existsByUser_IdAndTenant_IdAndBranch_IdAndRole(
+                            barber.getBarberId(), tenantId, branchId, RoleType.BARBER
+                    ))
                     .forEach(barber -> {
                         BarberPaymentPreviewResponse preview = barberPaymentService.preview(tenantId, branchId, barber.getBarberId(), from, to);
                         if (nvl(preview.getPendingAmount()).compareTo(BigDecimal.ZERO) <= 0) return;
