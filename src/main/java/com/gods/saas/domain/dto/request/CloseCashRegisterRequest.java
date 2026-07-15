@@ -7,5 +7,6 @@ import java.math.BigDecimal;
 @Data
 public class CloseCashRegisterRequest {
     private BigDecimal closingAmountCounted;
+    private BigDecimal fundDepositAmount;
     private String closingNote;
 }

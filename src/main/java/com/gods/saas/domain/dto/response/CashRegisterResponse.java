@@ -46,5 +46,8 @@ public class CashRegisterResponse {
      */
     private List<PaymentMethodSummaryResponse> paymentMethodBalances;
 
+    private BigDecimal accumulatedFundBalance;
+    private List<PaymentMethodSummaryResponse> accumulatedFundBalances;
+
     private List<CashMovementResponse> movements;
 }

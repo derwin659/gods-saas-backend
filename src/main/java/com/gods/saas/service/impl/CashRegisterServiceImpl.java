@@ -1,12 +1,16 @@
 package com.gods.saas.service.impl;
 
 import com.gods.saas.domain.dto.request.CashMovementRequest;
+import com.gods.saas.domain.dto.request.CashFundMovementRequest;
 import com.gods.saas.domain.dto.request.CloseCashRegisterRequest;
 import com.gods.saas.domain.dto.request.OpenCashRegisterRequest;
 import com.gods.saas.domain.dto.response.CashMovementResponse;
+import com.gods.saas.domain.dto.response.CashFundMovementResponse;
+import com.gods.saas.domain.dto.response.CashFundSummaryResponse;
 import com.gods.saas.domain.dto.response.CashAuditLogResponse;
 import com.gods.saas.domain.dto.response.CashRegisterResponse;
 import com.gods.saas.domain.enums.CashMovementType;
+import com.gods.saas.domain.enums.CashFundMovementType;
 import com.gods.saas.domain.enums.CashRegisterStatus;
 import com.gods.saas.domain.enums.PaymentMethod;
 import com.gods.saas.domain.model.*;
@@ -36,6 +40,7 @@ public class CashRegisterServiceImpl implements CashRegisterService {
 
     private final CashRegisterRepository cashRegisterRepository;
     private final CashMovementRepository cashMovementRepository;
+    private final CashFundMovementRepository cashFundMovementRepository;
     private final SaleRepository saleRepository;
     private final TenantRepository tenantRepository;
     private final BranchRepository branchRepository;
@@ -89,6 +94,20 @@ public class CashRegisterServiceImpl implements CashRegisterService {
 
         cashRegisterRepository.save(cashRegister);
 
+        BigDecimal fundWithdrawalAmount = safe(request.getFundWithdrawalAmount());
+        if (fundWithdrawalAmount.compareTo(BigDecimal.ZERO) > 0) {
+            validateFundAvailable(branch, PaymentMethod.CASH, fundWithdrawalAmount);
+            createFundMovementEntity(
+                    tenant, branch, cashRegister, openedBy,
+                    CashFundMovementType.OPENING_WITHDRAWAL,
+                    PaymentMethod.CASH,
+                    fundWithdrawalAmount,
+                    "Apertura de caja desde fondo acumulado",
+                    trimToNull(request.getOpeningNote()),
+                    now
+            );
+        }
+
         return mapResponse(cashRegister);
     }
 
@@ -130,6 +149,23 @@ public class CashRegisterServiceImpl implements CashRegisterService {
         cashRegister.setStatus(CashRegisterStatus.CLOSED);
 
         cashRegisterRepository.save(cashRegister);
+
+        BigDecimal fundDepositAmount = safe(request.getFundDepositAmount());
+        if (fundDepositAmount.compareTo(BigDecimal.ZERO) > 0) {
+            if (fundDepositAmount.compareTo(counted) > 0) {
+                throw new IllegalStateException("El monto enviado al fondo no puede superar el efectivo contado al cierre.");
+            }
+            createFundMovementEntity(
+                    cashRegister.getTenant(), cashRegister.getBranch(), cashRegister,
+                    cashRegister.getOpenedByUser(),
+                    CashFundMovementType.CLOSING_DEPOSIT,
+                    PaymentMethod.CASH,
+                    fundDepositAmount,
+                    "Sobrante enviado a fondo acumulado",
+                    trimToNull(request.getClosingNote()),
+                    cashRegister.getClosedAt()
+            );
+        }
 
         return mapResponse(cashRegister);
     }
@@ -179,6 +215,79 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 .build();
     }
 
+    @Override
+    @Transactional(readOnly = true)
+    public CashFundSummaryResponse getFundSummary(Long tenantId, Long branchId) {
+        Branch branch = branchRepository.findById(branchId)
+                .orElseThrow(() -> new EntityNotFoundException("Sede no encontrada"));
+        if (!branch.getTenant().getId().equals(tenantId)) {
+            throw new IllegalStateException("La sede no pertenece al tenant.");
+        }
+        return buildFundSummary(branch);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<CashFundMovementResponse> getFundMovements(Long tenantId, Long branchId) {
+        return cashFundMovementRepository.findByTenant_IdAndBranch_IdOrderByMovementDateDesc(tenantId, branchId)
+                .stream()
+                .map(this::mapFundMovementResponse)
+                .toList();
+    }
+
+    @Override
+    public CashFundMovementResponse createFundMovement(
+            Long tenantId,
+            Long branchId,
+            Long actorUserId,
+            CashFundMovementRequest request
+    ) {
+        validateCashActor(actorUserId, tenantId);
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new EntityNotFoundException("Tenant no encontrado"));
+        Branch branch = branchRepository.findById(branchId)
+                .orElseThrow(() -> new EntityNotFoundException("Sede no encontrada"));
+        if (!branch.getTenant().getId().equals(tenantId)) {
+            throw new IllegalStateException("La sede no pertenece al tenant.");
+        }
+        AppUser actor = appUserRepository.findById(actorUserId)
+                .orElseThrow(() -> new EntityNotFoundException("Usuario autenticado no encontrado."));
+
+        CashFundMovementType type = request.getType();
+        if (type == null || type == CashFundMovementType.OPENING_WITHDRAWAL || type == CashFundMovementType.CLOSING_DEPOSIT) {
+            throw new IllegalStateException("Selecciona un tipo de movimiento de fondo valido.");
+        }
+
+        BigDecimal amount = safe(request.getAmount());
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalStateException("El monto debe ser mayor a cero.");
+        }
+
+        PaymentMethod paymentMethod = request.getPaymentMethod() == null ? PaymentMethod.CASH : request.getPaymentMethod();
+        if (isFundOut(type)) {
+            validateFundAvailable(branch, paymentMethod, amount);
+        }
+
+        ZoneId zoneId = getZoneIdForTenant(tenantId);
+        LocalDateTime now = LocalDateTime.now(zoneId);
+        LocalDateTime movementDate = request.getMovementDate() == null
+                ? now
+                : request.getMovementDate().atTime(now.toLocalTime());
+
+        CashFundMovement movement = createFundMovementEntity(
+                tenant,
+                branch,
+                null,
+                actor,
+                type,
+                paymentMethod,
+                amount,
+                resolveFundConcept(type, request.getConcept()),
+                trimToNull(request.getNote()),
+                movementDate
+        );
+        return mapFundMovementResponse(movement);
+    }
     @Override
     @Transactional(readOnly = true)
     public List<CashMovementResponse> getMovements(Long tenantId, Long branchId, Long cashRegisterId) {
@@ -497,6 +606,7 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 buildPaymentMethodsSummary(cashRegister);
         List<PaymentMethodSummaryResponse> paymentMethodBalances =
                 buildPaymentMethodBalances(cashRegister);
+        CashFundSummaryResponse fundSummary = buildFundSummary(cashRegister.getBranch());
 
         return CashRegisterResponse.builder()
                 .id(cashRegister.getId())
@@ -519,6 +629,8 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 .cashSalesTotal(totals.cashSalesTotal())
                 .paymentMethodsSummary(paymentMethodsSummary)
                 .paymentMethodBalances(paymentMethodBalances)
+                .accumulatedFundBalance(fundSummary.getTotalBalance())
+                .accumulatedFundBalances(fundSummary.getBalances())
                 .movementsIncome(totals.movementsIncome())
                 .movementsExpense(totals.movementsExpense())
                 .cashMovementsExpense(totals.cashMovementsExpense())
@@ -529,6 +641,122 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 .build();
     }
 
+    private CashFundSummaryResponse buildFundSummary(Branch branch) {
+        List<CashFundMovement> movements = cashFundMovementRepository
+                .findByTenant_IdAndBranch_IdOrderByMovementDateDesc(branch.getTenant().getId(), branch.getId());
+        Map<String, BigDecimal> balances = new LinkedHashMap<>();
+        for (CashFundMovement movement : movements) {
+            String method = normalizePaymentMethodCode(movement.getPaymentMethod());
+            BigDecimal signed = signedFundAmount(movement);
+            balances.put(method, balances.getOrDefault(method, BigDecimal.ZERO).add(signed));
+        }
+        List<PaymentMethodSummaryResponse> balanceRows = balances.entrySet().stream()
+                .map(entry -> PaymentMethodSummaryResponse.builder()
+                        .paymentMethod(entry.getKey())
+                        .count(0L)
+                        .totalAmount(safe(entry.getValue()))
+                        .build())
+                .toList();
+        BigDecimal total = balances.values().stream()
+                .map(this::safe)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return CashFundSummaryResponse.builder()
+                .branchId(branch.getId())
+                .branchName(branch.getNombre())
+                .totalBalance(total)
+                .balances(balanceRows)
+                .build();
+    }
+
+    private CashFundMovement createFundMovementEntity(
+            Tenant tenant,
+            Branch branch,
+            CashRegister cashRegister,
+            AppUser actor,
+            CashFundMovementType type,
+            PaymentMethod paymentMethod,
+            BigDecimal amount,
+            String concept,
+            String note,
+            LocalDateTime movementDate
+    ) {
+        CashFundMovement movement = CashFundMovement.builder()
+                .tenant(tenant)
+                .branch(branch)
+                .cashRegister(cashRegister)
+                .actorUser(actor)
+                .type(type)
+                .paymentMethod(paymentMethod == null ? PaymentMethod.CASH : paymentMethod)
+                .amount(safe(amount))
+                .concept(resolveFundConcept(type, concept))
+                .note(note)
+                .movementDate(movementDate)
+                .createdAt(LocalDateTime.now(getZoneIdForTenant(tenant.getId())))
+                .build();
+        return cashFundMovementRepository.save(movement);
+    }
+
+    private CashFundMovementResponse mapFundMovementResponse(CashFundMovement movement) {
+        AppUser actor = movement.getActorUser();
+        return CashFundMovementResponse.builder()
+                .id(movement.getId())
+                .type(movement.getType().name())
+                .paymentMethod(normalizePaymentMethodCode(movement.getPaymentMethod()))
+                .amount(safe(movement.getAmount()))
+                .signedAmount(signedFundAmount(movement))
+                .concept(movement.getConcept())
+                .note(movement.getNote())
+                .movementDate(movement.getMovementDate())
+                .cashRegisterId(movement.getCashRegister() == null ? null : movement.getCashRegister().getId())
+                .actorUserId(actor == null ? null : actor.getId())
+                .actorUserName(actor == null ? null : fullName(actor))
+                .build();
+    }
+
+    private void validateFundAvailable(Branch branch, PaymentMethod paymentMethod, BigDecimal amount) {
+        CashFundSummaryResponse summary = buildFundSummary(branch);
+        String method = normalizePaymentMethodCode(paymentMethod == null ? null : paymentMethod.name());
+        BigDecimal available = summary.getBalances().stream()
+                .filter(row -> method.equals(normalizePaymentMethodCode(row.getPaymentMethod())))
+                .map(PaymentMethodSummaryResponse::getTotalAmount)
+                .findFirst()
+                .orElse(BigDecimal.ZERO);
+        if (safe(amount).compareTo(available) > 0) {
+            throw new IllegalStateException(
+                    "El fondo acumulado no tiene saldo suficiente en " + paymentMethodLabel(method)
+                            + ". Disponible: S/ " + available.setScale(2, java.math.RoundingMode.HALF_UP)
+            );
+        }
+    }
+
+    private BigDecimal signedFundAmount(CashFundMovement movement) {
+        if (movement == null || movement.getType() == null) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal amount = safe(movement.getAmount());
+        return isFundOut(movement.getType()) ? amount.negate() : amount;
+    }
+
+    private boolean isFundOut(CashFundMovementType type) {
+        return type == CashFundMovementType.OPENING_WITHDRAWAL
+                || type == CashFundMovementType.MANUAL_WITHDRAWAL
+                || type == CashFundMovementType.EXPENSE
+                || type == CashFundMovementType.ADJUSTMENT_OUT;
+    }
+
+    private String resolveFundConcept(CashFundMovementType type, String requestedConcept) {
+        String clean = trimToNull(requestedConcept);
+        if (clean != null) return clean;
+        return switch (type) {
+            case CLOSING_DEPOSIT -> "Sobrante de cierre";
+            case OPENING_WITHDRAWAL -> "Apertura desde fondo acumulado";
+            case MANUAL_DEPOSIT -> "Ingreso a fondo acumulado";
+            case MANUAL_WITHDRAWAL -> "Retiro de fondo acumulado";
+            case EXPENSE -> "Gasto desde fondo acumulado";
+            case ADJUSTMENT_IN -> "Ajuste positivo de fondo";
+            case ADJUSTMENT_OUT -> "Ajuste negativo de fondo";
+        };
+    }
     private CashTotals calculateCashTotals(CashRegister cashRegister) {
         LocalDateTime[] range = cashRegisterBusinessRange(cashRegister);
         return calculateCashTotals(cashRegister, range[0], range[1]);

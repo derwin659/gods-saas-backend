@@ -9,5 +9,6 @@ import java.math.BigDecimal;
 public class OpenCashRegisterRequest {
     private Long assignedUserId;
     private BigDecimal openingAmount;
+    private BigDecimal fundWithdrawalAmount;
     private String openingNote;
 }

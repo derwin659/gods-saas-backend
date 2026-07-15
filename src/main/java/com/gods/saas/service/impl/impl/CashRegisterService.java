@@ -1,9 +1,12 @@
 package com.gods.saas.service.impl.impl;
 
 import com.gods.saas.domain.dto.request.CashMovementRequest;
+import com.gods.saas.domain.dto.request.CashFundMovementRequest;
 import com.gods.saas.domain.dto.request.CloseCashRegisterRequest;
 import com.gods.saas.domain.dto.request.OpenCashRegisterRequest;
 import com.gods.saas.domain.dto.response.CashMovementResponse;
+import com.gods.saas.domain.dto.response.CashFundMovementResponse;
+import com.gods.saas.domain.dto.response.CashFundSummaryResponse;
 import com.gods.saas.domain.dto.response.CashRegisterResponse;
 import com.gods.saas.domain.dto.response.CashAuditLogResponse;
 
@@ -23,6 +26,13 @@ public interface CashRegisterService {
     List<CashAuditLogResponse> audit(Long tenantId, Long branchId, Long cashRegisterId, Long actorUserId, LocalDate from, LocalDate to);
 
 
+
+
+    CashFundSummaryResponse getFundSummary(Long tenantId, Long branchId);
+
+    List<CashFundMovementResponse> getFundMovements(Long tenantId, Long branchId);
+
+    CashFundMovementResponse createFundMovement(Long tenantId, Long branchId, Long actorUserId, CashFundMovementRequest request);
 
     List<CashMovementResponse> getMovements(Long tenantId, Long branchId, Long cashRegisterId);
 
