@@ -26,7 +26,6 @@ public final class SubscriptionPlanCatalog {
 
     public static final List<String> PUBLIC_PLAN_CODES = List.of(
             FREE,
-            BASIC,
             STARTER,
             GROWTH,
             PRO,
@@ -52,7 +51,7 @@ public final class SubscriptionPlanCatalog {
         String value = plan == null ? "" : plan.trim().toUpperCase(Locale.ROOT).replace("-", "_");
         return switch (value) {
             case "", "NORMAL", "STANDARD" -> STARTER;
-            case "SOLO", "INDEPENDENT" -> BASIC;
+            case "SOLO", "INDEPENDENT" -> STARTER;
             case "STARTER LEGACY" -> STARTER_LEGACY;
             case "PRO LEGACY" -> PRO_LEGACY;
             case FREE, BASIC, STARTER, GROWTH, PRO, ENTERPRISE, STARTER_LEGACY, PRO_LEGACY, GODS_AI -> value;
@@ -85,34 +84,34 @@ public final class SubscriptionPlanCatalog {
             case "USD", "VES" -> switch (p) {
                 case FREE -> BigDecimal.ZERO;
                 case BASIC -> BigDecimal.valueOf(12);
-                case GROWTH -> BigDecimal.valueOf(39);
-                case PRO -> BigDecimal.valueOf(69);
-                case ENTERPRISE -> BigDecimal.valueOf(119);
-                default -> BigDecimal.valueOf(19);
+                case GROWTH -> BigDecimal.valueOf(29.90);
+                case PRO -> BigDecimal.valueOf(44.90);
+                case ENTERPRISE -> BigDecimal.valueOf(89.90);
+                default -> BigDecimal.valueOf(14.90);
             };
             case "EUR" -> switch (p) {
                 case FREE -> BigDecimal.ZERO;
                 case BASIC -> BigDecimal.valueOf(11);
-                case GROWTH -> BigDecimal.valueOf(38);
-                case PRO -> BigDecimal.valueOf(61);
-                case ENTERPRISE -> BigDecimal.valueOf(106);
-                default -> BigDecimal.valueOf(22);
+                case GROWTH -> BigDecimal.valueOf(27.90);
+                case PRO -> BigDecimal.valueOf(41.90);
+                case ENTERPRISE -> BigDecimal.valueOf(83.90);
+                default -> BigDecimal.valueOf(13.90);
             };
             case "PEN" -> switch (p) {
                 case FREE -> BigDecimal.ZERO;
                 case BASIC -> BigDecimal.valueOf(39.90);
-                case GROWTH -> BigDecimal.valueOf(129.90);
-                case PRO -> BigDecimal.valueOf(199.90);
-                case ENTERPRISE -> BigDecimal.valueOf(349.90);
-                default -> BigDecimal.valueOf(69.90);
+                case GROWTH -> BigDecimal.valueOf(99.90);
+                case PRO -> BigDecimal.valueOf(149.90);
+                case ENTERPRISE -> BigDecimal.valueOf(299.90);
+                default -> BigDecimal.valueOf(49.90);
             };
             default -> switch (p) {
                 case FREE -> BigDecimal.ZERO;
                 case BASIC -> BigDecimal.valueOf(39.90);
-                case GROWTH -> BigDecimal.valueOf(129.90);
-                case PRO -> BigDecimal.valueOf(199.90);
-                case ENTERPRISE -> BigDecimal.valueOf(349.90);
-                default -> BigDecimal.valueOf(69.90);
+                case GROWTH -> BigDecimal.valueOf(99.90);
+                case PRO -> BigDecimal.valueOf(149.90);
+                case ENTERPRISE -> BigDecimal.valueOf(299.90);
+                default -> BigDecimal.valueOf(49.90);
             };
         };
     }

@@ -536,7 +536,7 @@ public class DemoRequestServiceImpl implements DemoRequestService {
             case "ARGENTINA", "AR" -> "ARS";
             case "BOLIVIA", "BO" -> "BOB";
             case "BRASIL", "BRAZIL", "BR" -> "BRL";
-            case "VENEZUELA", "VE" -> "VES";
+            case "VENEZUELA", "VE" -> "USD";
             case "URUGUAY", "UY" -> "UYU";
             case "PARAGUAY", "PY" -> "PYG";
             case "COSTARICA", "CR" -> "CRC";

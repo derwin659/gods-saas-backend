@@ -166,7 +166,7 @@ public class SubscriptionPlanPricingService {
             case "AR" -> "ARS";
             case "BO" -> "USD";
             case "BR" -> "BRL";
-            case "VE" -> "VES";
+            case "VE" -> "USD";
             case "UY", "PY", "CR", "DO", "GT" -> "USD";
             case "EU" -> "EUR";
             default -> "PEN";

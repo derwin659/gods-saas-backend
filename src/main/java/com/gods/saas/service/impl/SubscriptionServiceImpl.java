@@ -248,11 +248,6 @@ public class SubscriptionServiceImpl implements SubscriptionService {
     public List<AppStoreProductResponse> getAppStoreProducts() {
         return List.of(
                 AppStoreProductResponse.builder()
-                        .plan(SubscriptionPlanCatalog.BASIC)
-                        .productId(SubscriptionPlanCatalog.APP_STORE_BASIC_MONTHLY)
-                        .billingCycle("MONTHLY")
-                        .build(),
-                AppStoreProductResponse.builder()
                         .plan(SubscriptionPlanCatalog.STARTER)
                         .productId(SubscriptionPlanCatalog.APP_STORE_STARTER_MONTHLY)
                         .billingCycle("MONTHLY")
