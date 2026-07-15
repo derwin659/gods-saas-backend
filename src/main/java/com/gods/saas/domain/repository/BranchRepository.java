@@ -1,6 +1,8 @@
 package com.gods.saas.domain.repository;
 import com.gods.saas.domain.model.Branch;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 import java.util.Collection;
 import java.util.List;
@@ -20,4 +22,15 @@ public interface BranchRepository extends JpaRepository<Branch, Long> {
     boolean existsByTenant_IdAndNombreIgnoreCaseAndIdNot(Long tenantId, String nombre, Long branchId);
 
     List<Branch> findByTenantIdAndActivoTrueOrderByNombreAsc(Long tenantId);
+    @Query("""
+            select b from Branch b
+            join fetch b.tenant t
+            where b.activo = true
+              and t.active = true
+              and b.publicVisible = true
+              and b.directoryEnabled = true
+              and (:city is null or lower(coalesce(b.ciudad, t.ciudad, '')) like lower(concat('%', :city, '%')))
+            order by t.nombre asc, b.nombre asc
+            """)
+    List<Branch> findPublicDirectoryBranches(@Param("city") String city);
 }

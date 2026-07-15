@@ -30,6 +30,23 @@ public class Branch {
 
     @Column(length = 30)
     private String telefono;
+    @Column(length = 120)
+    private String ciudad;
+
+    @Column(name = "latitude")
+    private Double latitude;
+
+    @Column(name = "longitude")
+    private Double longitude;
+
+    @Column(name = "public_visible")
+    private Boolean publicVisible;
+
+    @Column(name = "directory_enabled")
+    private Boolean directoryEnabled;
+
+    @Column(name = "public_description", length = 500)
+    private String publicDescription;
 
     private Boolean activo;
 

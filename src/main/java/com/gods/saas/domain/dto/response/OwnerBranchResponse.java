@@ -6,6 +6,12 @@ public record OwnerBranchResponse(
         String direccion,
         String telefono,
         Boolean activo,
-        String imageUrl
+        String imageUrl,
+        String ciudad,
+        Double latitude,
+        Double longitude,
+        Boolean publicVisible,
+        Boolean directoryEnabled,
+        String publicDescription
 ) {
 }

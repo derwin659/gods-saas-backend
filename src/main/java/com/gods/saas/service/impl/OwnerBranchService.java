@@ -46,7 +46,7 @@ public class OwnerBranchService {
         subscriptionService.validateBranchLimit(tenantId);
 
         Tenant tenant = tenantRepository.findById(tenantId)
-                .orElseThrow(() -> new BusinessException("No se encontró el tenant"));
+                .orElseThrow(() -> new BusinessException("No se encontrÃƒÂ³ el tenant"));
 
         final String nombre = normalizeRequired(request.nombre());
 
@@ -59,6 +59,12 @@ public class OwnerBranchService {
                 .nombre(nombre)
                 .direccion(normalizeNullable(request.direccion()))
                 .telefono(normalizeNullable(request.telefono()))
+                .ciudad(normalizeNullable(request.ciudad()))
+                .latitude(request.latitude())
+                .longitude(request.longitude())
+                .publicVisible(Boolean.TRUE.equals(request.publicVisible()))
+                .directoryEnabled(Boolean.TRUE.equals(request.directoryEnabled()))
+                .publicDescription(normalizeNullable(request.publicDescription()))
                 .activo(request.activo() != null ? request.activo() : true)
                 .fechaCreacion(LocalDateTime.now())
                 .build();
@@ -70,7 +76,7 @@ public class OwnerBranchService {
     @Transactional
     public OwnerBranchResponse updateBranch(Long tenantId, Long branchId, OwnerBranchUpsertRequest request) {
         Branch branch = branchRepository.findByIdAndTenant_Id(branchId, tenantId)
-                .orElseThrow(() -> new BusinessException("No se encontró la sede"));
+                .orElseThrow(() -> new BusinessException("No se encontrÃƒÂ³ la sede"));
 
         final String nombre = normalizeRequired(request.nombre());
 
@@ -81,6 +87,12 @@ public class OwnerBranchService {
         branch.setNombre(nombre);
         branch.setDireccion(normalizeNullable(request.direccion()));
         branch.setTelefono(normalizeNullable(request.telefono()));
+        branch.setCiudad(normalizeNullable(request.ciudad()));
+        branch.setLatitude(request.latitude());
+        branch.setLongitude(request.longitude());
+        branch.setPublicVisible(Boolean.TRUE.equals(request.publicVisible()));
+        branch.setDirectoryEnabled(Boolean.TRUE.equals(request.directoryEnabled()));
+        branch.setPublicDescription(normalizeNullable(request.publicDescription()));
 
         if (request.activo() != null) {
             branch.setActivo(request.activo());
@@ -93,7 +105,7 @@ public class OwnerBranchService {
     @Transactional
     public void updateStatus(Long tenantId, Long branchId, Boolean activo) {
         Branch branch = branchRepository.findByIdAndTenant_Id(branchId, tenantId)
-                .orElseThrow(() -> new BusinessException("No se encontró la sede"));
+                .orElseThrow(() -> new BusinessException("No se encontrÃƒÂ³ la sede"));
 
         branch.setActivo(Boolean.TRUE.equals(activo));
         branchRepository.save(branch);
@@ -102,7 +114,7 @@ public class OwnerBranchService {
     @Transactional
     public OwnerBranchResponse uploadImage(Long tenantId, Long branchId, MultipartFile file) {
         Branch branch = branchRepository.findByIdAndTenant_Id(branchId, tenantId)
-                .orElseThrow(() -> new BusinessException("No se encontró la sede"));
+                .orElseThrow(() -> new BusinessException("No se encontrÃƒÂ³ la sede"));
 
         String oldPublicId = branch.getImagePublicId();
 
@@ -124,7 +136,7 @@ public class OwnerBranchService {
     @Transactional
     public OwnerBranchResponse deleteImage(Long tenantId, Long branchId) {
         Branch branch = branchRepository.findByIdAndTenant_Id(branchId, tenantId)
-                .orElseThrow(() -> new BusinessException("No se encontró la sede"));
+                .orElseThrow(() -> new BusinessException("No se encontrÃƒÂ³ la sede"));
 
         String oldPublicId = branch.getImagePublicId();
 
@@ -147,7 +159,13 @@ public class OwnerBranchService {
                 branch.getDireccion(),
                 branch.getTelefono(),
                 branch.getActivo(),
-                branch.getImageUrl()
+                branch.getImageUrl(),
+                branch.getCiudad(),
+                branch.getLatitude(),
+                branch.getLongitude(),
+                Boolean.TRUE.equals(branch.getPublicVisible()),
+                Boolean.TRUE.equals(branch.getDirectoryEnabled()),
+                branch.getPublicDescription()
         );
     }
     private String normalizeRequired(String value) {
