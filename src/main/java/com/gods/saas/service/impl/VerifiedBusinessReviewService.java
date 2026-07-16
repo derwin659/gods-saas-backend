@@ -3,8 +3,10 @@ package com.gods.saas.service.impl;
 import com.gods.saas.domain.dto.request.CreateVerifiedReviewRequest;
 import com.gods.saas.domain.dto.response.VerifiedReviewResponse;
 import com.gods.saas.domain.model.Appointment;
+import com.gods.saas.domain.model.Sale;
 import com.gods.saas.domain.model.VerifiedBusinessReview;
 import com.gods.saas.domain.repository.AppointmentRepository;
+import com.gods.saas.domain.repository.SaleRepository;
 import com.gods.saas.domain.repository.VerifiedBusinessReviewRepository;
 import com.gods.saas.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
@@ -16,21 +18,72 @@ import java.util.Set;
 public class VerifiedBusinessReviewService {
     private static final Set<String> COMPLETED = Set.of("ATENDIDO", "COMPLETADO", "COMPLETADA", "COMPLETED", "FINALIZADO", "FINALIZADA");
     private final AppointmentRepository appointmentRepository;
+    private final SaleRepository saleRepository;
     private final VerifiedBusinessReviewRepository reviewRepository;
 
     @Transactional
     public VerifiedReviewResponse create(Long tenantId, Long customerId, CreateVerifiedReviewRequest request) {
+        if (request.appointmentId() == null && request.saleId() == null) {
+            throw new BusinessException("Debes indicar la visita que deseas calificar");
+        }
+        if (request.appointmentId() != null) {
+            return createForAppointment(tenantId, customerId, request);
+        }
+        return createForDirectSale(tenantId, customerId, request);
+    }
+
+    private VerifiedReviewResponse createForAppointment(Long tenantId, Long customerId,
+                                                         CreateVerifiedReviewRequest request) {
         Appointment appointment = appointmentRepository
-                .findByIdAndTenant_IdAndCustomer_Id(request.appointmentId(), tenantId, customerId)
-                .orElseThrow(() -> new BusinessException("Atencion no encontrada"));
+                .findByIdAndTenant_Id(request.appointmentId(), tenantId)
+                .orElseThrow(() -> new BusinessException("Atención no encontrada"));
+        boolean belongsToCustomer = appointment.getCustomer() != null
+                && appointment.getCustomer().getId().equals(customerId);
+        boolean linkedToCustomerSale = saleRepository.existsReviewableVisit(
+                tenantId, customerId, appointment.getId());
+        if (!belongsToCustomer && !linkedToCustomerSale) {
+            throw new BusinessException("Esta visita no pertenece a tu cuenta");
+        }
         String status = appointment.getEstado() == null ? "" : appointment.getEstado().trim().toUpperCase();
-        if (!COMPLETED.contains(status)) throw new BusinessException("Solo puedes calificar una atencion completada");
-        if (reviewRepository.existsByAppointment_Id(appointment.getId())) throw new BusinessException("Esta atencion ya fue calificada");
-        String comment = request.comment() == null || request.comment().trim().isEmpty() ? null : request.comment().trim();
-        VerifiedBusinessReview saved = reviewRepository.save(VerifiedBusinessReview.builder()
-                .tenant(appointment.getTenant()).branch(appointment.getBranch()).customer(appointment.getCustomer())
-                .appointment(appointment).rating(request.rating()).comment(comment).build());
+        if (!COMPLETED.contains(status)) throw new BusinessException("Solo puedes calificar una atención completada");
+        if (reviewRepository.existsByAppointment_Id(appointment.getId())) {
+            throw new BusinessException("Esta atención ya fue calificada");
+        }
+        VerifiedBusinessReview saved = reviewRepository.save(baseReview(request)
+                .tenant(appointment.getTenant())
+                .branch(appointment.getBranch())
+                .customer(appointment.getCustomer() != null ? appointment.getCustomer() :
+                        saleRepository.findByIdAndTenant_IdAndCustomer_Id(request.saleId(), tenantId, customerId)
+                                .map(Sale::getCustomer).orElse(null))
+                .appointment(appointment)
+                .build());
         return toResponse(saved);
+    }
+
+    private VerifiedReviewResponse createForDirectSale(Long tenantId, Long customerId,
+                                                        CreateVerifiedReviewRequest request) {
+        Sale sale = saleRepository.findByIdAndTenant_IdAndCustomer_Id(request.saleId(), tenantId, customerId)
+                .orElseThrow(() -> new BusinessException("Venta no encontrada"));
+        if (sale.getPaymentValidationStatus() != null
+                && !"APPROVED".equalsIgnoreCase(sale.getPaymentValidationStatus())) {
+            throw new BusinessException("La venta aún no está aprobada");
+        }
+        if (reviewRepository.existsBySale_Id(sale.getId())) {
+            throw new BusinessException("Esta visita ya fue calificada");
+        }
+        VerifiedBusinessReview saved = reviewRepository.save(baseReview(request)
+                .tenant(sale.getTenant())
+                .branch(sale.getBranch())
+                .customer(sale.getCustomer())
+                .sale(sale)
+                .build());
+        return toResponse(saved);
+    }
+
+    private VerifiedBusinessReview.VerifiedBusinessReviewBuilder baseReview(CreateVerifiedReviewRequest request) {
+        String comment = request.comment() == null || request.comment().trim().isEmpty()
+                ? null : request.comment().trim();
+        return VerifiedBusinessReview.builder().rating(request.rating()).comment(comment);
     }
 
     @Transactional(readOnly = true)
@@ -43,7 +96,9 @@ public class VerifiedBusinessReviewService {
 
     private VerifiedReviewResponse toResponse(VerifiedBusinessReview item) {
         String name = item.getCustomer().getNombres();
-        return new VerifiedReviewResponse(item.getId(), item.getAppointment().getId(), item.getBranch().getId(),
+        return new VerifiedReviewResponse(item.getId(),
+                item.getAppointment() != null ? item.getAppointment().getId() : null,
+                item.getSale() != null ? item.getSale().getId() : null, item.getBranch().getId(),
                 item.getRating(), item.getComment(), name, item.getCreatedAt());
     }
 }

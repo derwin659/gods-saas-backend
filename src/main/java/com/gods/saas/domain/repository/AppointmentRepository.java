@@ -213,6 +213,7 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
     @Query(value = """
 select
     s.appointment_id as appointmentId,
+    s.sale_id as saleId,
     s.fecha_creacion::date as fecha,
     coalesce(
         string_agg(distinct se.nombre, ', '),
@@ -256,7 +257,6 @@ left join (
       and lm.referencia_id = s.sale_id
 where s.tenant_id = :tenantId
   and s.customer_id = :customerId
-  and s.appointment_id is not null
 group by s.sale_id, s.appointment_id, s.fecha_creacion
 order by s.fecha_creacion desc
 limit :limit

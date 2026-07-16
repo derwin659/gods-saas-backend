@@ -635,6 +635,7 @@ public class CustomerService {
         return rows.stream()
                 .map(v -> ClientHomeResponse.LastVisitResponse.builder()
                         .appointmentId(v.getAppointmentId())
+                        .saleId(v.getSaleId())
                         .fecha(v.getFecha() != null ? v.getFecha().toString() : null)
                         .servicio(v.getServicio())
                         .puntos(v.getPuntos() != null ? v.getPuntos() : 0)

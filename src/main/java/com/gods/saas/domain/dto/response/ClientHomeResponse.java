@@ -78,6 +78,7 @@ public class ClientHomeResponse {
         private Integer puntos;
         private Double total;
         private Long appointmentId;
+        private Long saleId;
     }
 
     @Getter

@@ -4,6 +4,7 @@ import java.time.LocalDate;
 
 public interface LastVisitProjection {
     Long getAppointmentId();
+    Long getSaleId();
     LocalDate getFecha();
     String getServicio();
     String getBarberPhotoUrl();

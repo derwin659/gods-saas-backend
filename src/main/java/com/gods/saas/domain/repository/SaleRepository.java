@@ -16,6 +16,22 @@ import java.util.Optional;
 @Repository
 public interface SaleRepository extends JpaRepository<Sale, Long> {
 
+    Optional<Sale> findByIdAndTenant_IdAndCustomer_Id(Long id, Long tenantId, Long customerId);
+
+    @Query("""
+        select (count(s) > 0)
+        from Sale s
+        where s.tenant.id = :tenantId
+          and s.customer.id = :customerId
+          and s.appointment.id = :appointmentId
+          and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
+    """)
+    boolean existsReviewableVisit(
+            @Param("tenantId") Long tenantId,
+            @Param("customerId") Long customerId,
+            @Param("appointmentId") Long appointmentId
+    );
+
     // Importante: reportes, dashboard y caja solo deben sumar ventas APROBADAS.
     // Las ventas PENDING_VALIDATION no entran a producción/caja hasta que owner/admin apruebe.
 

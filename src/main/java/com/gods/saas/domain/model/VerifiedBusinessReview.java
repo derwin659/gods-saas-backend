@@ -5,7 +5,10 @@ import lombok.*;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "verified_business_review", uniqueConstraints = @UniqueConstraint(name = "uk_verified_review_appointment", columnNames = "appointment_id"))
+@Table(name = "verified_business_review", uniqueConstraints = {
+        @UniqueConstraint(name = "uk_verified_review_appointment", columnNames = "appointment_id"),
+        @UniqueConstraint(name = "uk_verified_review_sale", columnNames = "sale_id")
+})
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor @Builder
 public class VerifiedBusinessReview {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -17,8 +20,10 @@ public class VerifiedBusinessReview {
     private Branch branch;
     @ManyToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "customer_id", nullable = false)
     private Customer customer;
-    @OneToOne(fetch = FetchType.LAZY, optional = false) @JoinColumn(name = "appointment_id", nullable = false)
+    @OneToOne(fetch = FetchType.LAZY) @JoinColumn(name = "appointment_id")
     private Appointment appointment;
+    @OneToOne(fetch = FetchType.LAZY) @JoinColumn(name = "sale_id")
+    private Sale sale;
     @Column(nullable = false) private Integer rating;
     @Column(length = 500) private String comment;
     @Column(name = "created_at", nullable = false) @Builder.Default
