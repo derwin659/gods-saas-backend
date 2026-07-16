@@ -101,4 +101,38 @@ public class VerifiedBusinessReviewService {
                 item.getSale() != null ? item.getSale().getId() : null, item.getBranch().getId(),
                 item.getRating(), item.getComment(), name, item.getCreatedAt());
     }
-}
+
+    @Transactional(readOnly = true)
+    public java.util.Map<String, Object> ownerInbox(Long tenantId, Long branchId, Integer rating) {
+        var all = reviewRepository.findTop200ByTenant_IdOrderByCreatedAtDesc(tenantId);
+        var filtered = all.stream()
+                .filter(item -> branchId == null || item.getBranch().getId().equals(branchId))
+                .filter(item -> rating == null || item.getRating().equals(rating))
+                .toList();
+        double average = all.stream().mapToInt(VerifiedBusinessReview::getRating).average().orElse(0.0);
+        var distribution = new java.util.LinkedHashMap<String, Long>();
+        for (int stars = 5; stars >= 1; stars--) {
+            final int value = stars;
+            distribution.put(String.valueOf(stars), all.stream().filter(item -> item.getRating() == value).count());
+        }
+        var rows = filtered.stream().map(item -> {
+            var row = new java.util.LinkedHashMap<String, Object>();
+            row.put("reviewId", item.getId());
+            row.put("appointmentId", item.getAppointment() == null ? null : item.getAppointment().getId());
+            row.put("saleId", item.getSale() == null ? null : item.getSale().getId());
+            row.put("branchId", item.getBranch().getId());
+            row.put("branchName", item.getBranch().getNombre());
+            row.put("rating", item.getRating());
+            row.put("comment", item.getComment());
+            row.put("customerName", item.getCustomer().getNombres());
+            row.put("createdAt", item.getCreatedAt());
+            row.put("verified", true);
+            return row;
+        }).toList();
+        var result = new java.util.LinkedHashMap<String, Object>();
+        result.put("average", Math.round(average * 10.0) / 10.0);
+        result.put("total", all.size());
+        result.put("distribution", distribution);
+        result.put("reviews", rows);
+        return result;
+    }}

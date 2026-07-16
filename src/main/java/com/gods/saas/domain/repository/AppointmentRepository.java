@@ -214,6 +214,11 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
 select
     s.appointment_id as appointmentId,
     s.sale_id as saleId,
+    exists (
+        select 1 from verified_business_review vr
+        where vr.tenant_id = s.tenant_id
+          and (vr.sale_id = s.sale_id or (s.appointment_id is not null and vr.appointment_id = s.appointment_id))
+    ) as reviewed,
     s.fecha_creacion::date as fecha,
     coalesce(
         string_agg(distinct se.nombre, ', '),

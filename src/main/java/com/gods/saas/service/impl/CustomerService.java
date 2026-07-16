@@ -636,6 +636,7 @@ public class CustomerService {
                 .map(v -> ClientHomeResponse.LastVisitResponse.builder()
                         .appointmentId(v.getAppointmentId())
                         .saleId(v.getSaleId())
+                        .reviewed(Boolean.TRUE.equals(v.getReviewed()))
                         .fecha(v.getFecha() != null ? v.getFecha().toString() : null)
                         .servicio(v.getServicio())
                         .puntos(v.getPuntos() != null ? v.getPuntos() : 0)

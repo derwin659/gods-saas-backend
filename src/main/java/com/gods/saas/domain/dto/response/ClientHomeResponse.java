@@ -79,6 +79,7 @@ public class ClientHomeResponse {
         private Double total;
         private Long appointmentId;
         private Long saleId;
+        private Boolean reviewed;
     }
 
     @Getter
