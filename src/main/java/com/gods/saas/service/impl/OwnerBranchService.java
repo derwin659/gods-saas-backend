@@ -173,9 +173,20 @@ public class OwnerBranchService {
                 followRepository.countByTenant_Id(branch.getTenant().getId()),
                 discoveryEventRepository.countByTenant_IdAndBranch_IdAndEventType(branch.getTenant().getId(), branch.getId(), "VIEW"),
                 discoveryEventRepository.countByTenant_IdAndBranch_IdAndEventType(branch.getTenant().getId(), branch.getId(), "ROUTE"),
-                discoveryEventRepository.countByTenant_IdAndBranch_IdAndEventType(branch.getTenant().getId(), branch.getId(), "BOOKING_INTENT")
+                discoveryEventRepository.countByTenant_IdAndBranch_IdAndEventType(branch.getTenant().getId(), branch.getId(), "BOOKING_INTENT"),
+                discoveryEventRepository.countByTenant_IdAndBranch_IdAndEventType(branch.getTenant().getId(), branch.getId(), "BOOKING_CONFIRMED"),
+                calculateBookingConversionRate(branch)
         );
     }
+    private Double calculateBookingConversionRate(Branch branch) {
+        long views = discoveryEventRepository.countByTenant_IdAndBranch_IdAndEventType(
+                branch.getTenant().getId(), branch.getId(), "VIEW");
+        long confirmed = discoveryEventRepository.countByTenant_IdAndBranch_IdAndEventType(
+                branch.getTenant().getId(), branch.getId(), "BOOKING_CONFIRMED");
+        if (views <= 0) return 0.0;
+        return Math.round((confirmed * 1000.0) / views) / 10.0;
+    }
+
     private String normalizeRequired(String value) {
         if (value == null || value.trim().isEmpty()) {
             throw new BusinessException("El nombre de la sede es obligatorio");

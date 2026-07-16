@@ -16,6 +16,8 @@ public record OwnerBranchResponse(
         Long followerCount,
         Long directoryViews,
         Long routeOpens,
-        Long bookingIntents
+        Long bookingIntents,
+        Long confirmedBookings,
+        Double bookingConversionRate
 ) {
 }

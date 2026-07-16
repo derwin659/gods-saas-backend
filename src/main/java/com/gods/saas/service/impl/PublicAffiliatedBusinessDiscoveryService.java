@@ -61,7 +61,7 @@ public class PublicAffiliatedBusinessDiscoveryService {
     @Transactional
     public void recordEvent(Long branchId, String eventType) {
         String normalized = eventType == null ? "" : eventType.trim().toUpperCase();
-        if (!java.util.Set.of("VIEW", "ROUTE", "BOOKING_INTENT").contains(normalized)) {
+        if (!java.util.Set.of("VIEW", "ROUTE", "BOOKING_INTENT", "BOOKING_CONFIRMED").contains(normalized)) {
             throw new BusinessException("Tipo de evento no valido");
         }
         Branch branch = branchRepository
