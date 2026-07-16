@@ -75,7 +75,8 @@ public class ClientBusinessDiscoveryService {
         String phone = requirePhone(customer);
         Tenant tenant = tenantRepository.findById(tenantId)
                 .filter(item -> Boolean.TRUE.equals(item.getActive()))
-                .filter(item -> branchRepository.existsByTenant_IdAndActivoTrueAndPublicVisibleTrueAndDirectoryEnabledTrue(item.getId()))
+                .filter(item -> customerRepository.findByTenant_IdAndTelefonoAndActivoTrue(item.getId(), phone).isPresent()
+                        || branchRepository.existsByTenant_IdAndActivoTrueAndPublicVisibleTrueAndDirectoryEnabledTrue(item.getId()))
                 .orElseThrow(() -> new BusinessException("Negocio afiliado no disponible"));
         if (followRepository.existsByFollowerPhoneAndTenant_Id(phone, tenantId)) return;
         followRepository.save(ClientBusinessFollow.builder()
