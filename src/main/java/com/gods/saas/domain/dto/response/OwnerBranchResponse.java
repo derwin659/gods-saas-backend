@@ -12,6 +12,7 @@ public record OwnerBranchResponse(
         Double longitude,
         Boolean publicVisible,
         Boolean directoryEnabled,
-        String publicDescription
+        String publicDescription,
+        Long followerCount
 ) {
 }

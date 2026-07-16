@@ -17,6 +17,7 @@ public record ClientBusinessSummaryResponse(
         String nextAppointmentBranch,
         String lastVisitDate,
         Long completedVisits,
-        String relationLabel
+        String relationLabel,
+        Boolean followed
 ) {
 }

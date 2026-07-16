@@ -5,6 +5,7 @@ import com.gods.saas.domain.dto.response.OwnerBranchResponse;
 import com.gods.saas.domain.model.Branch;
 import com.gods.saas.domain.model.Tenant;
 import com.gods.saas.domain.repository.BranchRepository;
+import com.gods.saas.domain.repository.ClientBusinessFollowRepository;
 import com.gods.saas.domain.repository.TenantRepository;
 import com.gods.saas.exception.BusinessException;
 import com.gods.saas.service.impl.impl.SubscriptionService;
@@ -21,6 +22,7 @@ import java.util.List;
 public class OwnerBranchService {
 
     private final BranchRepository branchRepository;
+    private final ClientBusinessFollowRepository followRepository;
     private final TenantRepository tenantRepository;
     private final SubscriptionService subscriptionService;
     private final CloudinaryStorageService cloudinaryStorageService;
@@ -165,7 +167,8 @@ public class OwnerBranchService {
                 branch.getLongitude(),
                 Boolean.TRUE.equals(branch.getPublicVisible()),
                 Boolean.TRUE.equals(branch.getDirectoryEnabled()),
-                branch.getPublicDescription()
+                branch.getPublicDescription(),
+                followRepository.countByTenant_Id(branch.getTenant().getId())
         );
     }
     private String normalizeRequired(String value) {

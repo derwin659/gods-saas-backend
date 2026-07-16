@@ -17,6 +17,8 @@ public interface BranchRepository extends JpaRepository<Branch, Long> {
     long countByTenant_Id(Long tenantId);
     Optional<Branch> findByIdAndTenant_Id(Long branchId, Long tenantId);
 
+    boolean existsByTenant_IdAndActivoTrueAndPublicVisibleTrueAndDirectoryEnabledTrue(Long tenantId);
+
     boolean existsByTenant_IdAndNombreIgnoreCase(Long tenantId, String nombre);
 
     boolean existsByTenant_IdAndNombreIgnoreCaseAndIdNot(Long tenantId, String nombre, Long branchId);

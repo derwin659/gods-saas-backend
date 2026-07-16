@@ -29,6 +29,18 @@ public class ClientAccountController {
         return ResponseEntity.ok(clientBusinessDiscoveryService.getMyBusinesses(authentication));
     }
 
+    @PutMapping("/my-businesses/{tenantId}/follow")
+    public ResponseEntity<Void> followBusiness(@PathVariable Long tenantId, Authentication authentication) {
+        clientBusinessDiscoveryService.follow(authentication, tenantId);
+        return ResponseEntity.noContent().build();
+    }
+
+    @DeleteMapping("/my-businesses/{tenantId}/follow")
+    public ResponseEntity<Void> unfollowBusiness(@PathVariable Long tenantId, Authentication authentication) {
+        clientBusinessDiscoveryService.unfollow(authentication, tenantId);
+        return ResponseEntity.noContent().build();
+    }
+
     @DeleteMapping("/delete")
     public ResponseEntity<DeleteAccountResponse> deleteMyAccount(
             @RequestBody DeleteMyAccountRequest request
