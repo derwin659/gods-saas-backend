@@ -11,6 +11,7 @@ import com.gods.saas.domain.repository.BarberAvailabilityRepository;
 import com.gods.saas.domain.repository.AffiliatedDiscoveryEventRepository;
 import com.gods.saas.domain.repository.PromotionRepository;
 import com.gods.saas.domain.repository.ServiceRepository;
+import com.gods.saas.domain.repository.VerifiedBusinessReviewRepository;
 import com.gods.saas.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -34,6 +35,7 @@ public class PublicAffiliatedBusinessDiscoveryService {
     private final ServiceRepository serviceRepository;
     private final PromotionRepository promotionRepository;
     private final AffiliatedDiscoveryEventRepository eventRepository;
+    private final VerifiedBusinessReviewRepository reviewRepository;
 
     @Transactional(readOnly = true)
     public List<PublicAffiliatedBranchResponse> search(Double latitude, Double longitude, String city, String businessType, String q, Double radiusKm, Integer limit) {
@@ -155,7 +157,9 @@ public class PublicAffiliatedBusinessDiscoveryService {
                 distance,
                 distance == null ? null : String.format("%.1f km", distance),
                 availabilityLabel,
-                near
+                near,
+                reviewRepository.findAverageRatingByBranchId(branch.getId()),
+                reviewRepository.countByBranch_Id(branch.getId())
         );
     }
 

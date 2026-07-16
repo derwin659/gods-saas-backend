@@ -18,6 +18,8 @@ public record PublicAffiliatedBranchResponse(
         Double distanceKm,
         String distanceLabel,
         String availabilityLabel,
-        Boolean near
+        Boolean near,
+        Double ratingAverage,
+        Long reviewCount
 ) {
 }
