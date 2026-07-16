@@ -19,6 +19,11 @@ public class PublicAffiliatedBusinessDiscoveryController {
 
     private final PublicAffiliatedBusinessDiscoveryService discoveryService;
 
+    @GetMapping("/{branchId}")
+    public PublicAffiliatedBranchDetailResponse detail(@PathVariable Long branchId) {
+        return discoveryService.detail(branchId);
+    }
+
     @GetMapping
     public List<PublicAffiliatedBranchResponse> search(
             @RequestParam(required = false) Double latitude,
