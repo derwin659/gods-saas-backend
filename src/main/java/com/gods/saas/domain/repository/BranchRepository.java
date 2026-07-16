@@ -29,8 +29,19 @@ public interface BranchRepository extends JpaRepository<Branch, Long> {
               and t.active = true
               and b.publicVisible = true
               and b.directoryEnabled = true
-              and (:city is null or lower(coalesce(b.ciudad, t.ciudad, '')) like lower(concat('%', :city, '%')))
             order by t.nombre asc, b.nombre asc
             """)
-    List<Branch> findPublicDirectoryBranches(@Param("city") String city);
+    List<Branch> findPublicDirectoryBranches();
+
+    @Query("""
+            select b from Branch b
+            join fetch b.tenant t
+            where b.activo = true
+              and t.active = true
+              and b.publicVisible = true
+              and b.directoryEnabled = true
+              and lower(coalesce(b.ciudad, t.ciudad, '')) like lower(concat('%', :city, '%'))
+            order by t.nombre asc, b.nombre asc
+            """)
+    List<Branch> findPublicDirectoryBranchesByCity(@Param("city") String city);
 }

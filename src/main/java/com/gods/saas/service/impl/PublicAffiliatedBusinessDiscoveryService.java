@@ -27,8 +27,11 @@ public class PublicAffiliatedBusinessDiscoveryService {
         int effectiveLimit = normalizeLimit(limit);
         String normalizedCity = normalizeCity(city);
 
-        return branchRepository.findPublicDirectoryBranches(normalizedCity)
-                .stream()
+        List<Branch> branches = normalizedCity == null
+                ? branchRepository.findPublicDirectoryBranches()
+                : branchRepository.findPublicDirectoryBranchesByCity(normalizedCity);
+
+        return branches.stream()
                 .map(branch -> toResponse(branch, hasLocation, latitude, longitude))
                 .filter(item -> !hasLocation || item.distanceKm() == null || item.distanceKm() <= effectiveRadius)
                 .sorted(comparator(hasLocation))
