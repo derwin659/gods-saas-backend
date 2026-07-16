@@ -33,12 +33,13 @@ public class PublicAffiliatedBusinessDiscoveryService {
     private final PromotionRepository promotionRepository;
 
     @Transactional(readOnly = true)
-    public List<PublicAffiliatedBranchResponse> search(Double latitude, Double longitude, String city, String businessType, Double radiusKm, Integer limit) {
+    public List<PublicAffiliatedBranchResponse> search(Double latitude, Double longitude, String city, String businessType, String q, Double radiusKm, Integer limit) {
         boolean hasLocation = latitude != null && longitude != null;
         double effectiveRadius = normalizeRadius(radiusKm);
         int effectiveLimit = normalizeLimit(limit);
         String normalizedCity = normalizeCity(city);
         String normalizedBusinessType = normalizeBusinessType(businessType);
+        String normalizedQuery = normalizeQuery(q);
 
         List<Branch> branches = normalizedCity == null
                 ? branchRepository.findPublicDirectoryBranches()
@@ -46,6 +47,7 @@ public class PublicAffiliatedBusinessDiscoveryService {
 
         return branches.stream()
                 .filter(branch -> matchesBusinessType(branch, normalizedBusinessType))
+                .filter(branch -> matchesQuery(branch, normalizedQuery))
                 .map(branch -> toResponse(branch, hasLocation, latitude, longitude))
                 .filter(item -> !hasLocation || item.distanceKm() == null || item.distanceKm() <= effectiveRadius)
                 .sorted(comparator(hasLocation))
@@ -168,6 +170,33 @@ public class PublicAffiliatedBusinessDiscoveryService {
         return city.trim();
     }
 
+    private String normalizeQuery(String q) {
+        if (q == null || q.trim().isEmpty()) return null;
+        return q.trim().toLowerCase();
+    }
+
+    private boolean matchesQuery(Branch branch, String q) {
+        if (q == null) return true;
+        Tenant tenant = branch.getTenant();
+        if (contains(tenant == null ? null : tenant.getNombre(), q)
+                || contains(branch.getNombre(), q)
+                || contains(branch.getDireccion(), q)
+                || contains(branch.getCiudad(), q)
+                || contains(branch.getPublicDescription(), q)) {
+            return true;
+        }
+        if (tenant == null) return false;
+        return serviceRepository
+                .findByTenant_IdAndActivoTrueAndDeletedAtIsNullOrderByNombreAsc(tenant.getId())
+                .stream()
+                .anyMatch(service -> contains(service.getNombre(), q)
+                        || contains(service.getDescripcion(), q)
+                        || contains(service.getCategoria(), q));
+    }
+
+    private boolean contains(String value, String q) {
+        return value != null && value.toLowerCase().contains(q);
+    }
     private String normalizeBusinessType(String businessType) {
         if (businessType == null || businessType.trim().isEmpty()) return null;
         String normalized = businessType.trim().toUpperCase();

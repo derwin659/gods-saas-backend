@@ -30,9 +30,10 @@ public class PublicAffiliatedBusinessDiscoveryController {
             @RequestParam(required = false) Double longitude,
             @RequestParam(required = false) String city,
             @RequestParam(required = false) String businessType,
+            @RequestParam(required = false) String q,
             @RequestParam(required = false) Double radiusKm,
             @RequestParam(required = false) Integer limit
     ) {
-        return discoveryService.search(latitude, longitude, city, businessType, radiusKm, limit);
+        return discoveryService.search(latitude, longitude, city, businessType, q, radiusKm, limit);
     }
 }
