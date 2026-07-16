@@ -21,17 +21,19 @@ public class PublicAffiliatedBusinessDiscoveryService {
     private final BranchRepository branchRepository;
 
     @Transactional(readOnly = true)
-    public List<PublicAffiliatedBranchResponse> search(Double latitude, Double longitude, String city, Double radiusKm, Integer limit) {
+    public List<PublicAffiliatedBranchResponse> search(Double latitude, Double longitude, String city, String businessType, Double radiusKm, Integer limit) {
         boolean hasLocation = latitude != null && longitude != null;
         double effectiveRadius = normalizeRadius(radiusKm);
         int effectiveLimit = normalizeLimit(limit);
         String normalizedCity = normalizeCity(city);
+        String normalizedBusinessType = normalizeBusinessType(businessType);
 
         List<Branch> branches = normalizedCity == null
                 ? branchRepository.findPublicDirectoryBranches()
                 : branchRepository.findPublicDirectoryBranchesByCity(normalizedCity);
 
         return branches.stream()
+                .filter(branch -> matchesBusinessType(branch, normalizedBusinessType))
                 .map(branch -> toResponse(branch, hasLocation, latitude, longitude))
                 .filter(item -> !hasLocation || item.distanceKm() == null || item.distanceKm() <= effectiveRadius)
                 .sorted(comparator(hasLocation))
@@ -103,6 +105,28 @@ public class PublicAffiliatedBusinessDiscoveryService {
     private String normalizeCity(String city) {
         if (city == null || city.trim().isEmpty()) return null;
         return city.trim();
+    }
+
+    private String normalizeBusinessType(String businessType) {
+        if (businessType == null || businessType.trim().isEmpty()) return null;
+        String normalized = businessType.trim().toUpperCase();
+        if (normalized.equals("ALL") || normalized.equals("TODOS")) return null;
+        if (normalized.equals("SALON")) return "BEAUTY_SALON";
+        if (normalized.equals("HAIR")) return "HAIR_SALON";
+        if (normalized.equals("NAIL")) return "NAILS";
+        return normalized;
+    }
+
+    private boolean matchesBusinessType(Branch branch, String businessType) {
+        if (businessType == null) return true;
+        Tenant tenant = branch.getTenant();
+        String tenantBusinessType = tenant == null || tenant.getBusinessType() == null
+                ? "BARBERSHOP"
+                : tenant.getBusinessType().trim().toUpperCase();
+        if (businessType.equals("BEAUTY_SALON")) {
+            return tenantBusinessType.equals("BEAUTY_SALON") || tenantBusinessType.equals("HAIR_SALON");
+        }
+        return tenantBusinessType.equals(businessType);
     }
 
     private String firstNonBlank(String first, String second) {
