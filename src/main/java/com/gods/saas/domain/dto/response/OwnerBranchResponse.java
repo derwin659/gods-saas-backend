@@ -13,6 +13,9 @@ public record OwnerBranchResponse(
         Boolean publicVisible,
         Boolean directoryEnabled,
         String publicDescription,
-        Long followerCount
+        Long followerCount,
+        Long directoryViews,
+        Long routeOpens,
+        Long bookingIntents
 ) {
 }

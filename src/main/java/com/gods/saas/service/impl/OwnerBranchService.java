@@ -5,6 +5,7 @@ import com.gods.saas.domain.dto.response.OwnerBranchResponse;
 import com.gods.saas.domain.model.Branch;
 import com.gods.saas.domain.model.Tenant;
 import com.gods.saas.domain.repository.BranchRepository;
+import com.gods.saas.domain.repository.AffiliatedDiscoveryEventRepository;
 import com.gods.saas.domain.repository.ClientBusinessFollowRepository;
 import com.gods.saas.domain.repository.TenantRepository;
 import com.gods.saas.exception.BusinessException;
@@ -23,6 +24,7 @@ public class OwnerBranchService {
 
     private final BranchRepository branchRepository;
     private final ClientBusinessFollowRepository followRepository;
+    private final AffiliatedDiscoveryEventRepository discoveryEventRepository;
     private final TenantRepository tenantRepository;
     private final SubscriptionService subscriptionService;
     private final CloudinaryStorageService cloudinaryStorageService;
@@ -48,7 +50,7 @@ public class OwnerBranchService {
         subscriptionService.validateBranchLimit(tenantId);
 
         Tenant tenant = tenantRepository.findById(tenantId)
-                .orElseThrow(() -> new BusinessException("No se encontrÃƒÂ³ el tenant"));
+                .orElseThrow(() -> new BusinessException("No se encontrÃƒÆ’Ã‚Â³ el tenant"));
 
         final String nombre = normalizeRequired(request.nombre());
 
@@ -78,7 +80,7 @@ public class OwnerBranchService {
     @Transactional
     public OwnerBranchResponse updateBranch(Long tenantId, Long branchId, OwnerBranchUpsertRequest request) {
         Branch branch = branchRepository.findByIdAndTenant_Id(branchId, tenantId)
-                .orElseThrow(() -> new BusinessException("No se encontrÃƒÂ³ la sede"));
+                .orElseThrow(() -> new BusinessException("No se encontrÃƒÆ’Ã‚Â³ la sede"));
 
         final String nombre = normalizeRequired(request.nombre());
 
@@ -107,7 +109,7 @@ public class OwnerBranchService {
     @Transactional
     public void updateStatus(Long tenantId, Long branchId, Boolean activo) {
         Branch branch = branchRepository.findByIdAndTenant_Id(branchId, tenantId)
-                .orElseThrow(() -> new BusinessException("No se encontrÃƒÂ³ la sede"));
+                .orElseThrow(() -> new BusinessException("No se encontrÃƒÆ’Ã‚Â³ la sede"));
 
         branch.setActivo(Boolean.TRUE.equals(activo));
         branchRepository.save(branch);
@@ -116,7 +118,7 @@ public class OwnerBranchService {
     @Transactional
     public OwnerBranchResponse uploadImage(Long tenantId, Long branchId, MultipartFile file) {
         Branch branch = branchRepository.findByIdAndTenant_Id(branchId, tenantId)
-                .orElseThrow(() -> new BusinessException("No se encontrÃƒÂ³ la sede"));
+                .orElseThrow(() -> new BusinessException("No se encontrÃƒÆ’Ã‚Â³ la sede"));
 
         String oldPublicId = branch.getImagePublicId();
 
@@ -138,7 +140,7 @@ public class OwnerBranchService {
     @Transactional
     public OwnerBranchResponse deleteImage(Long tenantId, Long branchId) {
         Branch branch = branchRepository.findByIdAndTenant_Id(branchId, tenantId)
-                .orElseThrow(() -> new BusinessException("No se encontrÃƒÂ³ la sede"));
+                .orElseThrow(() -> new BusinessException("No se encontrÃƒÆ’Ã‚Â³ la sede"));
 
         String oldPublicId = branch.getImagePublicId();
 
@@ -168,7 +170,10 @@ public class OwnerBranchService {
                 Boolean.TRUE.equals(branch.getPublicVisible()),
                 Boolean.TRUE.equals(branch.getDirectoryEnabled()),
                 branch.getPublicDescription(),
-                followRepository.countByTenant_Id(branch.getTenant().getId())
+                followRepository.countByTenant_Id(branch.getTenant().getId()),
+                discoveryEventRepository.countByTenant_IdAndBranch_IdAndEventType(branch.getTenant().getId(), branch.getId(), "VIEW"),
+                discoveryEventRepository.countByTenant_IdAndBranch_IdAndEventType(branch.getTenant().getId(), branch.getId(), "ROUTE"),
+                discoveryEventRepository.countByTenant_IdAndBranch_IdAndEventType(branch.getTenant().getId(), branch.getId(), "BOOKING_INTENT")
         );
     }
     private String normalizeRequired(String value) {

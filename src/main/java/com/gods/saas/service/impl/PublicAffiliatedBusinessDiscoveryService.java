@@ -3,10 +3,12 @@ package com.gods.saas.service.impl;
 import com.gods.saas.domain.dto.response.PublicAffiliatedBranchResponse;
 import com.gods.saas.domain.dto.response.PublicAffiliatedBranchDetailResponse;
 import com.gods.saas.domain.model.BarberAvailability;
+import com.gods.saas.domain.model.AffiliatedDiscoveryEvent;
 import com.gods.saas.domain.model.Branch;
 import com.gods.saas.domain.model.Tenant;
 import com.gods.saas.domain.repository.BranchRepository;
 import com.gods.saas.domain.repository.BarberAvailabilityRepository;
+import com.gods.saas.domain.repository.AffiliatedDiscoveryEventRepository;
 import com.gods.saas.domain.repository.PromotionRepository;
 import com.gods.saas.domain.repository.ServiceRepository;
 import com.gods.saas.exception.BusinessException;
@@ -31,6 +33,7 @@ public class PublicAffiliatedBusinessDiscoveryService {
     private final BarberAvailabilityRepository availabilityRepository;
     private final ServiceRepository serviceRepository;
     private final PromotionRepository promotionRepository;
+    private final AffiliatedDiscoveryEventRepository eventRepository;
 
     @Transactional(readOnly = true)
     public List<PublicAffiliatedBranchResponse> search(Double latitude, Double longitude, String city, String businessType, String q, Double radiusKm, Integer limit) {
@@ -55,6 +58,19 @@ public class PublicAffiliatedBusinessDiscoveryService {
                 .toList();
     }
 
+    @Transactional
+    public void recordEvent(Long branchId, String eventType) {
+        String normalized = eventType == null ? "" : eventType.trim().toUpperCase();
+        if (!java.util.Set.of("VIEW", "ROUTE", "BOOKING_INTENT").contains(normalized)) {
+            throw new BusinessException("Tipo de evento no valido");
+        }
+        Branch branch = branchRepository
+                .findByIdAndActivoTrueAndPublicVisibleTrueAndDirectoryEnabledTrue(branchId)
+                .filter(item -> item.getTenant() != null && Boolean.TRUE.equals(item.getTenant().getActive()))
+                .orElseThrow(() -> new BusinessException("Negocio afiliado no disponible"));
+        eventRepository.save(AffiliatedDiscoveryEvent.builder()
+                .tenant(branch.getTenant()).branch(branch).eventType(normalized).build());
+    }
     @Transactional(readOnly = true)
     public PublicAffiliatedBranchDetailResponse detail(Long branchId) {
         Branch branch = branchRepository
