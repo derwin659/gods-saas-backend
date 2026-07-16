@@ -1,13 +1,22 @@
 package com.gods.saas.service.impl;
 
 import com.gods.saas.domain.dto.response.PublicAffiliatedBranchResponse;
+import com.gods.saas.domain.dto.response.PublicAffiliatedBranchDetailResponse;
+import com.gods.saas.domain.model.BarberAvailability;
 import com.gods.saas.domain.model.Branch;
 import com.gods.saas.domain.model.Tenant;
 import com.gods.saas.domain.repository.BranchRepository;
+import com.gods.saas.domain.repository.BarberAvailabilityRepository;
+import com.gods.saas.domain.repository.PromotionRepository;
+import com.gods.saas.domain.repository.ServiceRepository;
+import com.gods.saas.exception.BusinessException;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 
@@ -19,6 +28,9 @@ public class PublicAffiliatedBusinessDiscoveryService {
     private static final double MAX_RADIUS_KM = 50.0;
 
     private final BranchRepository branchRepository;
+    private final BarberAvailabilityRepository availabilityRepository;
+    private final ServiceRepository serviceRepository;
+    private final PromotionRepository promotionRepository;
 
     @Transactional(readOnly = true)
     public List<PublicAffiliatedBranchResponse> search(Double latitude, Double longitude, String city, String businessType, Double radiusKm, Integer limit) {
@@ -41,6 +53,55 @@ public class PublicAffiliatedBusinessDiscoveryService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public PublicAffiliatedBranchDetailResponse detail(Long branchId) {
+        Branch branch = branchRepository
+                .findByIdAndActivoTrueAndPublicVisibleTrueAndDirectoryEnabledTrue(branchId)
+                .filter(item -> item.getTenant() != null && Boolean.TRUE.equals(item.getTenant().getActive()))
+                .orElseThrow(() -> new BusinessException("Negocio afiliado no disponible"));
+        Long tenantId = branch.getTenant().getId();
+        int dayOfWeek = LocalDate.now().getDayOfWeek().getValue();
+        List<BarberAvailability> availability = availabilityRepository
+                .findByTenant_IdAndBranch_IdAndDayOfWeekAndIsWorkingTrueOrderByStartTimeAsc(
+                        tenantId, branchId, dayOfWeek);
+        LocalTime opensAt = availability.stream().map(BarberAvailability::getStartTime)
+                .filter(java.util.Objects::nonNull).min(LocalTime::compareTo).orElse(null);
+        LocalTime closesAt = availability.stream().map(BarberAvailability::getEndTime)
+                .filter(java.util.Objects::nonNull).max(LocalTime::compareTo).orElse(null);
+        LocalTime now = LocalTime.now();
+        boolean openNow = opensAt != null && closesAt != null
+                && !now.isBefore(opensAt) && now.isBefore(closesAt);
+        DateTimeFormatter timeFormat = DateTimeFormatter.ofPattern("HH:mm");
+        String todayHours = opensAt == null || closesAt == null
+                ? null : opensAt.format(timeFormat) + " - " + closesAt.format(timeFormat);
+        String statusLabel = openNow
+                ? "Abierto ahora"
+                : opensAt == null
+                    ? "Horario no disponible"
+                    : now.isBefore(opensAt)
+                        ? "Abre a las " + opensAt.format(timeFormat)
+                        : "Cerrado hoy";
+
+        var services = serviceRepository
+                .findByTenant_IdAndActivoTrueAndDeletedAtIsNullOrderByNombreAsc(tenantId)
+                .stream().limit(8)
+                .map(item -> new PublicAffiliatedBranchDetailResponse.PublicServiceSummary(
+                        item.getId(), item.getNombre(), item.getDescripcion(), item.getCategoria(),
+                        item.getDuracionMinutos(), item.getPrecio(), item.getPrecioVariable(), item.getImageUrl()))
+                .toList();
+        var promotions = promotionRepository.findActiveClientPromotions(tenantId, 0).stream()
+                .filter(item -> item.getBranch() == null || branchId.equals(item.getBranch().getId()))
+                .filter(item -> !item.isSoloClientesConPuntos())
+                .limit(5)
+                .map(item -> new PublicAffiliatedBranchDetailResponse.PublicPromotionSummary(
+                        item.getId(), item.getTitulo(), item.getSubtitulo(), item.getDescripcion(),
+                        item.getBadge(), item.getImageUrl(), item.getPriceText()))
+                .toList();
+
+        return new PublicAffiliatedBranchDetailResponse(
+                toResponse(branch, false, null, null), openNow, statusLabel,
+                todayHours, services, promotions);
+    }
     private PublicAffiliatedBranchResponse toResponse(Branch branch, boolean hasLocation, Double latitude, Double longitude) {
         Tenant tenant = branch.getTenant();
         Double distance = null;

@@ -25,6 +25,10 @@ public interface BarberAvailabilityRepository extends JpaRepository<BarberAvaila
             Integer dayOfWeek
     );
 
+    List<BarberAvailability> findByTenant_IdAndBranch_IdAndDayOfWeekAndIsWorkingTrueOrderByStartTimeAsc(
+            Long tenantId, Long branchId, Integer dayOfWeek
+    );
+
     void deleteByTenant_IdAndBranch_IdAndBarber_Id(
             Long tenantId,
             Long branchId,
