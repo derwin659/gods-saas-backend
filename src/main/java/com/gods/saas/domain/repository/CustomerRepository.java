@@ -71,6 +71,17 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
 
     Optional<Customer> findByTenant_IdAndTelefono(Long tenantId, String telefono);
 
+    @Query("""
+        select c
+        from Customer c
+        join fetch c.tenant t
+        where c.telefono = :telefono
+          and coalesce(c.activo, true) = true
+          and coalesce(t.active, true) = true
+        order by t.nombre asc
+    """)
+    List<Customer> findActiveByPhoneAcrossTenants(@Param("telefono") String telefono);
+
 
 
 
