@@ -102,6 +102,14 @@ public class UserController {
         Long tenantId = targetUser.getTenant().getId();
         Long actorUserId = extractUserId(authentication);
 
+        boolean targetIsOwner = userTenantRoleRepository.existsByUser_IdAndTenant_IdAndRole(
+                targetUser.getId(), tenantId, RoleType.OWNER);
+        if (targetIsOwner) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.CONFLICT,
+                    "No puedes cambiar el rol de un owner. Conserva OWNER y agrega BARBER como rol adicional.");
+        }
+
         boolean isOwner = userTenantRoleRepository.existsByUserIdAndTenantIdAndRoleIn(
                 actorUserId,
                 tenantId,

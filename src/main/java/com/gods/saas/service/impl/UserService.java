@@ -532,6 +532,15 @@ public class UserService {
         AppUser user = userRepository.findByIdAndTenantId(userId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
+        boolean userHasOwnerRole = userTenantRoleRepository.existsByUser_IdAndTenant_IdAndRole(
+                userId, tenantId, RoleType.OWNER);
+        if (userHasOwnerRole) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "No puedes cambiar el rol del owner. Conserva OWNER y agrega BARBER como rol adicional."
+            );
+        }
+
         String currentRole = user.getRol() == null
                 ? ""
                 : user.getRol().trim().toUpperCase(Locale.ROOT);
@@ -573,17 +582,18 @@ public class UserService {
 
         List<UserTenantRole> tenantRoles = userTenantRoleRepository
                 .findByUser_IdAndTenant_Id(userId, tenantId);
+        final Branch assignedBranch = branch;
         if (tenantRoles.isEmpty()) {
             tenantRoles = List.of(UserTenantRole.builder()
                     .user(saved)
                     .tenant(new Tenant(tenantId))
-                    .branch(branch)
+                    .branch(assignedBranch)
                     .role(RoleType.valueOf(newRole))
                     .build());
         } else {
             tenantRoles.forEach(role -> {
                 role.setRole(RoleType.valueOf(newRole));
-                role.setBranch(branch);
+                role.setBranch(assignedBranch);
             });
         }
         userTenantRoleRepository.saveAll(tenantRoles);
