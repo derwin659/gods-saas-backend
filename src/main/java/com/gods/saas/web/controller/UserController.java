@@ -138,13 +138,18 @@ public class UserController {
 
         RoleType targetRole = RoleType.valueOf(targetRoleRaw);
 
-        UserTenantRole userTenantRole = userTenantRoleRepository
-                .findFirstByUser_IdAndTenant_IdOrderByIdAsc(targetUser.getId(), tenantId)
-                .orElseThrow(() -> new RuntimeException("El usuario no tiene rol asignado en este tenant."));
-
-        userTenantRole.setRole(targetRole);
-        userTenantRole.setBranch(branch);
-        userTenantRoleRepository.save(userTenantRole);
+        List<UserTenantRole> tenantRoles = userTenantRoleRepository
+                .findByUser_IdAndTenant_Id(targetUser.getId(), tenantId);
+        if (tenantRoles.isEmpty()) {
+            throw new RuntimeException("El usuario no tiene rol asignado en este tenant.");
+        }
+        // Un usuario puede tener registros por varias sedes. Actualizarlos todos
+        // evita que una entrada ADMIN antigua siga apareciendo al iniciar sesión.
+        tenantRoles.forEach(role -> {
+            role.setRole(targetRole);
+            role.setBranch(branch);
+        });
+        userTenantRoleRepository.saveAll(tenantRoles);
 
         // Mantener sincronizado app_user para listados antiguos y compatibilidad.
         targetUser.setRol(targetRoleRaw);

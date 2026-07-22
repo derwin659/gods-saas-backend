@@ -571,23 +571,22 @@ public class UserService {
 
         AppUser saved = userRepository.save(user);
 
-        UserTenantRole utr = userTenantRoleRepository
-                .findFirstByUser_IdAndTenant_IdOrderByIdAsc(userId, tenantId)
-                .orElse(null);
-
-        if (utr == null) {
-            utr = UserTenantRole.builder()
+        List<UserTenantRole> tenantRoles = userTenantRoleRepository
+                .findByUser_IdAndTenant_Id(userId, tenantId);
+        if (tenantRoles.isEmpty()) {
+            tenantRoles = List.of(UserTenantRole.builder()
                     .user(saved)
                     .tenant(new Tenant(tenantId))
                     .branch(branch)
                     .role(RoleType.valueOf(newRole))
-                    .build();
+                    .build());
         } else {
-            utr.setRole(RoleType.valueOf(newRole));
-            utr.setBranch(branch);
+            tenantRoles.forEach(role -> {
+                role.setRole(RoleType.valueOf(newRole));
+                role.setBranch(branch);
+            });
         }
-
-        userTenantRoleRepository.save(utr);
+        userTenantRoleRepository.saveAll(tenantRoles);
 
         return AppUserResponse.from(saved);
     }

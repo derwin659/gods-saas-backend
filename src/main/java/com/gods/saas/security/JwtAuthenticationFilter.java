@@ -1,6 +1,8 @@
 package com.gods.saas.security;
 
 import com.gods.saas.service.impl.JwtService;
+import com.gods.saas.domain.model.RoleType;
+import com.gods.saas.domain.repository.UserTenantRoleRepository;
 import io.jsonwebtoken.Claims;
 import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.JwtException;
@@ -25,6 +27,7 @@ import java.util.Map;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtService jwtService;
+    private final UserTenantRoleRepository userTenantRoleRepository;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request,
@@ -118,6 +121,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Long userId = userIdNum.longValue();
                 Long tenantId = tenantIdNum != null ? tenantIdNum.longValue() : null;
                 Long branchId = branchIdNum != null ? branchIdNum.longValue() : null;
+
+                // El JWT puede haber sido emitido antes de un cambio de rol.
+                // La base sigue siendo la fuente de verdad para permisos internos.
+                if (tenantId != null && branchId != null) {
+                    RoleType tokenRole;
+                    try {
+                        tokenRole = RoleType.valueOf(role.trim().toUpperCase());
+                    } catch (IllegalArgumentException invalidRole) {
+                        throw new JwtException("El token contiene un rol interno inválido");
+                    }
+                    boolean currentRole = userTenantRoleRepository
+                            .existsByUser_IdAndTenant_IdAndBranch_IdAndRole(userId, tenantId, branchId, tokenRole);
+                    if (!currentRole) {
+                        throw new JwtException("La sesión ya no corresponde al rol actual del usuario");
+                    }
+                }
 
                 SimpleGrantedAuthority authority =
                         new SimpleGrantedAuthority("ROLE_" + role.toUpperCase());
