@@ -12,6 +12,8 @@ public class CashMovementResponse {
     private Long id;
     private String type;
     private String paymentMethod;
+    private String fundingSource;
+    private Long fundMovementId;
     private String fromPaymentMethod;
     private String toPaymentMethod;
     private BigDecimal amount;

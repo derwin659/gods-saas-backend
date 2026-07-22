@@ -2,6 +2,7 @@ package com.gods.saas.domain.dto.request;
 
 
 import com.gods.saas.domain.enums.PaymentMethod;
+import com.gods.saas.domain.enums.CashFundingSource;
 import lombok.Data;
 
 import java.math.BigDecimal;
@@ -20,6 +21,7 @@ public class CreateBarberPaymentRequest {
      */
     private BigDecimal amountPaid;
     private PaymentMethod paymentMethod;
+    private CashFundingSource fundingSource;
 
     /**
      * Modo nuevo: pago mixto.

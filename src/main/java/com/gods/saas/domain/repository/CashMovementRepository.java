@@ -148,6 +148,7 @@ order by cm.movementDate desc
     where cm.tenant.id = :tenantId
       and (:branchId is null or cm.branch.id = :branchId)
       and cm.paymentMethod in (com.gods.saas.domain.enums.PaymentMethod.CASH, com.gods.saas.domain.enums.PaymentMethod.EFECTIVO)
+      and (cm.fundingSource is null or cm.fundingSource = com.gods.saas.domain.enums.CashFundingSource.CASH_REGISTER)
       and cm.movementDate >= :start
       and cm.movementDate < :end
     """)

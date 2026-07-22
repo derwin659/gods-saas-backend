@@ -72,6 +72,13 @@ public class CashRegister {
     @Column(name = "closing_note", length = 500)
     private String closingNote;
 
+    @Builder.Default
+    @Column(name = "reconciliation_required", nullable = false)
+    private Boolean reconciliationRequired = false;
+
+    @Column(name = "reconciliation_note", length = 500)
+    private String reconciliationNote;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
@@ -82,5 +89,6 @@ public class CashRegister {
     public void prePersist() {
         if (status == null) status = CashRegisterStatus.OPEN;
         if (openingAmount == null) openingAmount = BigDecimal.ZERO;
+        if (reconciliationRequired == null) reconciliationRequired = false;
     }
 }

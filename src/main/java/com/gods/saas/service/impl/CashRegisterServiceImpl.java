@@ -4,12 +4,14 @@ import com.gods.saas.domain.dto.request.CashMovementRequest;
 import com.gods.saas.domain.dto.request.CashFundMovementRequest;
 import com.gods.saas.domain.dto.request.CloseCashRegisterRequest;
 import com.gods.saas.domain.dto.request.OpenCashRegisterRequest;
+import com.gods.saas.domain.dto.request.ReconcileCashRegisterRequest;
 import com.gods.saas.domain.dto.response.CashMovementResponse;
 import com.gods.saas.domain.dto.response.CashFundMovementResponse;
 import com.gods.saas.domain.dto.response.CashFundSummaryResponse;
 import com.gods.saas.domain.dto.response.CashAuditLogResponse;
 import com.gods.saas.domain.dto.response.CashRegisterResponse;
 import com.gods.saas.domain.enums.CashMovementType;
+import com.gods.saas.domain.enums.CashFundingSource;
 import com.gods.saas.domain.enums.CashFundMovementType;
 import com.gods.saas.domain.enums.CashRegisterStatus;
 import com.gods.saas.domain.enums.PaymentMethod;
@@ -126,6 +128,69 @@ public class CashRegisterServiceImpl implements CashRegisterService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public CashRegisterResponse getPendingReconciliation(Long tenantId, Long branchId) {
+        CashRegister cashRegister = cashRegisterRepository
+                .findFirstByTenant_IdAndBranch_IdAndReconciliationRequiredTrueOrderByOpenedAtDesc(tenantId, branchId)
+                .orElseThrow(() -> new GlobalExceptionHandler.ResourceNotFoundException(
+                        "No hay cierres pendientes de conciliacion en esta sede."
+                ));
+        return mapResponse(cashRegister);
+    }
+
+    @Override
+    public CashRegisterResponse reconcile(Long tenantId, Long branchId, Long cashRegisterId, Long actorUserId, ReconcileCashRegisterRequest request) {
+        validateCashActor(actorUserId, tenantId);
+        CashRegister cashRegister = getCashRegisterInBranch(tenantId, branchId, cashRegisterId);
+        if (!Boolean.TRUE.equals(cashRegister.getReconciliationRequired())) {
+            throw new IllegalStateException("Esta caja no tiene una conciliacion pendiente.");
+        }
+        AppUser actor = appUserRepository.findById(actorUserId)
+                .orElseThrow(() -> new EntityNotFoundException("Usuario autenticado no encontrado."));
+        CashTotals totals = calculateCashTotals(cashRegister);
+        BigDecimal counted = request.getClosingAmountCounted() == null
+                ? totals.expectedCash()
+                : safe(request.getClosingAmountCounted());
+        if (counted.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalStateException("El efectivo contado no puede ser negativo.");
+        }
+
+        Map<String, BigDecimal> availableByMethod = calculatePaymentMethodBalances(cashRegister, null);
+        Map<String, BigDecimal> requestedDeposits = new LinkedHashMap<>();
+        if (request.getFundDeposits() != null) {
+            for (Map.Entry<PaymentMethod, BigDecimal> entry : request.getFundDeposits().entrySet()) {
+                if (entry.getKey() == null) continue;
+                BigDecimal amount = safe(entry.getValue());
+                if (amount.compareTo(BigDecimal.ZERO) <= 0) continue;
+                String code = normalizePaymentMethodCode(entry.getKey().name());
+                requestedDeposits.put(code, requestedDeposits.getOrDefault(code, BigDecimal.ZERO).add(amount));
+            }
+        }
+        for (Map.Entry<String, BigDecimal> entry : requestedDeposits.entrySet()) {
+            String code = entry.getKey();
+            BigDecimal amount = entry.getValue();
+            BigDecimal available = "CASH".equals(code)
+                    ? counted
+                    : availableByMethod.getOrDefault(code, BigDecimal.ZERO);
+            if (amount.compareTo(available) > 0) {
+                throw new IllegalStateException("El monto enviado al fondo supera el saldo disponible en " + paymentMethodLabel(code) + ".");
+            }
+            createFundMovementEntity(
+                    cashRegister.getTenant(), cashRegister.getBranch(), cashRegister, actor,
+                    CashFundMovementType.CLOSING_DEPOSIT, PaymentMethod.valueOf(code), amount,
+                    "Saldo conciliado enviado al fondo acumulado", trimToNull(request.getNote()),
+                    LocalDateTime.now(getZoneIdForTenant(tenantId))
+            );
+        }
+        cashRegister.setClosingAmountExpected(totals.expectedCash());
+        cashRegister.setClosingAmountCounted(counted);
+        cashRegister.setDifferenceAmount(counted.subtract(totals.expectedCash()));
+        cashRegister.setReconciliationRequired(false);
+        cashRegister.setReconciliationNote(trimToNull(request.getNote()));
+        cashRegisterRepository.save(cashRegister);
+        return mapResponse(cashRegister);
+    }
+    @Override
     public CashRegisterResponse close(Long tenantId, Long branchId, Long cashRegisterId, CloseCashRegisterRequest request) {
         autoCloseOpenRegisterIfExpired(tenantId, branchId);
 
@@ -147,6 +212,8 @@ public class CashRegisterServiceImpl implements CashRegisterService {
         cashRegister.setClosedAt(LocalDateTime.now(zoneId));
         cashRegister.setClosingNote(request.getClosingNote());
         cashRegister.setStatus(CashRegisterStatus.CLOSED);
+        cashRegister.setReconciliationRequired(false);
+        cashRegister.setReconciliationNote(null);
 
         cashRegisterRepository.save(cashRegister);
 
@@ -349,6 +416,24 @@ public class CashRegisterServiceImpl implements CashRegisterService {
             barberUser = null;
         }
 
+        CashFundingSource fundingSource = request.getFundingSource() == null
+                ? CashFundingSource.CASH_REGISTER
+                : request.getFundingSource();
+        CashFundMovement fundMovement = null;
+        boolean cashOutflow = type == CashMovementType.EXPENSE
+                || type == CashMovementType.ADVANCE_BARBER
+                || type == CashMovementType.PAYMENT_BARBER;
+        if (cashOutflow && fundingSource == CashFundingSource.CASH_REGISTER) {
+            validateAvailableBalanceForTransfer(movementCashRegister, paymentMethod, amount, null);
+        }
+        if (cashOutflow && fundingSource == CashFundingSource.ACCUMULATED_FUND) {
+            validateFundAvailable(movementCashRegister.getBranch(), paymentMethod, amount);
+            fundMovement = createFundMovementEntity(
+                    movementCashRegister.getTenant(), movementCashRegister.getBranch(), movementCashRegister, actor,
+                    CashFundMovementType.EXPENSE, paymentMethod, amount,
+                    resolveConcept(type, request.getConcept()), trimToNull(request.getNote()), movementDate
+            );
+        }
         CashMovement movement = CashMovement.builder()
                 .tenant(movementCashRegister.getTenant())
                 .branch(movementCashRegister.getBranch())
@@ -359,6 +444,8 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 .paymentMethod(paymentMethod)
                 .fromPaymentMethod(fromPaymentMethod)
                 .toPaymentMethod(toPaymentMethod)
+                .fundingSource(fundingSource)
+                .fundMovement(fundMovement)
                 .amount(amount)
                 .concept(resolveConcept(type, request.getConcept()))
                 .note(trimToNull(request.getNote()))
@@ -366,7 +453,9 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 .createdAt(now)
                 .build();
 
-        return mapMovementResponse(cashMovementRepository.save(movement));
+        CashMovement savedMovement = cashMovementRepository.save(movement);
+        recalculateClosedRegisterAfterMovementChange(movementCashRegister);
+        return mapMovementResponse(savedMovement);
     }
 
     private LocalDateTime resolveMovementDate(
@@ -479,6 +568,18 @@ public class CashRegisterServiceImpl implements CashRegisterService {
             throw new IllegalStateException("El monto debe ser mayor a cero.");
         }
 
+        CashFundingSource currentFundingSource = movement.getFundingSource() == null
+                ? CashFundingSource.CASH_REGISTER
+                : movement.getFundingSource();
+        CashFundingSource requestedFundingSource = request.getFundingSource() == null
+                ? currentFundingSource
+                : request.getFundingSource();
+        if (requestedFundingSource != currentFundingSource) {
+            throw new IllegalStateException("Para cambiar el origen del dinero elimina el movimiento y registralo nuevamente.");
+        }
+        if (currentFundingSource == CashFundingSource.ACCUMULATED_FUND) {
+            throw new IllegalStateException("Para corregir un gasto pagado desde fondo, eliminalo y registralo nuevamente.");
+        }
         CashMovementType type = request.getType() == null ? movement.getType() : request.getType();
         AppUser barberUser = resolveBarberUser(tenantId, branchId, request.getBarberUserId(), type);
         PaymentMethod paymentMethod = request.getPaymentMethod() == null
@@ -486,6 +587,15 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 : request.getPaymentMethod();
         PaymentMethod fromPaymentMethod = null;
         PaymentMethod toPaymentMethod = null;
+
+        CashRegister targetRegister = cashRegister;
+        LocalDateTime targetMovementDate = movement.getMovementDate();
+        if (request.getMovementDate() != null) {
+            targetMovementDate = resolveMovementDate(request, now, zoneId);
+            targetRegister = resolveCashRegisterForMovementDate(
+                    tenantId, branchId, cashRegister, targetMovementDate
+            );
+        }
 
         if (type == CashMovementType.PAYMENT_METHOD_TRANSFER) {
             fromPaymentMethod = request.getFromPaymentMethod() == null
@@ -495,9 +605,16 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                     ? movement.getToPaymentMethod()
                     : request.getToPaymentMethod();
             validatePaymentTransfer(fromPaymentMethod, toPaymentMethod);
-            validateAvailableBalanceForTransfer(cashRegister, fromPaymentMethod, amount, movement.getId());
+            validateAvailableBalanceForTransfer(targetRegister, fromPaymentMethod, amount, movement.getId());
             paymentMethod = toPaymentMethod;
             barberUser = null;
+        }
+
+        boolean outflow = type == CashMovementType.EXPENSE
+                || type == CashMovementType.ADVANCE_BARBER
+                || type == CashMovementType.PAYMENT_BARBER;
+        if (outflow && currentFundingSource == CashFundingSource.CASH_REGISTER) {
+            validateAvailableBalanceForTransfer(targetRegister, paymentMethod, amount, movement.getId());
         }
 
         movement.setType(type);
@@ -510,17 +627,19 @@ public class CashRegisterServiceImpl implements CashRegisterService {
         movement.setBarberUser(barberUser);
 
         if (request.getMovementDate() != null) {
-            LocalDateTime movementDate = resolveMovementDate(request, now, zoneId);
-            CashRegister movementCashRegister = resolveCashRegisterForMovementDate(
-                    tenantId, branchId, cashRegister, movementDate
-            );
-            movement.setCashRegister(movementCashRegister);
-            movement.setTenant(movementCashRegister.getTenant());
-            movement.setBranch(movementCashRegister.getBranch());
-            movement.setMovementDate(movementDate);
+            movement.setCashRegister(targetRegister);
+            movement.setTenant(targetRegister.getTenant());
+            movement.setBranch(targetRegister.getBranch());
+            movement.setMovementDate(targetMovementDate);
         }
 
-        return mapMovementResponse(cashMovementRepository.save(movement));
+        CashRegister previousRegister = cashRegister;
+        CashMovement savedMovement = cashMovementRepository.save(movement);
+        recalculateClosedRegisterAfterMovementChange(previousRegister);
+        if (!previousRegister.getId().equals(savedMovement.getCashRegister().getId())) {
+            recalculateClosedRegisterAfterMovementChange(savedMovement.getCashRegister());
+        }
+        return mapMovementResponse(savedMovement);
     }
 
     @Override
@@ -535,9 +654,28 @@ public class CashRegisterServiceImpl implements CashRegisterService {
         barberPaymentRepository.findByCashMovement_Id(movementId)
                 .ifPresent(barberPaymentRepository::delete);
 
+        CashFundMovement linkedFundMovement = movement.getFundMovement();
         cashMovementRepository.delete(movement);
+        cashMovementRepository.flush();
+        if (linkedFundMovement != null) {
+            cashFundMovementRepository.delete(linkedFundMovement);
+        }
+        recalculateClosedRegisterAfterMovementChange(cashRegister);
     }
 
+    private void recalculateClosedRegisterAfterMovementChange(CashRegister cashRegister) {
+        if (cashRegister == null || cashRegister.getStatus() == CashRegisterStatus.OPEN) {
+            return;
+        }
+        CashTotals recalculated = calculateCashTotals(cashRegister);
+        BigDecimal expected = recalculated.expectedCash();
+        BigDecimal counted = safe(cashRegister.getClosingAmountCounted());
+        cashRegister.setClosingAmountExpected(expected);
+        cashRegister.setDifferenceAmount(counted.subtract(expected));
+        cashRegister.setReconciliationRequired(true);
+        cashRegister.setReconciliationNote("Un movimiento posterior modifico esta caja cerrada. Revisa y concilia el saldo.");
+        cashRegisterRepository.save(cashRegister);
+    }
     private void autoCloseOpenRegisterIfExpired(Long tenantId, Long branchId) {
         CashRegister openRegister = cashRegisterRepository
                 .findByTenant_IdAndBranch_IdAndStatus(tenantId, branchId, CashRegisterStatus.OPEN)
@@ -563,6 +701,8 @@ public class CashRegisterServiceImpl implements CashRegisterService {
         openRegister.setClosedAt(LocalDateTime.now(zoneId));
         openRegister.setClosingNote("Cierre automático por cambio de día según zona horaria del tenant.");
         openRegister.setStatus(CashRegisterStatus.AUTO_CLOSED);
+        openRegister.setReconciliationRequired(true);
+        openRegister.setReconciliationNote("Confirma el efectivo, envia el saldo al fondo o registra el gasto pendiente.");
 
         cashRegisterRepository.save(openRegister);
     }
@@ -625,6 +765,8 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 .closedAt(cashRegister.getClosedAt())
                 .openingNote(cashRegister.getOpeningNote())
                 .closingNote(cashRegister.getClosingNote())
+                .reconciliationRequired(Boolean.TRUE.equals(cashRegister.getReconciliationRequired()))
+                .reconciliationNote(cashRegister.getReconciliationNote())
                 .salesTotal(totals.salesTotal())
                 .cashSalesTotal(totals.cashSalesTotal())
                 .paymentMethodsSummary(paymentMethodsSummary)
@@ -960,6 +1102,13 @@ public class CashRegisterServiceImpl implements CashRegisterService {
     }
 
     private boolean affectsCashDrawer(CashMovement movement) {
+        boolean outflow = movement.getType() == CashMovementType.EXPENSE
+                || movement.getType() == CashMovementType.ADVANCE_BARBER
+                || movement.getType() == CashMovementType.PAYMENT_BARBER;
+        if (outflow && movement.getFundingSource() != null
+                && movement.getFundingSource() != CashFundingSource.CASH_REGISTER) {
+            return false;
+        }
         return movement.getPaymentMethod() == null
                 || movement.getPaymentMethod() == PaymentMethod.CASH
                 || movement.getPaymentMethod() == PaymentMethod.EFECTIVO;
@@ -970,6 +1119,8 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 .id(movement.getId())
                 .type(movement.getType() == null ? null : movement.getType().name())
                 .paymentMethod(movement.getPaymentMethod() == null ? null : movement.getPaymentMethod().name())
+                .fundingSource(movement.getFundingSource() == null ? "CASH_REGISTER" : movement.getFundingSource().name())
+                .fundMovementId(movement.getFundMovement() == null ? null : movement.getFundMovement().getId())
                 .fromPaymentMethod(movement.getFromPaymentMethod() == null ? null : movement.getFromPaymentMethod().name())
                 .toPaymentMethod(movement.getToPaymentMethod() == null ? null : movement.getToPaymentMethod().name())
                 .amount(safe(movement.getAmount()))
@@ -1237,6 +1388,10 @@ public class CashRegisterServiceImpl implements CashRegisterService {
             if (movement.getType() == CashMovementType.PAYMENT_METHOD_TRANSFER) {
                 addToPaymentSummary(totals, ignoredCounts, movement.getFromPaymentMethod(), movementAmount.negate(), 0L);
                 addToPaymentSummary(totals, ignoredCounts, movement.getToPaymentMethod(), movementAmount, 0L);
+                continue;
+            }
+
+            if (movement.getFundingSource() == CashFundingSource.ACCUMULATED_FUND || movement.getFundingSource() == CashFundingSource.EXTERNAL) {
                 continue;
             }
 

@@ -18,6 +18,9 @@ public interface CashRegisterRepository extends JpaRepository<CashRegister, Long
 
     Optional<CashRegister> findByIdAndTenant_Id(Long id, Long tenantId);
 
+    Optional<CashRegister> findFirstByTenant_IdAndBranch_IdAndReconciliationRequiredTrueOrderByOpenedAtDesc(
+            Long tenantId, Long branchId);
+
     List<CashRegister> findByTenant_IdAndBranch_IdAndOpenedAtBetweenOrderByOpenedAtDesc(
             Long tenantId,
             Long branchId,

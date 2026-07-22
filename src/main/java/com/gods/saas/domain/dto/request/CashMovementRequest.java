@@ -1,6 +1,7 @@
 package com.gods.saas.domain.dto.request;
 
 import com.gods.saas.domain.enums.CashMovementType;
+import com.gods.saas.domain.enums.CashFundingSource;
 import com.gods.saas.domain.enums.PaymentMethod;
 import lombok.Data;
 
@@ -15,6 +16,9 @@ public class CashMovementRequest {
      * Para INCOME, EXPENSE, ADVANCE_BARBER y PAYMENT_BARBER.
      */
     private PaymentMethod paymentMethod;
+
+    /** Origen real de la salida. Para registros previos se asume CASH_REGISTER. */
+    private CashFundingSource fundingSource;
 
     /**
      * Para PAYMENT_METHOD_TRANSFER.

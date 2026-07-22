@@ -6,6 +6,7 @@ import com.gods.saas.domain.dto.request.CashMovementRequest;
 import com.gods.saas.domain.dto.request.CashFundMovementRequest;
 import com.gods.saas.domain.dto.request.CloseCashRegisterRequest;
 import com.gods.saas.domain.dto.request.OpenCashRegisterRequest;
+import com.gods.saas.domain.dto.request.ReconcileCashRegisterRequest;
 import com.gods.saas.domain.dto.response.CashMovementResponse;
 import com.gods.saas.domain.dto.response.CashFundMovementResponse;
 import com.gods.saas.domain.dto.response.CashFundSummaryResponse;
@@ -53,6 +54,27 @@ public class CashRegisterController {
         return cashRegisterService.getCurrent(tenantId, effectiveBranchId);
     }
 
+    @GetMapping("/reconciliation-pending")
+    public CashRegisterResponse pendingReconciliation(
+            @RequestAttribute("tenantId") Long tenantId,
+            @RequestAttribute("branchId") Long sessionBranchId,
+            @RequestParam(required = false) Long branchId
+    ) {
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
+        return cashRegisterService.getPendingReconciliation(tenantId, effectiveBranchId);
+    }
+    @PostMapping("/{cashRegisterId}/reconcile")
+    public CashRegisterResponse reconcile(
+            @RequestAttribute("tenantId") Long tenantId,
+            @RequestAttribute("branchId") Long sessionBranchId,
+            @RequestAttribute("userId") Long userId,
+            @PathVariable Long cashRegisterId,
+            @RequestParam(required = false) Long branchId,
+            @RequestBody ReconcileCashRegisterRequest request
+    ) {
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
+        return cashRegisterService.reconcile(tenantId, effectiveBranchId, cashRegisterId, userId, request);
+    }
     @PostMapping("/{cashRegisterId}/close")
     public CashRegisterResponse close(
             @RequestAttribute("tenantId") Long tenantId,

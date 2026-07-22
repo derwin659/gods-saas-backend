@@ -1,6 +1,8 @@
 package com.gods.saas.service.impl;
 
 import com.gods.saas.domain.dto.request.CreateBarberPaymentRequest;
+import com.gods.saas.domain.dto.request.CashMovementRequest;
+import com.gods.saas.domain.dto.response.CashMovementResponse;
 import com.gods.saas.domain.dto.response.BarberAdvanceDetailResponse;
 import com.gods.saas.domain.dto.response.BarberPaymentPreviewResponse;
 import com.gods.saas.domain.dto.response.BarberPaymentResponse;
@@ -8,6 +10,7 @@ import com.gods.saas.domain.enums.*;
 import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.*;
 import com.gods.saas.service.impl.impl.BarberPaymentService;
+import com.gods.saas.service.impl.impl.CashRegisterService;
 import com.gods.saas.service.impl.impl.NotificationService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +36,7 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
     private final BarberBranchCompensationRepository barberBranchCompensationRepository;
     private final CashRegisterRepository cashRegisterRepository;
     private final CashMovementRepository cashMovementRepository;
+    private final CashRegisterService cashRegisterService;
     private final SaleRepository saleRepository;
     private final AppUserRepository appUserRepository;
     private final UserTenantRoleRepository userTenantRoleRepository;
@@ -228,6 +232,10 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 tenantId, branchId, cashRegister, movementDate
         );
 
+        CashFundingSource fundingSource = request.getFundingSource() == null
+                ? CashFundingSource.CASH_REGISTER
+                : request.getFundingSource();
+
         BigDecimal remainingAfterAll = preview.getPendingAmount().subtract(amountPaid).setScale(2, RoundingMode.HALF_UP);
         BarberPaymentStatus finalStatus = remainingAfterAll.compareTo(BigDecimal.ZERO) == 0
                 ? BarberPaymentStatus.PAID
@@ -245,22 +253,21 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                     ? concept + " (" + paymentMethodLabel(split.paymentMethod()) + " S/ " + split.amount().setScale(2, RoundingMode.HALF_UP) + ")"
                     : concept;
 
-            CashMovement movement = CashMovement.builder()
-                    .tenant(movementCashRegister.getTenant())
-                    .branch(movementCashRegister.getBranch())
-                    .cashRegister(movementCashRegister)
-                    .user(actor)
-                    .barberUser(barber)
-                    .type(CashMovementType.PAYMENT_BARBER)
-                    .paymentMethod(split.paymentMethod())
-                    .amount(split.amount())
-                    .concept(splitConcept)
-                    .note(trimToNull(request.getNote()))
-                    .movementDate(movementDate)
-                    .createdAt(now)
-                    .build();
+            CashMovementRequest movementRequest = new CashMovementRequest();
+            movementRequest.setType(CashMovementType.PAYMENT_BARBER);
+            movementRequest.setPaymentMethod(split.paymentMethod());
+            movementRequest.setFundingSource(fundingSource);
+            movementRequest.setAmount(split.amount());
+            movementRequest.setConcept(splitConcept);
+            movementRequest.setNote(trimToNull(request.getNote()));
+            movementRequest.setBarberUserId(barber.getId());
+            movementRequest.setMovementDate(request.getMovementDate());
 
-            movement = cashMovementRepository.save(movement);
+            CashMovementResponse createdMovement = cashRegisterService.createMovement(
+                    tenantId, branchId, cashRegisterId, actorUserId, movementRequest
+            );
+            CashMovement movement = cashMovementRepository.findByIdAndTenant_Id(createdMovement.getId(), tenantId)
+                    .orElseThrow(() -> new IllegalStateException("No se pudo registrar el movimiento del pago."));
 
             BigDecimal remainingForThisSplit = preview.getPendingAmount()
                     .subtract(accumulated)

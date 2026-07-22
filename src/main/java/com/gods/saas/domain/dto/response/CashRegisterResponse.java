@@ -26,6 +26,8 @@ public class CashRegisterResponse {
     private LocalDateTime closedAt;
     private String openingNote;
     private String closingNote;
+    private Boolean reconciliationRequired;
+    private String reconciliationNote;
     private BigDecimal salesTotal;
     private BigDecimal cashSalesTotal;
     private BigDecimal movementsIncome;

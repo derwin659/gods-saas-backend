@@ -4,6 +4,7 @@ import com.gods.saas.domain.dto.request.CashMovementRequest;
 import com.gods.saas.domain.dto.request.CashFundMovementRequest;
 import com.gods.saas.domain.dto.request.CloseCashRegisterRequest;
 import com.gods.saas.domain.dto.request.OpenCashRegisterRequest;
+import com.gods.saas.domain.dto.request.ReconcileCashRegisterRequest;
 import com.gods.saas.domain.dto.response.CashMovementResponse;
 import com.gods.saas.domain.dto.response.CashFundMovementResponse;
 import com.gods.saas.domain.dto.response.CashFundSummaryResponse;
@@ -18,6 +19,10 @@ public interface CashRegisterService {
     CashRegisterResponse open(Long tenantId, Long branchId, Long openedByUserId, OpenCashRegisterRequest request);
 
     CashRegisterResponse getCurrent(Long tenantId, Long branchId);
+
+    CashRegisterResponse getPendingReconciliation(Long tenantId, Long branchId);
+
+    CashRegisterResponse reconcile(Long tenantId, Long branchId, Long cashRegisterId, Long actorUserId, ReconcileCashRegisterRequest request);
 
     CashRegisterResponse close(Long tenantId, Long branchId, Long cashRegisterId, CloseCashRegisterRequest request);
 

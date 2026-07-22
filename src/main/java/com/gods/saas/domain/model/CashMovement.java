@@ -1,6 +1,7 @@
 package com.gods.saas.domain.model;
 
 import com.gods.saas.domain.enums.CashMovementType;
+import com.gods.saas.domain.enums.CashFundingSource;
 import com.gods.saas.domain.enums.PaymentMethod;
 import jakarta.persistence.*;
 import lombok.*;
@@ -68,6 +69,14 @@ public class CashMovement {
     @Column(name = "to_payment_method", length = 30)
     private PaymentMethod toPaymentMethod;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "funding_source", length = 30, nullable = false)
+    private CashFundingSource fundingSource;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "cash_fund_movement_id")
+    private CashFundMovement fundMovement;
+
     @Column(name = "amount", precision = 12, scale = 2, nullable = false)
     private BigDecimal amount;
 
@@ -90,5 +99,6 @@ public class CashMovement {
         if (movementDate == null) movementDate = now;
         if (createdAt == null) createdAt = now;
         if (amount == null) amount = BigDecimal.ZERO;
+        if (fundingSource == null) fundingSource = CashFundingSource.CASH_REGISTER;
     }
 }
