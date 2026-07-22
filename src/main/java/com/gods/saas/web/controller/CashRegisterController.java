@@ -19,6 +19,7 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -41,7 +42,7 @@ public class CashRegisterController {
     ) {
         adminPermissionService.checkPermission("CASH_OPEN");
         Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
-        return cashRegisterService.open(tenantId, effectiveBranchId, userId, request);
+        return protectFundData(cashRegisterService.open(tenantId, effectiveBranchId, userId, request));
     }
 
     @GetMapping("/current")
@@ -51,7 +52,7 @@ public class CashRegisterController {
             @RequestParam(required = false) Long branchId
     ) {
         Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
-        return cashRegisterService.getCurrent(tenantId, effectiveBranchId);
+        return protectFundData(cashRegisterService.getCurrent(tenantId, effectiveBranchId));
     }
 
     @GetMapping("/reconciliation-pending")
@@ -61,7 +62,7 @@ public class CashRegisterController {
             @RequestParam(required = false) Long branchId
     ) {
         Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
-        return cashRegisterService.getPendingReconciliation(tenantId, effectiveBranchId);
+        return protectFundData(cashRegisterService.getPendingReconciliation(tenantId, effectiveBranchId));
     }
     @PostMapping("/{cashRegisterId}/reconcile")
     public CashRegisterResponse reconcile(
@@ -73,7 +74,7 @@ public class CashRegisterController {
             @RequestBody ReconcileCashRegisterRequest request
     ) {
         Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
-        return cashRegisterService.reconcile(tenantId, effectiveBranchId, cashRegisterId, userId, request);
+        return protectFundData(cashRegisterService.reconcile(tenantId, effectiveBranchId, cashRegisterId, userId, request));
     }
     @PostMapping("/{cashRegisterId}/close")
     public CashRegisterResponse close(
@@ -84,7 +85,7 @@ public class CashRegisterController {
             @RequestBody CloseCashRegisterRequest request
     ) {
         Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
-        return cashRegisterService.close(tenantId, effectiveBranchId, cashRegisterId, request);
+        return protectFundData(cashRegisterService.close(tenantId, effectiveBranchId, cashRegisterId, request));
     }
 
     @GetMapping("/history")
@@ -96,7 +97,11 @@ public class CashRegisterController {
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
-        return cashRegisterService.history(tenantId, effectiveBranchId, from, to);
+        boolean canManageFund = canManageFund();
+        return cashRegisterService.history(tenantId, effectiveBranchId, from, to)
+                .stream()
+                .map(item -> protectFundData(item, canManageFund))
+                .toList();
     }
 
     @GetMapping("/audit")
@@ -119,6 +124,7 @@ public class CashRegisterController {
             @RequestAttribute("branchId") Long sessionBranchId,
             @RequestParam(required = false) Long branchId
     ) {
+        adminPermissionService.checkOwnerOrAdminPermission("CASH_FUND_MANAGE");
         Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return cashRegisterService.getFundSummary(tenantId, effectiveBranchId);
     }
@@ -129,6 +135,7 @@ public class CashRegisterController {
             @RequestAttribute("branchId") Long sessionBranchId,
             @RequestParam(required = false) Long branchId
     ) {
+        adminPermissionService.checkOwnerOrAdminPermission("CASH_FUND_MANAGE");
         Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return cashRegisterService.getFundMovements(tenantId, effectiveBranchId);
     }
@@ -141,7 +148,7 @@ public class CashRegisterController {
             @RequestParam(required = false) Long branchId,
             @RequestBody CashFundMovementRequest request
     ) {
-        adminPermissionService.checkPermission("CASH_REGISTER_EXPENSE");
+        adminPermissionService.checkOwnerOrAdminPermission("CASH_FUND_MANAGE");
         Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return cashRegisterService.createFundMovement(tenantId, effectiveBranchId, userId, request);
     }
@@ -153,7 +160,7 @@ public class CashRegisterController {
             @RequestParam(required = false) Long branchId
     ) {
         Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
-        return cashRegisterService.getMovements(tenantId, effectiveBranchId, cashRegisterId);
+        return protectFundMovements(cashRegisterService.getMovements(tenantId, effectiveBranchId, cashRegisterId), canManageFund());
     }
 
     @PostMapping("/{cashRegisterId}/movements")
@@ -195,5 +202,31 @@ public class CashRegisterController {
         Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         cashRegisterService.deleteMovement(tenantId, effectiveBranchId, movementId, userId, auditReason);
         return ResponseEntity.noContent().build();
+    }
+    private boolean canManageFund() {
+        return adminPermissionService.hasCurrentOwnerOrAdminPermission("CASH_FUND_MANAGE");
+    }
+
+    private CashRegisterResponse protectFundData(CashRegisterResponse response) {
+        return protectFundData(response, canManageFund());
+    }
+
+    private CashRegisterResponse protectFundData(CashRegisterResponse response, boolean canManageFund) {
+        if (response == null || canManageFund) return response;
+        response.setAccumulatedFundBalance(BigDecimal.ZERO);
+        response.setAccumulatedFundBalances(List.of());
+        response.setMovements(protectFundMovements(response.getMovements(), false));
+        return response;
+    }
+
+    private List<CashMovementResponse> protectFundMovements(
+            List<CashMovementResponse> movements,
+            boolean canManageFund
+    ) {
+        if (movements == null) return List.of();
+        if (canManageFund) return movements;
+        return movements.stream()
+                .filter(item -> !"ACCUMULATED_FUND".equalsIgnoreCase(item.getFundingSource()))
+                .toList();
     }
 }

@@ -52,6 +52,7 @@ public class CashRegisterServiceImpl implements CashRegisterService {
     private final BarberPaymentRepository barberPaymentRepository;
     private final TenantPaymentMethodRepository tenantPaymentMethodRepository;
     private final CashAuditLogRepository cashAuditLogRepository;
+    private final AdminPermissionService adminPermissionService;
 
 
 
@@ -98,6 +99,7 @@ public class CashRegisterServiceImpl implements CashRegisterService {
 
         BigDecimal fundWithdrawalAmount = safe(request.getFundWithdrawalAmount());
         if (fundWithdrawalAmount.compareTo(BigDecimal.ZERO) > 0) {
+            adminPermissionService.checkOwnerOrAdminPermission("CASH_FUND_MANAGE");
             validateFundAvailable(branch, PaymentMethod.CASH, fundWithdrawalAmount);
             createFundMovementEntity(
                     tenant, branch, cashRegister, openedBy,
@@ -166,6 +168,9 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 requestedDeposits.put(code, requestedDeposits.getOrDefault(code, BigDecimal.ZERO).add(amount));
             }
         }
+        if (!requestedDeposits.isEmpty()) {
+            adminPermissionService.checkOwnerOrAdminPermission("CASH_FUND_MANAGE");
+        }
         for (Map.Entry<String, BigDecimal> entry : requestedDeposits.entrySet()) {
             String code = entry.getKey();
             BigDecimal amount = entry.getValue();
@@ -219,6 +224,7 @@ public class CashRegisterServiceImpl implements CashRegisterService {
 
         BigDecimal fundDepositAmount = safe(request.getFundDepositAmount());
         if (fundDepositAmount.compareTo(BigDecimal.ZERO) > 0) {
+            adminPermissionService.checkOwnerOrAdminPermission("CASH_FUND_MANAGE");
             if (fundDepositAmount.compareTo(counted) > 0) {
                 throw new IllegalStateException("El monto enviado al fondo no puede superar el efectivo contado al cierre.");
             }
@@ -310,6 +316,7 @@ public class CashRegisterServiceImpl implements CashRegisterService {
             CashFundMovementRequest request
     ) {
         validateCashActor(actorUserId, tenantId);
+        adminPermissionService.checkOwnerOrAdminPermission("CASH_FUND_MANAGE");
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("Tenant no encontrado"));
         Branch branch = branchRepository.findById(branchId)
@@ -420,6 +427,9 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 ? CashFundingSource.CASH_REGISTER
                 : request.getFundingSource();
         CashFundMovement fundMovement = null;
+        if (fundingSource == CashFundingSource.ACCUMULATED_FUND) {
+            adminPermissionService.checkOwnerOrAdminPermission("CASH_FUND_MANAGE");
+        }
         boolean cashOutflow = type == CashMovementType.EXPENSE
                 || type == CashMovementType.ADVANCE_BARBER
                 || type == CashMovementType.PAYMENT_BARBER;
@@ -578,6 +588,7 @@ public class CashRegisterServiceImpl implements CashRegisterService {
             throw new IllegalStateException("Para cambiar el origen del dinero elimina el movimiento y registralo nuevamente.");
         }
         if (currentFundingSource == CashFundingSource.ACCUMULATED_FUND) {
+            adminPermissionService.checkOwnerOrAdminPermission("CASH_FUND_MANAGE");
             throw new IllegalStateException("Para corregir un gasto pagado desde fondo, eliminalo y registralo nuevamente.");
         }
         CashMovementType type = request.getType() == null ? movement.getType() : request.getType();
@@ -655,6 +666,9 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 .ifPresent(barberPaymentRepository::delete);
 
         CashFundMovement linkedFundMovement = movement.getFundMovement();
+        if (linkedFundMovement != null || movement.getFundingSource() == CashFundingSource.ACCUMULATED_FUND) {
+            adminPermissionService.checkOwnerOrAdminPermission("CASH_FUND_MANAGE");
+        }
         cashMovementRepository.delete(movement);
         cashMovementRepository.flush();
         if (linkedFundMovement != null) {

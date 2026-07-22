@@ -250,6 +250,20 @@ public class AdminPermissionService {
         Long userId = getAuthenticatedUserId();
         return hasPermission(tenantId, userId, permissionKey);
     }
+    public boolean hasCurrentOwnerOrAdminPermission(String permissionKey) {
+        Long tenantId = TenantContext.getTenantId();
+        Long userId = getAuthenticatedUserId();
+        String role = getAuthenticatedRole();
+
+        if ("OWNER".equalsIgnoreCase(role)) return true;
+        if (!"ADMIN".equalsIgnoreCase(role)) return false;
+
+        return adminPermissionRepository.existsByTenant_IdAndUser_IdAndPermissionKeyAndEnabledTrue(
+                tenantId,
+                userId,
+                normalizePermission(permissionKey)
+        );
+    }
 
     public void checkPermission(String permissionKey) {
         Long tenantId = TenantContext.getTenantId();
@@ -273,6 +287,27 @@ public class AdminPermissionService {
         }
     }
 
+    public void checkOwnerOrAdminPermission(String permissionKey) {
+        Long tenantId = TenantContext.getTenantId();
+        Long userId = getAuthenticatedUserId();
+        String role = getAuthenticatedRole();
+
+        if ("OWNER".equalsIgnoreCase(role)) return;
+
+        if (!"ADMIN".equalsIgnoreCase(role)) {
+            throw new AccessDeniedException("Solo el dueño o un administrador autorizado pueden gestionar el fondo acumulado");
+        }
+
+        boolean allowed = adminPermissionRepository.existsByTenant_IdAndUser_IdAndPermissionKeyAndEnabledTrue(
+                tenantId,
+                userId,
+                normalizePermission(permissionKey)
+        );
+
+        if (!allowed) {
+            throw new AccessDeniedException("No tienes permiso para gestionar el fondo acumulado");
+        }
+    }
     public void requireOwner() {
         validarOwner();
     }
