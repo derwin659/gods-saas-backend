@@ -110,7 +110,7 @@ public class UserController {
 
         if (!isOwner) {
             throw new org.springframework.security.access.AccessDeniedException(
-                    "Solo el dueño puede cambiar roles."
+                    "Solo el dueÃ±o puede cambiar roles."
             );
         }
 
@@ -119,7 +119,7 @@ public class UserController {
                 : body.get("targetRole").toString().trim().toUpperCase();
 
         if (!"ADMIN".equals(targetRoleRaw) && !"CASHIER".equals(targetRoleRaw) && !"BARBER".equals(targetRoleRaw)) {
-            throw new RuntimeException("Rol inválido. Solo se permite ADMIN, CASHIER o BARBER.");
+            throw new RuntimeException("Rol invÃ¡lido. Solo se permite ADMIN, CASHIER o BARBER.");
         }
 
         Object branchValue = body.get("branchId");
@@ -144,7 +144,7 @@ public class UserController {
             throw new RuntimeException("El usuario no tiene rol asignado en este tenant.");
         }
         // Un usuario puede tener registros por varias sedes. Actualizarlos todos
-        // evita que una entrada ADMIN antigua siga apareciendo al iniciar sesi�n.
+        // evita que una entrada ADMIN antigua siga apareciendo al iniciar sesion.
         tenantRoles.forEach(role -> {
             role.setRole(targetRole);
             role.setBranch(branch);
@@ -195,7 +195,7 @@ public class UserController {
 
     private Long extractUserId(Authentication authentication) {
         if (authentication == null || authentication.getPrincipal() == null) {
-            throw new RuntimeException("Sesión no válida");
+            throw new RuntimeException("SesiÃ³n no vÃ¡lida");
         }
 
         Object principal = authentication.getPrincipal();
@@ -223,7 +223,7 @@ public class UserController {
         try {
             return Long.parseLong(value.toString());
         } catch (Exception e) {
-            throw new RuntimeException(fieldName + " inválido.");
+            throw new RuntimeException(fieldName + " invÃ¡lido.");
         }
     }
 }

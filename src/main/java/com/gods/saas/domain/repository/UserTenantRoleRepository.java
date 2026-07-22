@@ -46,6 +46,8 @@ public interface UserTenantRoleRepository extends JpaRepository<UserTenantRole, 
 
     List<UserTenantRole> findByUser_Id(Long userId);
 
+    List<UserTenantRole> findByUser_IdAndTenant_Id(Long userId, Long tenantId);
+
     Optional<UserTenantRole> findFirstByUser_IdAndTenant_IdOrderByIdAsc(Long userId, Long tenantId);
 
     List<UserTenantRole> findByTenant_Id(Long tenantId);

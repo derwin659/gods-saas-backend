@@ -39,7 +39,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
         try {
             // ============================================================
-            // 1. RUTAS PÚBLICAS
+            // 1. RUTAS PÃšBLICAS
             // ============================================================
             if (path.startsWith("/api/auth/")
                     || path.startsWith("/swagger-ui/")
@@ -129,12 +129,12 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                     try {
                         tokenRole = RoleType.valueOf(role.trim().toUpperCase());
                     } catch (IllegalArgumentException invalidRole) {
-                        throw new JwtException("El token contiene un rol interno inv�lido");
+                        throw new JwtException("El token contiene un rol interno invalido");
                     }
                     boolean currentRole = userTenantRoleRepository
                             .existsByUser_IdAndTenant_IdAndBranch_IdAndRole(userId, tenantId, branchId, tokenRole);
                     if (!currentRole) {
-                        throw new JwtException("La sesi�n ya no corresponde al rol actual del usuario");
+                        throw new JwtException("La sesion ya no corresponde al rol actual del usuario");
                     }
                 }
 
@@ -155,7 +155,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 TenantContext.setTenantId(tenantId);
 
-                // 🔥 ESTO ES LO QUE FALTA
+                // ðŸ”¥ ESTO ES LO QUE FALTA
                 request.setAttribute("userId", userId);
                 request.setAttribute("tenantId", tenantId);
                 request.setAttribute("branchId", branchId);
@@ -163,7 +163,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             }
 
             // ============================================================
-            // 6. REGISTRAR AUTENTICACIÓN
+            // 6. REGISTRAR AUTENTICACIÃ“N
             // ============================================================
             if (authentication != null) {
                 authentication.setDetails(details);
@@ -186,7 +186,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             response.getWriter().write("""
                 {
                   "code": "TOKEN_EXPIRED",
-                  "message": "La sesión ha expirado"
+                  "message": "La sesion ha expirado"
                 }
                 """);
         } catch (JwtException | IllegalArgumentException e) {
@@ -199,7 +199,7 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
             response.getWriter().write("""
                 {
                   "code": "INVALID_TOKEN",
-                  "message": "Token inválido o mal formado"
+                  "message": "Token invÃ¡lido o mal formado"
                 }
                 """);
         } finally {
