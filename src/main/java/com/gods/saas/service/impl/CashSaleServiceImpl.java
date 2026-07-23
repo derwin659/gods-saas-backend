@@ -255,7 +255,7 @@ public class CashSaleServiceImpl implements CashSaleService {
     @Override
     @Transactional
     public SaleResponse approveSalePayment(Long tenantId, Long branchId, Long userId, Long saleId) {
-        requireOwnerForSensitiveSaleAction(tenantId, userId);
+        adminPermissionService.checkPermission("CASH_APPROVE_SALES");
 
         Sale sale = saleRepository.findByIdAndTenant_IdAndBranch_Id(saleId, tenantId, branchId)
                 .orElseThrow(() -> new RuntimeException("Venta no encontrada"));
@@ -282,7 +282,7 @@ public class CashSaleServiceImpl implements CashSaleService {
     @Override
     @Transactional
     public SaleResponse rejectSalePayment(Long tenantId, Long branchId, Long userId, Long saleId, String reason) {
-        requireOwnerForSensitiveSaleAction(tenantId, userId);
+        adminPermissionService.checkPermission("CASH_APPROVE_SALES");
 
         Sale sale = saleRepository.findByIdAndTenant_IdAndBranch_Id(saleId, tenantId, branchId)
                 .orElseThrow(() -> new RuntimeException("Venta no encontrada"));
@@ -796,6 +796,13 @@ public class CashSaleServiceImpl implements CashSaleService {
                 .validatedAt(sale.getValidatedAt())
                 .rejectionReason(sale.getRejectionReason())
                 .createdByRole(sale.getCreatedByRole())
+                .tenantName(sale.getTenant() != null ? sale.getTenant().getNombre() : null)
+                .tenantLogoUrl(sale.getTenant() != null ? sale.getTenant().getLogoUrl() : null)
+                .branchName(sale.getBranch() != null ? sale.getBranch().getNombre() : null)
+                .branchAddress(sale.getBranch() != null ? sale.getBranch().getDireccion() : null)
+                .branchPhone(sale.getBranch() != null ? sale.getBranch().getTelefono() : null)
+                .branchCity(sale.getBranch() != null ? sale.getBranch().getCiudad() : null)
+                .currency(resolveReceiptCurrency(sale))
                 .build();
     }
 
@@ -1464,6 +1471,60 @@ public class CashSaleServiceImpl implements CashSaleService {
         }
 
         return null;
+    }
+
+
+    @Override
+    @Transactional
+    public void registerPrinterEvent(Long tenantId, Long branchId, Long userId, Long saleId, PrinterEventRequest request) {
+        adminPermissionService.checkPermission("CASH_PRINT_RECEIPT");
+        registerHardwareAudit(tenantId, branchId, userId, saleId, "PRINTER", request);
+    }
+
+    @Override
+    @Transactional
+    public void registerDrawerEvent(Long tenantId, Long branchId, Long userId, Long saleId, PrinterEventRequest request) {
+        adminPermissionService.checkPermission("CASH_OPEN_DRAWER");
+        registerHardwareAudit(tenantId, branchId, userId, saleId, "CASH_DRAWER", request);
+    }
+
+    private void registerHardwareAudit(
+            Long tenantId, Long branchId, Long userId, Long saleId,
+            String entityType, PrinterEventRequest request
+    ) {
+        Sale sale = saleRepository.findByIdAndTenant_IdAndBranch_Id(saleId, tenantId, branchId)
+                .orElseThrow(() -> new EntityNotFoundException("Venta no encontrada"));
+
+        String requestedAction = request == null ? null : request.getAction();
+        String action = cleanAuditToken(requestedAction, "EVENT");
+        boolean success = request != null && Boolean.TRUE.equals(request.getSuccess());
+        String printer = request == null ? null : cleanText(request.getPrinterName());
+        String message = request == null ? null : cleanText(request.getMessage());
+        String reason = (success ? "OK" : "ERROR")
+                + (printer == null ? "" : " | impresora=" + printer)
+                + (message == null ? "" : " | " + message);
+        if (reason.length() > 500) reason = reason.substring(0, 500);
+
+        registerCashAudit(
+                sale.getTenant(), sale.getBranch(), sale.getCashRegister(), userId,
+                entityType, sale.getId(), action, reason, null, null
+        );
+    }
+
+    private String cleanAuditToken(String value, String fallback) {
+        String clean = value == null ? "" : value.trim().toUpperCase(Locale.ROOT)
+                .replaceAll("[^A-Z0-9_]", "_")
+                .replaceAll("_+", "_");
+        if (clean.isBlank()) clean = fallback;
+        return clean.length() > 40 ? clean.substring(0, 40) : clean;
+    }
+
+    private String resolveReceiptCurrency(Sale sale) {
+        if (sale == null || sale.getTenant() == null || sale.getTenant().getId() == null) return "PEN";
+        return tenantSettingsRepository.findByTenant_Id(sale.getTenant().getId())
+                .map(TenantSettings::getCurrency)
+                .filter(value -> value != null && !value.isBlank())
+                .orElse("PEN");
     }
 
     @Override

@@ -2,6 +2,7 @@ package com.gods.saas.service.impl.impl;
 
 import com.gods.saas.domain.dto.request.CreateCashSaleRequest;
 import com.gods.saas.domain.dto.request.UpdateSaleRequest;
+import com.gods.saas.domain.dto.request.PrinterEventRequest;
 import com.gods.saas.domain.dto.response.SaleResponse;
 
 import java.time.LocalDate;
@@ -28,4 +29,8 @@ public interface CashSaleService {
     SaleResponse rejectSalePayment(Long tenantId, Long branchId, Long userId, Long saleId, String reason);
 
     void deleteSale(Long tenantId, Long branchId, Long userId, Long saleId, String auditReason);
+
+    void registerPrinterEvent(Long tenantId, Long branchId, Long userId, Long saleId, PrinterEventRequest request);
+
+    void registerDrawerEvent(Long tenantId, Long branchId, Long userId, Long saleId, PrinterEventRequest request);
 }

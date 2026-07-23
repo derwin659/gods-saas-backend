@@ -47,4 +47,13 @@ public class SaleResponse {
     private String customerPhone;
     private String customerWhatsappMessage;
     private String customerWhatsappUrl;
+
+    // Datos necesarios para construir el ticket térmico en web/móvil.
+    private String tenantName;
+    private String tenantLogoUrl;
+    private String branchName;
+    private String branchAddress;
+    private String branchPhone;
+    private String branchCity;
+    private String currency;
 }

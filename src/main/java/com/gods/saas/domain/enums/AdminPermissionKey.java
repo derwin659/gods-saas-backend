@@ -24,6 +24,9 @@ public enum AdminPermissionKey {
     CASH_DELETE_SALES,
     CASH_DELETE_MOVEMENTS,
     CASH_EDIT_PAST_SALES,
+    CASH_APPROVE_SALES,
+    CASH_PRINT_RECEIPT,
+    CASH_OPEN_DRAWER,
 
     REPORTS_ACCESS,
     REPORTS_PROFITABILITY,
@@ -44,6 +47,9 @@ public enum AdminPermissionKey {
                 CASH_ACCESS,
                 CASH_REGISTER_INCOME,
                 CASH_REGISTER_EXPENSE,
+                CASH_APPROVE_SALES,
+                CASH_PRINT_RECEIPT,
+                CASH_OPEN_DRAWER,
                 CUSTOMERS_ACCESS
         ).stream().map(Enum::name).toList();
     }
@@ -51,6 +57,9 @@ public enum AdminPermissionKey {
     public static List<String> defaultsForNewAdmin() {
         return List.of(
                 CASH_ACCESS,
+                CASH_APPROVE_SALES,
+                CASH_PRINT_RECEIPT,
+                CASH_OPEN_DRAWER,
                 AGENDA_ACCESS,
                 CUSTOMERS_ACCESS
         ).stream().map(Enum::name).toList();

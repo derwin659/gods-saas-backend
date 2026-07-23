@@ -5,6 +5,7 @@ import com.gods.saas.security.BranchAccessGuard;
 import com.gods.saas.domain.dto.request.CreateCashSaleRequest;
 import com.gods.saas.domain.dto.request.RejectSalePaymentRequest;
 import com.gods.saas.domain.dto.request.UpdateSaleRequest;
+import com.gods.saas.domain.dto.request.PrinterEventRequest;
 import com.gods.saas.domain.dto.response.SaleResponse;
 import com.gods.saas.service.impl.impl.CashSaleService;
 import com.gods.saas.service.impl.AdminPermissionService;
@@ -127,6 +128,32 @@ public class CashSaleController {
     ) {
         Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return cashSaleService.updateSale(tenantId, effectiveBranchId, userId, saleId, request);
+    }
+
+    @PostMapping("/{saleId}/print-event")
+    public void registerPrintEvent(
+            @RequestAttribute("tenantId") Long tenantId,
+            @RequestAttribute("branchId") Long sessionBranchId,
+            @RequestAttribute("userId") Long userId,
+            @PathVariable Long saleId,
+            @RequestParam(required = false) Long branchId,
+            @RequestBody PrinterEventRequest request
+    ) {
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
+        cashSaleService.registerPrinterEvent(tenantId, effectiveBranchId, userId, saleId, request);
+    }
+
+    @PostMapping("/{saleId}/drawer-event")
+    public void registerDrawerEvent(
+            @RequestAttribute("tenantId") Long tenantId,
+            @RequestAttribute("branchId") Long sessionBranchId,
+            @RequestAttribute("userId") Long userId,
+            @PathVariable Long saleId,
+            @RequestParam(required = false) Long branchId,
+            @RequestBody PrinterEventRequest request
+    ) {
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
+        cashSaleService.registerDrawerEvent(tenantId, effectiveBranchId, userId, saleId, request);
     }
 
     @DeleteMapping("/{saleId}")
