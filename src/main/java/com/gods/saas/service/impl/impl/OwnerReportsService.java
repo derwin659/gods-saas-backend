@@ -92,7 +92,8 @@ public interface OwnerReportsService {
     );
 
     Map<String, Object> getExpenseReport(
-            Long tenantId, Long branchId, LocalDate from, LocalDate to, String type
+            Long tenantId, Long branchId, LocalDate from, LocalDate to,
+            String type, String paymentMethod
     );
 
     PaymentSummaryResponse getPaymentSummary(

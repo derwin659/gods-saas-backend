@@ -500,15 +500,22 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
 
     @Override
     public Map<String, Object> getExpenseReport(
-            Long tenantId, Long branchId, LocalDate from, LocalDate to, String type
+            Long tenantId, Long branchId, LocalDate from, LocalDate to,
+            String type, String paymentMethod
     ) {
         validateAdvancedReportsAllowed(tenantId);
         CashMovementType selectedType = type == null || type.isBlank() ? null : CashMovementType.valueOf(type.trim().toUpperCase());
+        String selectedPaymentMethod = normalizeExpensePaymentMethod(paymentMethod);
         List<CashMovementType> expenseTypes = List.of(CashMovementType.EXPENSE, CashMovementType.ADVANCE_BARBER, CashMovementType.PAYMENT_BARBER);
         if (selectedType != null && !expenseTypes.contains(selectedType)) throw new IllegalArgumentException("Tipo de gasto no válido");
         List<CashMovement> movements = cashMovementRepository.findExpenseReportMovements(
                 tenantId, branchId, expenseTypes, selectedType, startOfDay(from), endInclusive(to)
         );
+        if (selectedPaymentMethod != null) {
+            movements = movements.stream()
+                    .filter(movement -> selectedPaymentMethod.equals(normalizeExpenseMovementMethod(movement)))
+                    .toList();
+        }
         Map<String, BigDecimal> totalsByType = new LinkedHashMap<>();
         for (CashMovementType value : expenseTypes) totalsByType.put(value.name(), BigDecimal.ZERO);
         List<Map<String, Object>> items = movements.stream().map(movement -> {
@@ -527,6 +534,7 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
         response.put("from", from.toString()); response.put("to", to.toString());
         response.put("branchId", branchId == null ? 0L : branchId);
         response.put("type", selectedType == null ? "ALL" : selectedType.name());
+        response.put("paymentMethod", selectedPaymentMethod == null ? "ALL" : selectedPaymentMethod);
         response.put("total", total); response.put("count", items.size());
         response.put("totalsByType", totalsByType); response.put("items", items);
         return response;
@@ -630,6 +638,33 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
     private LocalDateTime endInclusive(LocalDate date) {
         return date.plusDays(1).atStartOfDay().minusNanos(1);
     }
+
+    private String normalizeExpenseMovementMethod(CashMovement movement) {
+        if (movement == null || movement.getPaymentMethod() == null) return "";
+        return normalizeExpensePaymentMethod(movement.getPaymentMethod().name());
+    }
+
+    private String normalizeExpensePaymentMethod(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+
+        String code = raw.trim()
+                .toUpperCase(java.util.Locale.ROOT)
+                .replace(' ', '_');
+
+        code = switch (code) {
+            case "CASH", "EFECTIVO" -> "CASH";
+            case "CARD", "TARJETA" -> "CARD";
+            case "TRANSFER", "TRANSFERENCIA" -> "TRANSFER";
+            case "FREE", "GRATIS" -> "FREE";
+            default -> code;
+        };
+
+        if (!code.matches("[A-Z0-9_]+")) {
+            throw new IllegalArgumentException("Método de pago no válido");
+        }
+        return code;
+    }
+
     private void validateAdvancedReportsAllowed(Long tenantId) {
         Subscription subscription = subscriptionRepository
                 .findTopByTenantIdOrderByFechaInicioDesc(tenantId)

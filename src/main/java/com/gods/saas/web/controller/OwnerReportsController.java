@@ -192,13 +192,14 @@ public class OwnerReportsController {
             Authentication authentication,
             @RequestParam(required = false) Long branchId,
             @RequestParam(required = false) String type,
+            @RequestParam(required = false) String paymentMethod,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         adminPermissionService.checkPermission("REPORTS_PROFITABILITY");
         Long tenantId = extractTenantId(authentication);
         return ownerReportsService.getExpenseReport(
-                tenantId, effectiveBranchIdForReports(authentication, branchId), from, to, type
+                tenantId, effectiveBranchIdForReports(authentication, branchId), from, to, type, paymentMethod
         );
     }
 
