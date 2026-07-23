@@ -231,6 +231,11 @@ public class AdminPermissionService {
         }
     }
 
+    @Transactional
+    public void revokeAllPermissionsForRoleChange(Long tenantId, Long userId) {
+        adminPermissionRepository.deleteByTenant_IdAndUser_Id(tenantId, userId);
+    }
+
     public boolean hasPermission(Long tenantId, Long userId, String permissionKey) {
         String role = getAuthenticatedRole();
 

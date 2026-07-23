@@ -92,6 +92,20 @@ public class UserController {
             @RequestBody Map<String, Object> body,
             Authentication authentication
     ) {
+        // El cuerpo es obligatorio en Spring; delegamos al servicio transaccional,
+        // que aplica la seguridad del tenant y resuelve roles adicionales sin duplicar.
+        if (body != null) {
+            String targetRoleRaw = body.get("targetRole") == null
+                    ? ""
+                    : body.get("targetRole").toString().trim().toUpperCase();
+            Object branchValue = body.get("branchId");
+            if (branchValue == null) {
+                throw new RuntimeException("branchId es obligatorio.");
+            }
+            Long branchId = parseLong(branchValue, "branchId");
+            return ResponseEntity.ok(userService.cambiarRolUsuario(id, targetRoleRaw, branchId));
+        }
+
         AppUser targetUser = appUserRepository.findById(id)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 

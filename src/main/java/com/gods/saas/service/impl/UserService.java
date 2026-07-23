@@ -565,11 +565,20 @@ public class UserService {
             );
         }
 
-        if ("BARBER".equals(newRole)) {
+        RoleType targetRoleType = RoleType.valueOf(newRole);
+        List<UserTenantRole> tenantRoles = userTenantRoleRepository
+                .findByUser_IdAndTenant_Id(userId, tenantId);
+        boolean alreadyHasTargetRole = tenantRoles.stream()
+                .anyMatch(role -> role.getRole() == targetRoleType);
+
+        if ("BARBER".equals(newRole) && !alreadyHasTargetRole) {
             subscriptionService.validateBarberLimit(tenantId);
         }
 
-        if ("ADMIN".equals(newRole) || "CASHIER".equals(newRole)) {
+        boolean currentRoleIsAdministrative = List.of("ADMIN", "CASHIER").contains(currentRole);
+        if (("ADMIN".equals(newRole) || "CASHIER".equals(newRole))
+                && !alreadyHasTargetRole
+                && !currentRoleIsAdministrative) {
             subscriptionService.validateAdminLimit(tenantId);
         }
 
@@ -580,24 +589,40 @@ public class UserService {
 
         AppUser saved = userRepository.save(user);
 
-        List<UserTenantRole> tenantRoles = userTenantRoleRepository
-                .findByUser_IdAndTenant_Id(userId, tenantId);
         final Branch assignedBranch = branch;
-        if (tenantRoles.isEmpty()) {
-            tenantRoles = List.of(UserTenantRole.builder()
+        if (targetRoleType == RoleType.BARBER) {
+            // Un administrador puede tener un perfil BARBER adicional. Al degradarlo,
+            // conservamos esas filas profesionales y eliminamos solo los accesos
+            // administrativos; convertir todas las filas provocaba una clave duplicada.
+            List<UserTenantRole> obsoleteAdministrativeRoles = tenantRoles.stream()
+                    .filter(role -> role.getRole() != RoleType.BARBER)
+                    .toList();
+
+            if (!obsoleteAdministrativeRoles.isEmpty()) {
+                userTenantRoleRepository.deleteAllInBatch(obsoleteAdministrativeRoles);
+                userTenantRoleRepository.flush();
+            }
+
+            ensureUserRoleForBranch(saved, tenantId, RoleType.BARBER, assignedBranch);
+            adminPermissionService.revokeAllPermissionsForRoleChange(tenantId, userId);
+        } else {
+            // La accion de cambio de rol deja un unico rol administrativo. Borramos
+            // y vaciamos primero para que un BARBER/ADMIN ya existente no choque con
+            // la restriccion unica al insertar el nuevo rol.
+            if (!tenantRoles.isEmpty()) {
+                userTenantRoleRepository.deleteAllInBatch(tenantRoles);
+                userTenantRoleRepository.flush();
+            }
+
+            userTenantRoleRepository.save(UserTenantRole.builder()
                     .user(saved)
                     .tenant(new Tenant(tenantId))
                     .branch(assignedBranch)
-                    .role(RoleType.valueOf(newRole))
+                    .role(targetRoleType)
                     .build());
-        } else {
-            tenantRoles.forEach(role -> {
-                role.setRole(RoleType.valueOf(newRole));
-                role.setBranch(assignedBranch);
-            });
+            adminPermissionService.createDefaultPermissionsForNewAdmin(tenantId, userId);
         }
-        userTenantRoleRepository.saveAll(tenantRoles);
 
-        return AppUserResponse.from(saved);
+        return responseWithBranches(saved, tenantId);
     }
 }
