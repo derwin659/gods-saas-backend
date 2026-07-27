@@ -24,6 +24,14 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
             String referenceType,
             Long referenceId
     );
+    boolean existsByTenant_IdAndTypeAndReferenceTypeAndReferenceIdAndUser_Id(
+            Long tenantId,
+            NotificationType type,
+            String referenceType,
+            Long referenceId,
+            Long userId
+    );
+
     Optional<Notification> findByIdAndTenant_IdAndCustomer_Id(Long id, Long tenantId, Long customerId);
 
     Optional<Notification> findByIdAndTenant_IdAndUser_Id(Long id, Long tenantId, Long userId);

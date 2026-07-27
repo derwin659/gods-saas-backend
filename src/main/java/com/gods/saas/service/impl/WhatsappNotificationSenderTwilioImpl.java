@@ -1,8 +1,6 @@
 package com.gods.saas.service.impl;
 
-import com.gods.saas.domain.model.Customer;
 import com.gods.saas.domain.model.Notification;
-import com.gods.saas.domain.model.Tenant;
 import com.gods.saas.domain.model.TenantSettings;
 import com.gods.saas.domain.repository.TenantSettingsRepository;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +15,6 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
-import java.util.Locale;
 import java.util.Map;
 
 @Service
@@ -27,6 +24,7 @@ public class WhatsappNotificationSenderTwilioImpl {
 
     private static final String FROM_NUMBER_KEY = "twilioWhatsappFromNumber";
     private static final String MESSAGING_SERVICE_SID_KEY = "twilioMessagingServiceSid";
+    private static final String OWNER_BOOKING_CONTENT_SID_KEY = "twilioOwnerBookingContentSid";
 
     @Value("${whatsapp.twilio.enabled:false}")
     private boolean enabled;
@@ -45,8 +43,12 @@ public class WhatsappNotificationSenderTwilioImpl {
 
     @Value("${whatsapp.twilio.status-callback-url:}")
     private String statusCallbackUrl;
+    @Value("${whatsapp.twilio.owner-booking-content-sid:}")
+    private String defaultOwnerBookingContentSid;
 
     private final TenantSettingsRepository tenantSettingsRepository;
+    private final WhatsappRecipientResolver recipientResolver;
+    private final OwnerBookingWhatsappPayloadFactory ownerBookingPayloadFactory;
 
     public String send(Notification notification) {
         if (!enabled) {
@@ -61,15 +63,8 @@ public class WhatsappNotificationSenderTwilioImpl {
             throw new IllegalArgumentException("La notificacion no tiene tenant valido");
         }
 
-        Customer customer = notification.getCustomer();
-        if (customer == null) {
-            throw new RuntimeException("La notificacion no tiene cliente para enviar WhatsApp");
-        }
-
-        String to = normalizeE164(customer.getTelefono(), notification.getTenant());
-        if (to == null || to.isBlank()) {
-            throw new RuntimeException("El cliente no tiene telefono valido para WhatsApp");
-        }
+        WhatsappRecipientResolver.Recipient recipient = recipientResolver.resolve(notification);
+        String to = "+" + recipient.phoneDigits();
 
         String message = cleanText(notification.getMessage());
         if (message == null) {
@@ -91,6 +86,14 @@ public class WhatsappNotificationSenderTwilioImpl {
                 )
         );
         String messagingServiceSid = cleanText(readString(config, MESSAGING_SERVICE_SID_KEY, defaultMessagingServiceSid));
+        String ownerBookingContentSid = cleanText(readString(
+                config,
+                OWNER_BOOKING_CONTENT_SID_KEY,
+                defaultOwnerBookingContentSid
+        ));
+        OwnerBookingWhatsappPayloadFactory.Payload ownerBookingPayload = ownerBookingPayloadFactory
+                .from(notification)
+                .orElse(null);
 
         if (accountSid == null) {
             throw new RuntimeException("Falta configurar TWILIO_ACCOUNT_SID");
@@ -108,7 +111,17 @@ public class WhatsappNotificationSenderTwilioImpl {
             String url = "https://api.twilio.com/2010-04-01/Accounts/" + urlEncode(accountSid) + "/Messages.json";
             StringBuilder body = new StringBuilder();
             appendForm(body, "To", "whatsapp:" + to);
-            appendForm(body, "Body", message);
+            if (ownerBookingPayload != null) {
+                if (ownerBookingContentSid == null) {
+                    throw new RuntimeException(
+                            "Falta configurar TWILIO_OWNER_BOOKING_CONTENT_SID para avisos de reserva"
+                    );
+                }
+                appendForm(body, "ContentSid", ownerBookingContentSid);
+                appendForm(body, "ContentVariables", buildContentVariables(ownerBookingPayload));
+            } else {
+                appendForm(body, "Body", message);
+            }
 
             if (messagingServiceSid != null) {
                 appendForm(body, "MessagingServiceSid", messagingServiceSid);
@@ -144,9 +157,10 @@ public class WhatsappNotificationSenderTwilioImpl {
             }
 
             log.info(
-                    "TWILIO WHATSAPP SENT => notificationId={}, customerId={}, phone={}",
+                    "TWILIO WHATSAPP SENT => notificationId={}, customerId={}, userId={}, phone={}",
                     notification.getId(),
-                    customer.getId(),
+                    recipient.customerId(),
+                    recipient.userId(),
                     to
             );
 
@@ -156,6 +170,29 @@ public class WhatsappNotificationSenderTwilioImpl {
         }
     }
 
+    private String buildContentVariables(OwnerBookingWhatsappPayloadFactory.Payload payload) {
+        return "{" +
+                "\"1\":\"" + escapeJson(payload.appointmentId()) + "\"," +
+                "\"2\":\"" + escapeJson(payload.customerName()) + "\"," +
+                "\"3\":\"" + escapeJson(payload.customerPhone()) + "\"," +
+                "\"4\":\"" + escapeJson(payload.businessAndBranch()) + "\"," +
+                "\"5\":\"" + escapeJson(payload.serviceName()) + "\"," +
+                "\"6\":\"" + escapeJson(payload.professionalName()) + "\"," +
+                "\"7\":\"" + escapeJson(payload.date()) + "\"," +
+                "\"8\":\"" + escapeJson(payload.schedule()) + "\"," +
+                "\"9\":\"" + escapeJson(payload.paymentSummary()) + "\"," +
+                "\"10\":\"" + escapeJson(payload.agendaUrl()) + "\"" +
+                "}";
+    }
+
+    private String escapeJson(String value) {
+        if (value == null) return "";
+        return value
+                .replace("\\", "\\\\")
+                .replace("\"", "\\\"")
+                .replace("\n", "\\n")
+                .replace("\r", "");
+    }
     private String normalizeConfiguredSender(String rawPhone) {
         String clean = cleanText(rawPhone);
         if (clean == null) {
@@ -178,58 +215,6 @@ public class WhatsappNotificationSenderTwilioImpl {
         }
 
         return "+" + digits.replaceAll("[^0-9]", "");
-    }
-
-    private String normalizeE164(String rawPhone, Tenant tenant) {
-        String digits = rawPhone == null ? "" : rawPhone.replaceAll("[^0-9]", "");
-
-        if (digits.isBlank()) {
-            return null;
-        }
-
-        if (digits.startsWith("00") && digits.length() > 2) {
-            digits = digits.substring(2);
-        }
-
-        if (digits.length() >= 11) {
-            return "+" + digits;
-        }
-
-        String country = tenant == null ? null : cleanText(tenant.getPais());
-        String prefix = whatsappCountryPrefix(country);
-
-        if (prefix == null) {
-            return "+" + digits;
-        }
-
-        if (digits.startsWith(prefix)) {
-            return "+" + digits;
-        }
-
-        return "+" + prefix + digits;
-    }
-
-    private String whatsappCountryPrefix(String countryCode) {
-        if (countryCode == null || countryCode.isBlank()) {
-            return null;
-        }
-
-        return switch (countryCode.trim().toUpperCase(Locale.ROOT)) {
-            case "PE", "PERU" -> "51";
-            case "CO", "COLOMBIA" -> "57";
-            case "MX", "MEXICO" -> "52";
-            case "CL", "CHILE" -> "56";
-            case "AR", "ARGENTINA" -> "54";
-            case "BO", "BOLIVIA" -> "591";
-            case "BR", "BRASIL", "BRAZIL" -> "55";
-            case "UY", "URUGUAY" -> "598";
-            case "PY", "PARAGUAY" -> "595";
-            case "CR", "COSTA RICA" -> "506";
-            case "DO", "REPUBLICA DOMINICANA", "DOMINICAN REPUBLIC" -> "1";
-            case "GT", "GUATEMALA" -> "502";
-            case "US", "USA", "UNITED STATES" -> "1";
-            default -> null;
-        };
     }
 
     private String readString(Map<String, Object> config, String key, String fallback) {

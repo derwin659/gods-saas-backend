@@ -96,7 +96,7 @@ public class OwnerAgendaAppointmentService {
                 .build();
 
         Appointment saved = appointmentRepository.save(appointment);
-        notificationService.notifyBookingCreated(saved);
+        notificationService.notifyBookingCreated(saved, false);
         return toAgendaResponse(saved);
     }
 

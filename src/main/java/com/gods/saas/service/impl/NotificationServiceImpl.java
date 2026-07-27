@@ -15,9 +15,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.format.DateTimeFormatter;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
@@ -34,7 +37,7 @@ public class NotificationServiceImpl implements NotificationService {
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
 
     @Override
-    public void notifyBookingCreated(Appointment appointment) {
+    public void notifyBookingCreated(Appointment appointment, boolean customerInitiated) {
         String serviceName = appointment.getService() != null ? appointment.getService().getNombre() : "Servicio";
         String date = appointment.getFecha() != null ? appointment.getFecha().format(DATE_FMT) : "";
         String time = appointment.getHoraInicio() != null ? appointment.getHoraInicio().format(TIME_FMT) : "";
@@ -53,25 +56,7 @@ public class NotificationServiceImpl implements NotificationService {
             registerDefaultChannels(n, true);
         }
 
-        if (appointment.getUser() != null) {
-            String customerName = appointment.getCustomer() != null
-                    ? safeFullName(appointment.getCustomer().getNombres(), appointment.getCustomer().getApellidos())
-                    : "Cliente";
-
-            Notification n = saveUserNotification(
-                    appointment.getTenant(),
-                    appointment.getBranch(),
-                    appointment.getUser(),
-                    NotificationType.BOOKING_CREATED,
-                    "Nueva reserva",
-                    customerName + " reservó " + serviceName + " para el " + date + " a las " + time + ".",
-                    "APPOINTMENT",
-                    appointment.getId()
-            );
-            registerDefaultChannels(n, false);
-        }
-
-        notifyOwnersAndAdminsBookingCreated(appointment, serviceName, date, time);
+        notifyBookingTeamCreated(appointment, serviceName, date, time, customerInitiated);
     }
 
 
@@ -298,36 +283,44 @@ public class NotificationServiceImpl implements NotificationService {
         registerDefaultChannels(n, true);
     }
 
-    private void notifyOwnersAndAdminsBookingCreated(
+    private void notifyBookingTeamCreated(
             Appointment appointment,
             String serviceName,
             String date,
-            String time
+            String time,
+            boolean customerInitiated
     ) {
-        if (appointment == null || appointment.getTenant() == null) return;
+        if (appointment == null || appointment.getTenant() == null || appointment.getTenant().getId() == null) {
+            return;
+        }
 
         Long tenantId = appointment.getTenant().getId();
         Long branchId = appointment.getBranch() != null ? appointment.getBranch().getId() : null;
-
         String customerName = appointment.getCustomer() != null
                 ? safeFullName(appointment.getCustomer().getNombres(), appointment.getCustomer().getApellidos())
                 : "Cliente";
-
         String barberName = appointment.getUser() != null
                 ? safeUserName(appointment.getUser())
-                : "Sin barbero";
+                : "Sin profesional";
 
         Map<Long, AppUser> recipients = new LinkedHashMap<>();
+        Set<Long> ownerIds = new HashSet<>();
+        Set<Long> adminIds = new HashSet<>();
+        Long professionalId = appointment.getUser() != null ? appointment.getUser().getId() : null;
+
+        if (professionalId != null) {
+            recipients.put(professionalId, appointment.getUser());
+        }
 
         List<AppUser> owners = userTenantRoleRepository.findActiveUsersByTenantBranchAndRole(
                 tenantId,
                 null,
                 RoleType.OWNER
         );
-
         for (AppUser owner : owners) {
             if (owner != null && owner.getId() != null) {
                 recipients.put(owner.getId(), owner);
+                ownerIds.add(owner.getId());
             }
         }
 
@@ -336,26 +329,84 @@ public class NotificationServiceImpl implements NotificationService {
                 branchId,
                 RoleType.ADMIN
         );
-
         for (AppUser admin : admins) {
             if (admin != null && admin.getId() != null) {
                 recipients.put(admin.getId(), admin);
+                adminIds.add(admin.getId());
             }
         }
 
+        Map<String, Object> config = tenantSettingsRepository.findByTenant_Id(tenantId)
+                .map(TenantSettings::getScheduleConfig)
+                .orElse(Map.of());
+        boolean alertEnabled = readBooleanConfig(
+                config,
+                OwnerWhatsappSettingsService.OWNER_BOOKING_ALERT_ENABLED_KEY,
+                false
+        );
+        boolean includeAdmins = readBooleanConfig(
+                config,
+                OwnerWhatsappSettingsService.OWNER_BOOKING_ALERT_ADMINS_KEY,
+                false
+        );
+        boolean includeProfessional = readBooleanConfig(
+                config,
+                OwnerWhatsappSettingsService.OWNER_BOOKING_ALERT_PROFESSIONAL_KEY,
+                false
+        );
+        boolean includeStaffCreated = readBooleanConfig(
+                config,
+                OwnerWhatsappSettingsService.OWNER_BOOKING_ALERT_STAFF_CREATED_KEY,
+                false
+        );
+        boolean whatsappEventEnabled = alertEnabled && (customerInitiated || includeStaffCreated);
+
+        String ownerMessage = buildOwnerBookingMessage(
+                appointment,
+                serviceName,
+                customerName,
+                barberName,
+                date,
+                time,
+                customerInitiated
+        );
+        String professionalMessage = customerName + " reservo " + serviceName
+                + " para el " + date + " a las " + time + ".";
+
         for (AppUser recipient : recipients.values()) {
-            Notification n = saveUserNotification(
+            if (recipient == null || recipient.getId() == null) continue;
+            if (notificationRepository.existsByTenant_IdAndTypeAndReferenceTypeAndReferenceIdAndUser_Id(
+                    tenantId,
+                    NotificationType.BOOKING_CREATED,
+                    "APPOINTMENT",
+                    appointment.getId(),
+                    recipient.getId()
+            )) {
+                continue;
+            }
+
+            boolean isOwner = ownerIds.contains(recipient.getId());
+            boolean isAdmin = adminIds.contains(recipient.getId());
+            boolean isProfessional = professionalId != null && professionalId.equals(recipient.getId());
+            boolean managementRecipient = isOwner || isAdmin;
+
+            Notification notification = saveUserNotification(
                     appointment.getTenant(),
                     appointment.getBranch(),
                     recipient,
                     NotificationType.BOOKING_CREATED,
-                    "Nueva cita agendada",
-                    "Se agendó una cita para " + customerName + " con " + barberName + " el " + date + " a las " + time + ".",
+                    managementRecipient ? "Nueva reserva de cliente" : "Nueva reserva",
+                    managementRecipient ? ownerMessage : professionalMessage,
                     "APPOINTMENT",
                     appointment.getId()
             );
 
-            registerDefaultChannels(n, false);
+            boolean includeWhatsapp = whatsappEventEnabled && (
+                    isOwner
+                            || (isAdmin && includeAdmins)
+                            || (isProfessional && includeProfessional)
+            );
+            registerDefaultChannels(notification, includeWhatsapp);
         }
     }
 
@@ -548,6 +599,109 @@ public class NotificationServiceImpl implements NotificationService {
                 .orElse(fallback);
     }
 
+    private String buildOwnerBookingMessage(
+            Appointment appointment,
+            String serviceName,
+            String customerName,
+            String professionalName,
+            String date,
+            String time,
+            boolean customerInitiated
+    ) {
+        String customerPhone = appointment.getCustomer() != null
+                ? safeText(appointment.getCustomer().getTelefono(), "No registrado")
+                : "No registrado";
+        String tenantName = safeText(appointment.getTenant().getNombre(), "Negocio");
+        String branchName = appointment.getBranch() != null
+                ? safeText(appointment.getBranch().getNombre(), "Sede")
+                : "Sede";
+        String endTime = appointment.getHoraFin() != null
+                ? " - " + appointment.getHoraFin().format(TIME_FMT)
+                : "";
+        String status = safeText(appointment.getEstado(), "RESERVADO");
+        String depositStatus = ownerDepositStatus(appointment);
+        String total = appointment.getTotalAmount() != null
+                ? appointment.getTotalAmount().stripTrailingZeros().toPlainString()
+                : "No informado";
+        String contactLink = customerWhatsappLink(customerPhone, appointment.getTenant());
+        String agendaUrl = "https://www.supergodsapp.com/owner/agenda"
+                + "?appointmentId=" + appointment.getId()
+                + "&branchId=" + (appointment.getBranch() == null ? "" : appointment.getBranch().getId())
+                + "&date=" + (appointment.getFecha() == null ? "" : appointment.getFecha());
+        StringBuilder message = new StringBuilder()
+
+                .append("Nueva reserva #").append(appointment.getId()).append('\n')
+                .append("Cliente: ").append(customerName).append('\n')
+                .append("WhatsApp: ").append(customerPhone).append('\n')
+                .append("Negocio: ").append(tenantName).append('\n')
+                .append("Sede: ").append(branchName).append('\n')
+                .append("Servicio: ").append(serviceName).append('\n')
+                .append("Profesional: ").append(professionalName).append('\n')
+                .append("Fecha: ").append(date).append('\n')
+                .append("Horario: ").append(time).append(endTime).append('\n')
+                .append("Estado: ").append(status).append('\n')
+                .append("Adelanto: ").append(depositStatus).append('\n')
+                .append("Total: ").append(total).append('\n')
+                .append("Origen: ").append(customerInitiated ? "Cliente" : "Equipo").append('\n')
+                .append("Agenda: ").append(agendaUrl);
+
+        if (contactLink != null) {
+            message.append('\n').append("Contactar: ").append(contactLink);
+        }
+
+        return limitText(message.toString(), 500);
+    }
+
+    private String ownerDepositStatus(Appointment appointment) {
+        if (appointment == null || !Boolean.TRUE.equals(appointment.getDepositRequired())) {
+            return "No requerido";
+        }
+
+        String amount = appointment.getDepositAmount() != null
+                ? appointment.getDepositAmount().stripTrailingZeros().toPlainString()
+                : "0";
+        String status = safeText(appointment.getDepositStatus(), "PENDING_VALIDATION")
+                .toUpperCase(Locale.ROOT);
+
+        return switch (status) {
+            case "PAID", "VALIDATED", "VALIDADO" -> "Validado - " + amount;
+            case "REJECTED", "RECHAZADO" -> "Rechazado - " + amount;
+            default -> "Pendiente de validar - " + amount;
+        };
+    }
+
+    private String customerWhatsappLink(String rawPhone, Tenant tenant) {
+        String digits = rawPhone == null ? "" : rawPhone.replaceAll("[^0-9]", "");
+        if (digits.startsWith("00") && digits.length() > 2) {
+            digits = digits.substring(2);
+        }
+        if (digits.isBlank() || "No registrado".equalsIgnoreCase(rawPhone)) {
+            return null;
+        }
+
+        if (digits.length() < 11) {
+            String country = tenant == null ? "" : safeText(tenant.getPais(), "").toUpperCase(Locale.ROOT);
+            String prefix = switch (country) {
+                case "PE", "PERU", "PERÚ" -> "51";
+                case "CO", "COLOMBIA" -> "57";
+                case "MX", "MEXICO", "MÉXICO" -> "52";
+                case "CL", "CHILE" -> "56";
+                case "AR", "ARGENTINA" -> "54";
+                case "BO", "BOLIVIA" -> "591";
+                default -> "";
+            };
+            if (!prefix.isBlank() && !digits.startsWith(prefix)) {
+                digits = prefix + digits;
+            }
+        }
+
+        return "https://wa.me/" + digits;
+    }
+
+    private String limitText(String value, int max) {
+        if (value == null) return "";
+        return value.length() <= max ? value : value.substring(0, max);
+    }
     private boolean readBooleanConfig(Map<String, Object> config, String key, boolean fallback) {
         if (config == null || !config.containsKey(key)) {
             return fallback;

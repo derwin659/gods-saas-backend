@@ -1,8 +1,6 @@
 package com.gods.saas.service.impl;
 
-import com.gods.saas.domain.model.Customer;
 import com.gods.saas.domain.model.Notification;
-import com.gods.saas.domain.model.Tenant;
 import com.gods.saas.domain.model.TenantSettings;
 import com.gods.saas.domain.repository.TenantSettingsRepository;
 import lombok.RequiredArgsConstructor;
@@ -14,7 +12,6 @@ import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
-import java.util.Locale;
 import java.util.Map;
 
 @Service
@@ -24,6 +21,10 @@ public class WhatsappNotificationSenderMetaCloudImpl {
 
     private static final String PHONE_NUMBER_ID_KEY = "whatsappPhoneNumberId";
     private static final String ACCESS_TOKEN_KEY = "whatsappAccessToken";
+    private static final String OWNER_BOOKING_TEMPLATE_NAME_KEY = "whatsappOwnerBookingTemplateName";
+    private static final String OWNER_BOOKING_TEMPLATE_LANGUAGE_KEY = "whatsappOwnerBookingTemplateLanguage";
+    private static final String DEFAULT_OWNER_BOOKING_TEMPLATE_NAME = "owner_new_booking_v1";
+    private static final String DEFAULT_OWNER_BOOKING_TEMPLATE_LANGUAGE = "es";
 
     @Value("${whatsapp.meta.phone-number-id:}")
     private String defaultPhoneNumberId;
@@ -32,6 +33,8 @@ public class WhatsappNotificationSenderMetaCloudImpl {
     private String defaultAccessToken;
 
     private final TenantSettingsRepository tenantSettingsRepository;
+    private final WhatsappRecipientResolver recipientResolver;
+    private final OwnerBookingWhatsappPayloadFactory ownerBookingPayloadFactory;
 
     @Override
     public String toString() {
@@ -47,15 +50,8 @@ public class WhatsappNotificationSenderMetaCloudImpl {
             throw new IllegalArgumentException("La notificación no tiene tenant válido");
         }
 
-        Customer customer = notification.getCustomer();
-        if (customer == null) {
-            throw new RuntimeException("La notificación no tiene cliente para enviar WhatsApp");
-        }
-
-        String phone = normalizeWhatsappPhone(customer.getTelefono(), notification.getTenant());
-        if (phone == null || phone.isBlank()) {
-            throw new RuntimeException("El cliente no tiene teléfono válido para WhatsApp");
-        }
+        WhatsappRecipientResolver.Recipient recipient = recipientResolver.resolve(notification);
+        String phone = recipient.phoneDigits();
 
         Map<String, Object> config = tenantSettingsRepository
                 .findByTenant_Id(notification.getTenant().getId())
@@ -81,20 +77,7 @@ public class WhatsappNotificationSenderMetaCloudImpl {
         try {
             String url = "https://graph.facebook.com/v20.0/" + phoneNumberId + "/messages";
 
-            String body = """
-                    {
-                      "messaging_product": "whatsapp",
-                      "to": "%s",
-                      "type": "text",
-                      "text": {
-                        "preview_url": true,
-                        "body": "%s"
-                      }
-                    }
-                    """.formatted(
-                    escapeJson(phone),
-                    escapeJson(message)
-            );
+            String body = buildRequestBody(notification, phone, message, config);
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
@@ -122,9 +105,10 @@ public class WhatsappNotificationSenderMetaCloudImpl {
             }
 
             log.info(
-                    "META WHATSAPP SENT => notificationId={}, customerId={}, phone={}",
+                    "META WHATSAPP SENT => notificationId={}, customerId={}, userId={}, phone={}",
                     notification.getId(),
-                    customer.getId(),
+                    recipient.customerId(),
+                    recipient.userId(),
                     phone
             );
 
@@ -135,58 +119,84 @@ public class WhatsappNotificationSenderMetaCloudImpl {
         }
     }
 
-    private String normalizeWhatsappPhone(String rawPhone, Tenant tenant) {
-        String digits = rawPhone == null ? "" : rawPhone.replaceAll("[^0-9]", "");
+    private String buildRequestBody(
+            Notification notification,
+            String phone,
+            String message,
+            Map<String, Object> config
+    ) {
+        OwnerBookingWhatsappPayloadFactory.Payload payload = ownerBookingPayloadFactory
+                .from(notification)
+                .orElse(null);
 
-        if (digits.isBlank()) {
-            return null;
+        if (payload == null) {
+            return """
+                    {
+                      "messaging_product": "whatsapp",
+                      "to": "%s",
+                      "type": "text",
+                      "text": {
+                        "preview_url": true,
+                        "body": "%s"
+                      }
+                    }
+                    """.formatted(
+                    escapeJson(phone),
+                    escapeJson(message)
+            );
         }
 
-        if (digits.startsWith("00") && digits.length() > 2) {
-            digits = digits.substring(2);
-        }
+        String templateName = readString(
+                config,
+                OWNER_BOOKING_TEMPLATE_NAME_KEY,
+                DEFAULT_OWNER_BOOKING_TEMPLATE_NAME
+        );
+        String language = readString(
+                config,
+                OWNER_BOOKING_TEMPLATE_LANGUAGE_KEY,
+                DEFAULT_OWNER_BOOKING_TEMPLATE_LANGUAGE
+        );
+        String parameters = String.join(",",
+                templateParameter(payload.appointmentId()),
+                templateParameter(payload.customerName()),
+                templateParameter(payload.customerPhone()),
+                templateParameter(payload.businessAndBranch()),
+                templateParameter(payload.serviceName()),
+                templateParameter(payload.professionalName()),
+                templateParameter(payload.date()),
+                templateParameter(payload.schedule()),
+                templateParameter(payload.paymentSummary()),
+                templateParameter(payload.agendaUrl())
+        );
 
-        if (digits.length() >= 11) {
-            return digits;
-        }
-
-        String country = tenant == null ? null : cleanText(tenant.getPais());
-        String prefix = whatsappCountryPrefix(country);
-
-        if (prefix == null) {
-            return digits;
-        }
-
-        if (digits.startsWith(prefix)) {
-            return digits;
-        }
-
-        return prefix + digits;
+        return """
+                {
+                  "messaging_product": "whatsapp",
+                  "recipient_type": "individual",
+                  "to": "%s",
+                  "type": "template",
+                  "template": {
+                    "name": "%s",
+                    "language": {"code": "%s"},
+                    "components": [
+                      {
+                        "type": "body",
+                        "parameters": [%s]
+                      }
+                    ]
+                  }
+                }
+                """.formatted(
+                escapeJson(phone),
+                escapeJson(templateName),
+                escapeJson(language),
+                parameters
+        );
     }
 
-    private String whatsappCountryPrefix(String countryCode) {
-        if (countryCode == null || countryCode.isBlank()) {
-            return null;
-        }
-
-        return switch (countryCode.trim().toUpperCase(Locale.ROOT)) {
-            case "PE", "PERU" -> "51";
-            case "CO", "COLOMBIA" -> "57";
-            case "MX", "MEXICO" -> "52";
-            case "CL", "CHILE" -> "56";
-            case "AR", "ARGENTINA" -> "54";
-            case "BO", "BOLIVIA" -> "591";
-            case "BR", "BRASIL", "BRAZIL" -> "55";
-            case "UY", "URUGUAY" -> "598";
-            case "PY", "PARAGUAY" -> "595";
-            case "CR", "COSTA RICA" -> "506";
-            case "DO", "REPUBLICA DOMINICANA", "DOMINICAN REPUBLIC" -> "1";
-            case "GT", "GUATEMALA" -> "502";
-            case "US", "USA", "UNITED STATES" -> "1";
-            default -> null;
-        };
+    private String templateParameter(String value) {
+        return "{\"type\":\"text\",\"text\":\"" + escapeJson(value) + "\"}";
     }
-
     private String readString(Map<String, Object> config, String key, String fallback) {
         if (config == null || !config.containsKey(key)) {
             return cleanText(fallback);

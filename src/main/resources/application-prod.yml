@@ -78,3 +78,4 @@ whatsapp:
     from-number: ${TWILIO_WHATSAPP_FROM_NUMBER:}
     messaging-service-sid: ${TWILIO_MESSAGING_SERVICE_SID:}
     status-callback-url: ${TWILIO_STATUS_CALLBACK_URL:}
+    owner-booking-content-sid: ${TWILIO_OWNER_BOOKING_CONTENT_SID:}

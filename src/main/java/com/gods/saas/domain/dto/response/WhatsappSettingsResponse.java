@@ -12,6 +12,10 @@ public class WhatsappSettingsResponse {
     private Boolean appointmentReminder60Enabled;
     private Boolean appointmentReminder24hEnabled;
     private Boolean inactiveCustomerFollowUpEnabled;
+    private Boolean ownerBookingAlertEnabled;
+    private Boolean ownerBookingAlertIncludeAdmins;
+    private Boolean ownerBookingAlertIncludeProfessional;
+    private Boolean ownerBookingAlertIncludeStaffCreated;
     private String appDownloadUrl;
     private String provider;
     private String connectionStatus;

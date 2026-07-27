@@ -471,7 +471,7 @@ public class ClientBookingService {
 
         Appointment saved = appointmentRepository.save(appointment);
 
-        notificationService.notifyBookingCreated(saved);
+        notificationService.notifyBookingCreated(saved, true);
 
         return CreateAppointmentResponse.builder()
                 .appointmentId(saved.getId())

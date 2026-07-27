@@ -23,6 +23,10 @@ public class OwnerWhatsappSettingsService {
     public static final String REMINDER_60_ENABLED_KEY = "whatsappReminder60Enabled";
     public static final String REMINDER_24H_ENABLED_KEY = "whatsappReminder24hEnabled";
     public static final String INACTIVE_CUSTOMER_FOLLOW_UP_ENABLED_KEY = "whatsappInactiveCustomerFollowUpEnabled";
+    public static final String OWNER_BOOKING_ALERT_ENABLED_KEY = "whatsappOwnerBookingAlertEnabled";
+    public static final String OWNER_BOOKING_ALERT_ADMINS_KEY = "whatsappOwnerBookingAlertIncludeAdmins";
+    public static final String OWNER_BOOKING_ALERT_PROFESSIONAL_KEY = "whatsappOwnerBookingAlertIncludeProfessional";
+    public static final String OWNER_BOOKING_ALERT_STAFF_CREATED_KEY = "whatsappOwnerBookingAlertIncludeStaffCreated";
     public static final String APP_DOWNLOAD_URL_KEY = "whatsappAppDownloadUrl";
     public static final String PROVIDER_KEY = "whatsappProvider";
     public static final String CONNECTION_STATUS_KEY = "whatsappConnectionStatus";
@@ -64,6 +68,10 @@ public class OwnerWhatsappSettingsService {
                 .appointmentReminder60Enabled(readBoolean(config, REMINDER_60_ENABLED_KEY, true))
                 .appointmentReminder24hEnabled(readBoolean(config, REMINDER_24H_ENABLED_KEY, false))
                 .inactiveCustomerFollowUpEnabled(readBoolean(config, INACTIVE_CUSTOMER_FOLLOW_UP_ENABLED_KEY, false))
+                .ownerBookingAlertEnabled(readBoolean(config, OWNER_BOOKING_ALERT_ENABLED_KEY, false))
+                .ownerBookingAlertIncludeAdmins(readBoolean(config, OWNER_BOOKING_ALERT_ADMINS_KEY, false))
+                .ownerBookingAlertIncludeProfessional(readBoolean(config, OWNER_BOOKING_ALERT_PROFESSIONAL_KEY, false))
+                .ownerBookingAlertIncludeStaffCreated(readBoolean(config, OWNER_BOOKING_ALERT_STAFF_CREATED_KEY, false))
                 .appDownloadUrl(readString(config, APP_DOWNLOAD_URL_KEY, DEFAULT_APP_DOWNLOAD_URL))
                 .provider(provider)
                 .connectionStatus(connectionStatus)
@@ -90,6 +98,10 @@ public class OwnerWhatsappSettingsService {
         putBoolean(config, REMINDER_60_ENABLED_KEY, request.getAppointmentReminder60Enabled());
         putBoolean(config, REMINDER_24H_ENABLED_KEY, request.getAppointmentReminder24hEnabled());
         putBoolean(config, INACTIVE_CUSTOMER_FOLLOW_UP_ENABLED_KEY, request.getInactiveCustomerFollowUpEnabled());
+        putBoolean(config, OWNER_BOOKING_ALERT_ENABLED_KEY, request.getOwnerBookingAlertEnabled());
+        putBoolean(config, OWNER_BOOKING_ALERT_ADMINS_KEY, request.getOwnerBookingAlertIncludeAdmins());
+        putBoolean(config, OWNER_BOOKING_ALERT_PROFESSIONAL_KEY, request.getOwnerBookingAlertIncludeProfessional());
+        putBoolean(config, OWNER_BOOKING_ALERT_STAFF_CREATED_KEY, request.getOwnerBookingAlertIncludeStaffCreated());
 
         if (request.getAppDownloadUrl() != null) {
             String url = request.getAppDownloadUrl().trim();

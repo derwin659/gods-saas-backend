@@ -8,7 +8,7 @@ import java.time.LocalTime;
 
 public interface NotificationService {
 
-    void notifyBookingCreated(Appointment appointment);
+    void notifyBookingCreated(Appointment appointment, boolean customerInitiated);
 
     void notifyBookingCancelledByClient(Appointment appointment);
 
