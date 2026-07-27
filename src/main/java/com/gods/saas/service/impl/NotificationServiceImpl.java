@@ -32,6 +32,7 @@ public class NotificationServiceImpl implements NotificationService {
     private final UserTenantRoleRepository userTenantRoleRepository;
     private final CustomerRepository customerRepository;
     private final TenantSettingsRepository tenantSettingsRepository;
+    private final OwnerWhatsappPhoneVerificationService ownerWhatsappPhoneVerificationService;
 
     private static final DateTimeFormatter DATE_FMT = DateTimeFormatter.ofPattern("dd/MM/yyyy");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
@@ -359,7 +360,9 @@ public class NotificationServiceImpl implements NotificationService {
                 OwnerWhatsappSettingsService.OWNER_BOOKING_ALERT_STAFF_CREATED_KEY,
                 false
         );
-        boolean whatsappEventEnabled = alertEnabled && (customerInitiated || includeStaffCreated);
+        boolean whatsappEventEnabled = alertEnabled
+                && ownerWhatsappPhoneVerificationService.isCentralReady()
+                && (customerInitiated || includeStaffCreated);
 
         String ownerMessage = buildOwnerBookingMessage(
                 appointment,
@@ -401,7 +404,9 @@ public class NotificationServiceImpl implements NotificationService {
                     appointment.getId()
             );
 
-            boolean includeWhatsapp = whatsappEventEnabled && (
+            boolean includeWhatsapp = whatsappEventEnabled
+                    && ownerWhatsappPhoneVerificationService.isVerifiedRecipient(recipient)
+                    && (
                     isOwner
                             || (isAdmin && includeAdmins)
                             || (isProfessional && includeProfessional)

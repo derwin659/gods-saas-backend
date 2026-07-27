@@ -22,4 +22,7 @@ public class WhatsappSettingsResponse {
     private String senderPhone;
     private String senderLabel;
     private Boolean connected;
+    private Boolean centralNotificationsEnabled;
+    private String centralProvider;
+    private String centralSenderLabel;
 }

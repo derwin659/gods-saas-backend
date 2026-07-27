@@ -2,8 +2,8 @@
 
 Esta plantilla operativa permite avisar al owner, administradores o profesional
 cuando se crea una reserva. El backend no suplanta el numero del cliente: envia
-desde el numero oficial conectado y muestra el telefono del cliente dentro del
-mensaje.
+desde el numero central oficial GODS Notificaciones y muestra el telefono del
+cliente dentro del mensaje.
 
 ## Meta Cloud API
 
@@ -38,10 +38,8 @@ Variables enviadas por backend:
 9. Estado, adelanto y total.
 10. URL de agenda owner.
 
-El nombre e idioma pueden sobrescribirse en `tenant_settings.schedule_config`
-con `whatsappOwnerBookingTemplateName` y
-`whatsappOwnerBookingTemplateLanguage`. No se requiere SQL para usar los
-valores predeterminados.
+En la primera etapa el nombre e idioma pertenecen a la configuracion global de
+`GODS Notificaciones`; ningun tenant debe ingresar credenciales ni Content SID.
 
 ## Twilio WhatsApp
 
@@ -58,13 +56,15 @@ permite.
 
 ## Activacion En Super Gods
 
-1. Conectar Meta Cloud API o Twilio y dejar el estado en `CONNECTED`.
-2. Verificar que el owner tenga telefono con codigo de pais en `app_user.phone`.
+1. Ejecutar `docs/sql/20260726_owner_whatsapp_recipient_verification.sql`.
+2. Configurar una sola cuenta/remitente Twilio de `GODS Notificaciones` en
+   Railway con ambos Content SID aprobados.
 3. Entrar a Owner > Configuracion > WhatsApp y mensajes.
-4. Activar `Avisarme nuevas reservas por WhatsApp`.
-5. Opcionalmente incluir administradores, profesional o citas creadas por el
-   equipo.
-6. Crear una reserva de prueba desde cliente y revisar
+4. Solicitar el OTP y verificar el numero receptor.
+5. Activar `Avisarme nuevas reservas por WhatsApp`.
+6. Opcionalmente incluir administradores o profesionales que tambien hayan
+   verificado su propio numero.
+7. Crear una reserva de prueba desde cliente y revisar
    `notification_delivery` si no llega.
 
 La reserva nunca se revierte si el proveedor falla. IN_APP y PUSH permanecen

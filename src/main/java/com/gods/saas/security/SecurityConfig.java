@@ -104,6 +104,16 @@ public class SecurityConfig {
 
                         .requestMatchers("/api/owner/device-tokens/**")
                         .hasAnyRole("OWNER", "ADMIN", "BARBER", "CASHIER")
+                        .requestMatchers(
+                                "/api/owner/whatsapp-settings/recipient-verification",
+                                "/api/owner/whatsapp-settings/recipient-verification/**"
+                        )
+                        .hasAnyRole("OWNER", "ADMIN", "BARBER")
+                        .requestMatchers(
+                                "/api/owner/whatsapp-settings",
+                                "/api/owner/whatsapp-settings/**"
+                        )
+                        .hasRole("OWNER")
                         .requestMatchers("/api/public/**").permitAll()
                         .requestMatchers("/api/owner/booking-links/**").hasAnyRole("OWNER", "ADMIN")
                         .requestMatchers("/api/owner/home/**").hasAnyRole("OWNER", "ADMIN", "CASHIER")

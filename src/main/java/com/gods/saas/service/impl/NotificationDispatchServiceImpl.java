@@ -156,8 +156,11 @@ public class NotificationDispatchServiceImpl implements NotificationDispatchServ
             return;
         }
         Long tenantId = notification.getTenant().getId();
+        boolean centralBookingAlert = notification.getType()
+                == com.gods.saas.domain.enums.NotificationType.BOOKING_CREATED
+                && notification.getUser() != null;
 
-        if (!isGrowthOrHigher(tenantId)) {
+        if (!centralBookingAlert && !isGrowthOrHigher(tenantId)) {
             delivery.setStatus(NotificationDeliveryStatus.SKIPPED);
             delivery.setErrorMessage("WhatsApp premium disponible desde plan GROWTH");
             notificationDeliveryRepository.save(delivery);

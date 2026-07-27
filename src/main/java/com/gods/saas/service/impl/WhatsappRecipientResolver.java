@@ -34,7 +34,7 @@ public class WhatsappRecipientResolver {
         return new Recipient(digits, customerId, userId);
     }
 
-    private String normalizeDigits(String rawPhone, Tenant tenant) {
+    public String normalizeDigits(String rawPhone, Tenant tenant) {
         String digits = rawPhone == null ? "" : rawPhone.replaceAll("[^0-9]", "");
         if (digits.isBlank()) return null;
 

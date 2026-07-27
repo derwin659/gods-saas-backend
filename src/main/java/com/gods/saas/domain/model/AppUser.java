@@ -60,6 +60,28 @@ public class AppUser implements UserDetails {
     @Column(length = 20)
     private String phone;
 
+    @Column(name = "whatsapp_verified_phone", length = 32)
+    private String whatsappVerifiedPhone;
+
+    @Column(name = "whatsapp_phone_verified_at")
+    private LocalDateTime whatsappPhoneVerifiedAt;
+
+    @Column(name = "whatsapp_pending_phone", length = 32)
+    private String whatsappPendingPhone;
+
+    @Column(name = "whatsapp_verification_code_hash", length = 100)
+    private String whatsappVerificationCodeHash;
+
+    @Column(name = "whatsapp_verification_expires_at")
+    private LocalDateTime whatsappVerificationExpiresAt;
+
+    @Column(name = "whatsapp_verification_requested_at")
+    private LocalDateTime whatsappVerificationRequestedAt;
+
+    @Builder.Default
+    @Column(name = "whatsapp_verification_attempts", nullable = false)
+    private Integer whatsappVerificationAttempts = 0;
+
     @Column(name = "google_subject", length = 120)
     private String googleSubject;
 

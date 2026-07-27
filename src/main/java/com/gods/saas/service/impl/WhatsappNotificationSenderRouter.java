@@ -20,6 +20,7 @@ public class WhatsappNotificationSenderRouter implements WhatsappNotificationSen
     private final WhatsappNotificationSenderMockImpl mockSender;
     private final WhatsappNotificationSenderMetaCloudImpl metaCloudSender;
     private final WhatsappNotificationSenderTwilioImpl twilioSender;
+    private final CentralWhatsappSenderService centralWhatsappSenderService;
 
     @Override
     public String send(Notification notification) {
@@ -27,6 +28,10 @@ public class WhatsappNotificationSenderRouter implements WhatsappNotificationSen
             throw new IllegalArgumentException("La notificación no tiene tenant válido");
         }
 
+        if (notification.getType() == com.gods.saas.domain.enums.NotificationType.BOOKING_CREATED
+                && notification.getUser() != null) {
+            return centralWhatsappSenderService.sendBooking(notification);
+        }
         Map<String, Object> config = tenantSettingsRepository
                 .findByTenant_Id(notification.getTenant().getId())
                 .map(TenantSettings::getScheduleConfig)

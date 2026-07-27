@@ -39,6 +39,7 @@ public class OwnerWhatsappSettingsService {
     private static final String DEFAULT_CONNECTION_STATUS = "NOT_CONNECTED";
 
     private final TenantSettingsRepository tenantSettingsRepository;
+    private final CentralWhatsappSenderService centralWhatsappSenderService;
 
     @Value("${whatsapp.twilio.enabled:false}")
     private boolean twilioEnabled;
@@ -78,6 +79,9 @@ public class OwnerWhatsappSettingsService {
                 .senderPhone(senderPhone)
                 .senderLabel(readString(config, SENDER_LABEL_KEY, ""))
                 .connected(isConnected(provider, connectionStatus, senderPhone))
+                .centralNotificationsEnabled(centralWhatsappSenderService.isConfigured())
+                .centralProvider(centralWhatsappSenderService.provider())
+                .centralSenderLabel(centralWhatsappSenderService.senderLabel())
                 .build();
     }
 
