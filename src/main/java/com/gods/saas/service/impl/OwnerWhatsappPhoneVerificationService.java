@@ -10,6 +10,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.security.SecureRandom;
 import java.time.LocalDateTime;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 @Service
 @RequiredArgsConstructor
@@ -19,6 +21,8 @@ public class OwnerWhatsappPhoneVerificationService {
     private static final int CODE_EXPIRY_MINUTES = 10;
     private static final int RESEND_COOLDOWN_SECONDS = 60;
     private static final int MAX_ATTEMPTS = 5;
+    private static final Pattern INBOUND_CODE_PATTERN = Pattern.compile(
+            "(?i)^\\s*VERIFICAR\\s+GODS\\s+(\\d+)\\s+(\\d{6})\\s*$");
 
     private final AppUserRepository appUserRepository;
     private final PasswordEncoder passwordEncoder;
@@ -27,14 +31,14 @@ public class OwnerWhatsappPhoneVerificationService {
 
     @Transactional(readOnly = true)
     public OwnerWhatsappVerificationResponse getStatus(Long tenantId, Long userId) {
-        return response(requireUser(tenantId, userId));
+        return response(requireUser(tenantId, userId), null);
     }
 
     @Transactional
     public OwnerWhatsappVerificationResponse requestCode(Long tenantId, Long userId, String rawPhone) {
-        if (!centralWhatsappSenderService.isConfigured()) {
+        if (!centralWhatsappSenderService.isInboundVerificationConfigured()) {
             throw new RuntimeException(
-                    "GODS Notificaciones aun no esta habilitado. Configura primero el proveedor central."
+                    "La verificacion entrante de GODS Notificaciones aun no esta habilitada."
             );
         }
 
@@ -62,14 +66,7 @@ public class OwnerWhatsappPhoneVerificationService {
         user.setFechaActualizacion(now);
         appUserRepository.saveAndFlush(user);
 
-        centralWhatsappSenderService.sendVerification(
-                user.getTenant(),
-                digits,
-                code,
-                CODE_EXPIRY_MINUTES
-        );
-
-        return response(user);
+        return response(user, code);
     }
 
     @Transactional(noRollbackFor = VerificationCodeException.class)
@@ -116,7 +113,80 @@ public class OwnerWhatsappPhoneVerificationService {
         clearPending(user);
         appUserRepository.save(user);
 
-        return response(user);
+        return response(user, null);
+    }
+
+    @Transactional
+    public InboundVerificationResult verifyInbound(String rawFrom, String rawBody) {
+        String phone = normalizeInboundPhone(rawFrom);
+        Matcher matcher = INBOUND_CODE_PATTERN.matcher(rawBody == null ? "" : rawBody);
+        if (phone == null || !matcher.matches()) {
+            return new InboundVerificationResult(
+                    false,
+                    "No pude validar el mensaje. Abre nuevamente GODS y genera otro enlace de verificacion."
+            );
+        }
+
+        Long userId;
+        try {
+            userId = Long.parseLong(matcher.group(1));
+        } catch (NumberFormatException ignored) {
+            return new InboundVerificationResult(false, "El enlace de verificacion no es valido.");
+        }
+        String code = matcher.group(2);
+        AppUser user = appUserRepository.findById(userId).orElse(null);
+        LocalDateTime now = LocalDateTime.now();
+
+        if (user == null
+                || user.getWhatsappPendingPhone() == null
+                || user.getWhatsappVerificationCodeHash() == null
+                || user.getWhatsappVerificationExpiresAt() == null) {
+            return new InboundVerificationResult(
+                    false,
+                    "No existe una verificacion pendiente. Genera un enlace nuevo desde GODS."
+            );
+        }
+        if (!phone.equals(user.getWhatsappPendingPhone())) {
+            return new InboundVerificationResult(
+                    false,
+                    "Este enlace corresponde a otro numero. En GODS registra el WhatsApp desde el que escribes."
+            );
+        }
+        if (user.getWhatsappVerificationExpiresAt().isBefore(now)) {
+            clearPending(user);
+            appUserRepository.save(user);
+            return new InboundVerificationResult(
+                    false,
+                    "El enlace vencio. Genera uno nuevo desde GODS."
+            );
+        }
+
+        int attempts = safeAttempts(user) + 1;
+        if (!passwordEncoder.matches(code, user.getWhatsappVerificationCodeHash())) {
+            user.setWhatsappVerificationAttempts(attempts);
+            if (attempts >= MAX_ATTEMPTS) {
+                clearPending(user);
+            }
+            appUserRepository.save(user);
+            return new InboundVerificationResult(
+                    false,
+                    attempts >= MAX_ATTEMPTS
+                            ? "El enlace ya no es valido. Genera uno nuevo desde GODS."
+                            : "El codigo no coincide. Usa el mensaje generado directamente por GODS."
+            );
+        }
+
+        user.setPhone(phone);
+        user.setWhatsappVerifiedPhone(phone);
+        user.setWhatsappPhoneVerifiedAt(now);
+        user.setFechaActualizacion(now);
+        clearPending(user);
+        appUserRepository.save(user);
+
+        return new InboundVerificationResult(
+                true,
+                "WhatsApp verificado correctamente. Regresa a GODS y activa las alertas de reservas."
+        );
     }
 
     @Transactional(readOnly = true)
@@ -137,7 +207,7 @@ public class OwnerWhatsappPhoneVerificationService {
         return centralWhatsappSenderService.isConfigured();
     }
 
-    private OwnerWhatsappVerificationResponse response(AppUser user) {
+    private OwnerWhatsappVerificationResponse response(AppUser user, String code) {
         boolean verified = isVerifiedRecipient(user);
         LocalDateTime now = LocalDateTime.now();
         boolean pending = user.getWhatsappPendingPhone() != null
@@ -147,6 +217,9 @@ public class OwnerWhatsappPhoneVerificationService {
         LocalDateTime canRequestAt = user.getWhatsappVerificationRequestedAt() == null
                 ? null
                 : user.getWhatsappVerificationRequestedAt().plusSeconds(RESEND_COOLDOWN_SECONDS);
+        String verificationMessage = code == null
+                ? null
+                : centralWhatsappSenderService.verificationMessage(user.getId(), code);
 
         return OwnerWhatsappVerificationResponse.builder()
                 .phone(user.getPhone())
@@ -161,6 +234,11 @@ public class OwnerWhatsappPhoneVerificationService {
                 .centralNotificationsEnabled(centralWhatsappSenderService.isConfigured())
                 .centralProvider(centralWhatsappSenderService.provider())
                 .centralSenderLabel(centralWhatsappSenderService.senderLabel())
+                .verificationMode("INBOUND_WHATSAPP")
+                .verificationMessage(verificationMessage)
+                .verificationUrl(code == null
+                        ? null
+                        : centralWhatsappSenderService.verificationChatUrl(user.getId(), code))
                 .build();
     }
 
@@ -188,6 +266,16 @@ public class OwnerWhatsappPhoneVerificationService {
         user.setWhatsappVerificationCodeHash(null);
         user.setWhatsappVerificationExpiresAt(null);
         user.setWhatsappVerificationAttempts(0);
+    }
+
+    private String normalizeInboundPhone(String value) {
+        if (value == null || value.isBlank()) return null;
+        String digits = value.replace("whatsapp:", "").replaceAll("[^0-9]", "");
+        if (digits.length() < 8 || digits.length() > 15) return null;
+        return "+" + digits;
+    }
+
+    public record InboundVerificationResult(boolean verified, String reply) {
     }
 
     private String mask(String value) {

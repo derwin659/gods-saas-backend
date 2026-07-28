@@ -3,7 +3,6 @@ package com.gods.saas.service.impl;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gods.saas.domain.model.Notification;
-import com.gods.saas.domain.model.Tenant;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -28,7 +27,6 @@ import java.util.Map;
 public class CentralWhatsappSenderService {
 
     private static final String DEFAULT_BOOKING_TEMPLATE = "owner_new_booking_v1";
-    private static final String DEFAULT_VERIFICATION_TEMPLATE = "owner_phone_verification_v1";
     private static final String DEFAULT_LANGUAGE = "es";
 
     @Value("${whatsapp.central.enabled:false}")
@@ -48,9 +46,6 @@ public class CentralWhatsappSenderService {
 
     @Value("${whatsapp.central.meta.booking-template-name:" + DEFAULT_BOOKING_TEMPLATE + "}")
     private String metaBookingTemplateName;
-
-    @Value("${whatsapp.central.meta.verification-template-name:" + DEFAULT_VERIFICATION_TEMPLATE + "}")
-    private String metaVerificationTemplateName;
 
     @Value("${whatsapp.central.meta.template-language:" + DEFAULT_LANGUAGE + "}")
     private String metaTemplateLanguage;
@@ -76,8 +71,8 @@ public class CentralWhatsappSenderService {
     @Value("${whatsapp.twilio.owner-booking-content-sid:}")
     private String twilioBookingContentSid;
 
-    @Value("${whatsapp.twilio.owner-phone-verification-content-sid:}")
-    private String twilioVerificationContentSid;
+    @Value("${whatsapp.twilio.inbound-webhook-url:}")
+    private String twilioInboundWebhookUrl;
 
     private final ObjectMapper objectMapper;
     private final WhatsappRecipientResolver recipientResolver;
@@ -93,8 +88,7 @@ public class CentralWhatsappSenderService {
                     && hasText(twilioAccountSid)
                     && hasText(twilioAuthToken)
                     && (hasText(twilioMessagingServiceSid) || hasText(twilioFromNumber))
-                    && hasText(twilioBookingContentSid)
-                    && hasText(twilioVerificationContentSid);
+                    && hasText(twilioBookingContentSid);
             default -> false;
         };
     }
@@ -107,6 +101,25 @@ public class CentralWhatsappSenderService {
     public String senderLabel() {
         String value = clean(centralSenderLabel);
         return value == null ? "GODS Notificaciones" : value;
+    }
+
+    public boolean isInboundVerificationConfigured() {
+        return isConfigured()
+                && "TWILIO".equals(provider())
+                && hasText(twilioFromNumber)
+                && hasText(twilioInboundWebhookUrl);
+    }
+
+    public String verificationMessage(Long userId, String code) {
+        return "VERIFICAR GODS " + userId + " " + code;
+    }
+
+    public String verificationChatUrl(Long userId, String code) {
+        if (!isInboundVerificationConfigured()) {
+            throw new RuntimeException("Falta configurar el webhook entrante de WhatsApp en Twilio.");
+        }
+        String number = normalizeSender(twilioFromNumber).replaceAll("[^0-9]", "");
+        return "https://wa.me/" + number + "?text=" + urlEncode(verificationMessage(userId, code));
     }
 
     public String sendBooking(Notification notification) {
@@ -137,24 +150,6 @@ public class CentralWhatsappSenderService {
                 parameters,
                 "BOOKING",
                 notification.getId()
-        );
-    }
-
-    public String sendVerification(Tenant tenant, String phoneDigits, String code, int expiresMinutes) {
-        requireConfigured();
-
-        String normalized = recipientResolver.normalizeDigits(phoneDigits, tenant);
-        if (!hasText(normalized)) {
-            throw new RuntimeException("El numero no es valido para recibir el codigo");
-        }
-
-        return sendTemplate(
-                normalized,
-                metaVerificationTemplateName,
-                twilioVerificationContentSid,
-                List.of(code),
-                "PHONE_VERIFICATION",
-                null
         );
     }
 

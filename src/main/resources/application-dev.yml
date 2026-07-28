@@ -10,7 +10,6 @@ whatsapp:
     sender-label: ${WHATSAPP_CENTRAL_SENDER_LABEL:GODS Notificaciones}
     meta:
       booking-template-name: ${WHATSAPP_META_OWNER_BOOKING_TEMPLATE_NAME:owner_new_booking_v1}
-      verification-template-name: ${WHATSAPP_META_OWNER_VERIFICATION_TEMPLATE_NAME:owner_phone_verification_v1}
       template-language: ${WHATSAPP_META_TEMPLATE_LANGUAGE:es}
   meta:
     access-token: ${WHATSAPP_META_ACCESS_TOKEN:}
@@ -23,7 +22,8 @@ whatsapp:
     messaging-service-sid: ${TWILIO_MESSAGING_SERVICE_SID:}
     status-callback-url: ${TWILIO_STATUS_CALLBACK_URL:}
     owner-booking-content-sid: ${TWILIO_OWNER_BOOKING_CONTENT_SID:}
-    owner-phone-verification-content-sid: ${TWILIO_OWNER_PHONE_VERIFICATION_CONTENT_SID:}
+    inbound-webhook-url: ${TWILIO_INBOUND_WEBHOOK_URL:}
+    validate-inbound-signature: ${TWILIO_VALIDATE_INBOUND_SIGNATURE:true}
 
 spring:
   datasource:

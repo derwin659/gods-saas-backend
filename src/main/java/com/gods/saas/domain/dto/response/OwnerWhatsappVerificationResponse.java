@@ -20,4 +20,7 @@ public class OwnerWhatsappVerificationResponse {
     private Boolean centralNotificationsEnabled;
     private String centralProvider;
     private String centralSenderLabel;
+    private String verificationMode;
+    private String verificationMessage;
+    private String verificationUrl;
 }
