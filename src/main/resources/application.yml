@@ -80,3 +80,13 @@ whatsapp:
     owner-booking-content-sid: ${TWILIO_OWNER_BOOKING_CONTENT_SID:}
     inbound-webhook-url: ${TWILIO_INBOUND_WEBHOOK_URL:}
     validate-inbound-signature: ${TWILIO_VALIDATE_INBOUND_SIGNATURE:true}
+
+twilio:
+  verify:
+    enabled: ${TWILIO_VERIFY_ENABLED:false}
+    service-sid: ${TWILIO_VERIFY_SERVICE_SID:}
+    channel: ${TWILIO_VERIFY_CHANNEL:sms}
+    api-key: ${TWILIO_VERIFY_API_KEY:}
+    api-secret: ${TWILIO_VERIFY_API_SECRET:}
+    ttl-seconds: ${TWILIO_VERIFY_TTL_SECONDS:600}
+    resend-cooldown-seconds: ${TWILIO_VERIFY_RESEND_COOLDOWN_SECONDS:60}

@@ -40,6 +40,8 @@ public class CustomerService {
     private final LoyaltyAccountRepository loyaltyAccountRepository;
     private final CustomerRepository customerRepository;
     private final OtpCodeRepository otpCodeRepository;
+    private final TwilioVerifyOtpService twilioVerifyOtpService;
+    private final InternationalPhoneService internationalPhoneService;
     private final TenantRepository tenantRepository;
     private final AppointmentRepository appointmentRepository;
     private final SaleItemRepository saleItemRepository;
@@ -69,10 +71,12 @@ public class CustomerService {
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new RuntimeException("Tenant no encontrado"));
 
-        String telefono = req.getPhone().trim();
+        InternationalPhoneService.NormalizedPhone normalized =
+                internationalPhoneService.normalize(tenant, req.getPhone());
+        String telefono = normalized.e164();
 
-        if (customerRepository.existsByTenant_IdAndTelefono(tenantId, telefono)) {
-            throw new RuntimeException("El teléfono ya está registrado en esta barbería");
+        if (!findPhoneCandidates(tenant, normalized, false).isEmpty()) {
+            throw new RuntimeException("El teléfono ya está registrado en este negocio");
         }
 
         Customer newClient = Customer.builder()
@@ -125,19 +129,20 @@ public class CustomerService {
         }
 
         if (req.getTelefono() != null) {
-            String telefono = req.getTelefono().trim();
-
-            if (telefono.isBlank()) {
+            if (req.getTelefono().isBlank()) {
                 throw new RuntimeException("El teléfono es obligatorio");
             }
 
-            customerRepository.findByTenant_IdAndTelefono(tenantId, telefono)
-                    .filter(existing -> !existing.getId().equals(customerId))
-                    .ifPresent(existing -> {
-                        throw new RuntimeException("El teléfono ya está registrado en esta barbería");
-                    });
+            InternationalPhoneService.NormalizedPhone normalized =
+                    internationalPhoneService.normalize(customer.getTenant(), req.getTelefono());
+            boolean duplicated = findPhoneCandidates(customer.getTenant(), normalized, false)
+                    .stream()
+                    .anyMatch(existing -> !existing.getId().equals(customerId));
+            if (duplicated) {
+                throw new RuntimeException("El teléfono ya está registrado en este negocio");
+            }
 
-            customer.setTelefono(telefono);
+            customer.setTelefono(normalized.e164());
         }
 
         if (req.getEmail() != null) {
@@ -391,6 +396,10 @@ public class CustomerService {
 
     @Transactional
     public ClientLoginResponse verifyLoginOtp(Long otpId, String code) {
+        if (code == null || !code.trim().matches("\\d{4,10}")) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ingresa el codigo recibido.");
+        }
+
         OtpCode otp = otpCodeRepository.findById(otpId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "OTP no encontrado"));
 
@@ -402,7 +411,7 @@ public class CustomerService {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Código expirado");
         }
 
-        if (otp.getCode() == null || !otp.getCode().equals(code)) {
+        if (!"VERIFY".equals(otp.getCode())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Código incorrecto");
         }
 
@@ -413,6 +422,10 @@ public class CustomerService {
 
         Customer customer = customerRepository.findByTenantIdAndTelefonoWithTenant(tenantId, otp.getPhone())
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cliente no encontrado"));
+
+        if (!twilioVerifyOtpService.checkCode(customer.getTenant(), otp.getPhone(), code.trim())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Codigo incorrecto o vencido.");
+        }
 
         customer.setPhoneVerified(true);
         customer.setFechaActualizacion(LocalDateTime.now());
@@ -456,17 +469,17 @@ public class CustomerService {
 
     @Transactional
     public Customer registerFromApp(Long tenantId, String phone, String nombres, String apellidos) {
-        customerRepository.findByTenantIdAndTelefono(tenantId, phone)
-                .ifPresent(c -> {
-                    throw new ResponseStatusException(HttpStatus.CONFLICT, "El teléfono ya está registrado");
-                });
-
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tenant no encontrado"));
+        InternationalPhoneService.NormalizedPhone normalized = internationalPhoneService.normalize(tenant, phone);
+
+        if (!findPhoneCandidates(tenant, normalized, false).isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "El telefono ya esta registrado");
+        }
 
         Customer customer = Customer.builder()
                 .tenant(tenant)
-                .telefono(phone)
+                .telefono(normalized.e164())
                 .nombres(nombres)
                 .apellidos(apellidos)
                 .phoneVerified(false)
@@ -484,29 +497,103 @@ public class CustomerService {
 
         return customerRepository.save(customer);
     }
-
     @Transactional
-    public OtpCode requestLoginOtp(Long tenantId, String phone) {
-        customerRepository.findByTenantIdAndTelefono(tenantId, phone)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cliente no encontrado"));
+    public OtpDispatch requestLoginOtp(Long tenantId, String phone) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tenant no encontrado"));
+        InternationalPhoneService.NormalizedPhone normalized = internationalPhoneService.normalize(tenant, phone);
+        Customer customer = findActiveCustomerByPhone(tenant, normalized);
+        String e164 = normalized.e164();
 
-        String code = String.format("%06d", new Random().nextInt(999999));
+        LocalDateTime now = LocalDateTime.now();
+        OtpCode previous = otpCodeRepository
+                .findTopByTenantIdAndPhoneAndUsedIsFalseOrderByCreatedAtDesc(tenantId, e164)
+                .orElse(null);
+
+        if (previous != null
+                && previous.getCreatedAt() != null
+                && previous.getCreatedAt().plusSeconds(twilioVerifyOtpService.resendCooldownSeconds()).isAfter(now)) {
+            throw new ResponseStatusException(
+                    HttpStatus.TOO_MANY_REQUESTS,
+                    "Espera antes de solicitar otro codigo."
+            );
+        }
+
+        twilioVerifyOtpService.sendCode(tenant, e164);
+        if (previous != null) {
+            previous.setUsed(true);
+            otpCodeRepository.save(previous);
+        }
 
         OtpCode otp = OtpCode.builder()
                 .tenantId(tenantId)
-                .phone(phone)
-                .code(code)
+                .phone(e164)
+                .code("VERIFY")
                 .used(false)
-                .createdAt(LocalDateTime.now())
-                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .createdAt(now)
+                .expiresAt(now.plusSeconds(twilioVerifyOtpService.ttlSeconds()))
                 .build();
 
         otpCodeRepository.save(otp);
 
-        System.out.println("🔐 OTP LOGIN (DEV): " + code);
-        return otp;
+        return new OtpDispatch(
+                otp.getId(),
+                twilioVerifyOtpService.ttlSeconds(),
+                twilioVerifyOtpService.channel()
+        );
     }
 
+    private Customer findActiveCustomerByPhone(
+            Tenant tenant,
+            InternationalPhoneService.NormalizedPhone normalized
+    ) {
+        List<Customer> activeCandidates = findPhoneCandidates(tenant, normalized, true);
+        if (activeCandidates.isEmpty()) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Cliente no encontrado");
+        }
+        if (activeCandidates.size() > 1) {
+            throw new ResponseStatusException(
+                    HttpStatus.CONFLICT,
+                    "Hay mas de una cuenta con este telefono. Contacta al negocio para corregirla."
+            );
+        }
+
+        Customer customer = activeCandidates.get(0);
+        if (!normalized.e164().equals(customer.getTelefono())) {
+            customer.setTelefono(normalized.e164());
+            customer.setFechaActualizacion(LocalDateTime.now());
+            customer = customerRepository.save(customer);
+        }
+        return customer;
+    }
+
+    private List<Customer> findPhoneCandidates(
+            Tenant tenant,
+            InternationalPhoneService.NormalizedPhone normalized,
+            boolean activeOnly
+    ) {
+        String legacyNational = normalized.belongsToTenantRegion()
+                ? normalized.nationalDigits()
+                : normalized.internationalDigits();
+        String legacyFormatted = normalized.belongsToTenantRegion()
+                ? normalized.lookupDigits().stream().skip(2).findFirst().orElse(legacyNational)
+                : normalized.internationalDigits();
+
+        List<Customer> candidates = customerRepository.findPhoneCandidates(
+                tenant.getId(),
+                normalized.e164(),
+                normalized.internationalDigits(),
+                legacyNational,
+                legacyFormatted
+        );
+        if (!activeOnly) return candidates;
+        return candidates.stream()
+                .filter(candidate -> candidate.getActivo() == null || Boolean.TRUE.equals(candidate.getActivo()))
+                .toList();
+    }
+
+    public record OtpDispatch(Long otpId, int ttl, String channel) {
+    }
     public Customer obtenerClientePorId(Long tenantId, Long customerId) {
         return customerRepository.findByIdAndTenant_IdAndActivoTrue(customerId, tenantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cliente no encontrado"));

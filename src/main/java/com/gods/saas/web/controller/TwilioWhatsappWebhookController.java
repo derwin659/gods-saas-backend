@@ -56,6 +56,9 @@ public class TwilioWhatsappWebhookController {
     }
 
     private String twiml(String message) {
+        if (message == null || message.isBlank()) {
+            return "<Response></Response>";
+        }
         String safe = HtmlUtils.htmlEscape(message == null ? "" : message);
         return "<Response><Message>" + safe + "</Message></Response>";
     }

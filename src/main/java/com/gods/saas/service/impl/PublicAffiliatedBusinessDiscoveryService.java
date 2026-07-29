@@ -145,6 +145,7 @@ public class PublicAffiliatedBusinessDiscoveryService {
                 tenant == null ? null : tenant.getCodigo(),
                 tenant == null ? null : tenant.getLogoUrl(),
                 tenant == null ? null : tenant.getBusinessType(),
+                tenant == null ? null : tenant.getPais(),
                 branch.getId(),
                 branch.getNombre(),
                 branch.getDireccion(),

@@ -7,6 +7,8 @@ import com.gods.saas.domain.repository.AppointmentRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Component;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
 import java.util.Optional;
@@ -85,18 +87,18 @@ public class OwnerBookingWhatsappPayloadFactory {
     }
 
     private String paymentSummary(Appointment appointment) {
-        String status = safe(appointment.getEstado(), "RESERVADO");
+        String status = appointmentStatusLabel(appointment.getEstado());
         String total = appointment.getTotalAmount() == null
                 ? "No informado"
-                : appointment.getTotalAmount().stripTrailingZeros().toPlainString();
+                : money(appointment.getTotalAmount());
 
         if (!Boolean.TRUE.equals(appointment.getDepositRequired())) {
             return status + " | Sin adelanto | Total " + total;
         }
 
         String depositAmount = appointment.getDepositAmount() == null
-                ? "0"
-                : appointment.getDepositAmount().stripTrailingZeros().toPlainString();
+                ? money(BigDecimal.ZERO)
+                : money(appointment.getDepositAmount());
         String depositStatus = safe(appointment.getDepositStatus(), "PENDING_VALIDATION")
                 .toUpperCase(Locale.ROOT);
         String depositLabel = switch (depositStatus) {
@@ -106,6 +108,26 @@ public class OwnerBookingWhatsappPayloadFactory {
         };
 
         return status + " | " + depositLabel + " | Total " + total;
+    }
+
+    private String appointmentStatusLabel(String rawStatus) {
+        String status = safe(rawStatus, "RESERVADO").toUpperCase(Locale.ROOT);
+        return switch (status) {
+            case "PENDING_DEPOSIT_VALIDATION" -> "Pendiente de validar adelanto";
+            case "RESERVADO", "BOOKED", "CONFIRMED", "CONFIRMADO" -> "Reserva confirmada";
+            case "CANCELLED", "CANCELED", "CANCELADO" -> "Reserva cancelada";
+            case "COMPLETED", "COMPLETADO", "ATENDIDO" -> "Atencion completada";
+            default -> "Reserva registrada";
+        };
+    }
+
+    private String money(BigDecimal amount) {
+        if (amount == null) {
+            return "No informado";
+        }
+        return "S/ " + amount
+                .setScale(2, RoundingMode.HALF_UP)
+                .toPlainString();
     }
 
     private String fullName(String firstName, String lastName, String fallback) {

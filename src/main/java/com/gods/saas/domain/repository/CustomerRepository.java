@@ -39,6 +39,24 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
     Optional<Customer> findByTenant_IdAndTelefonoAndActivoTrue(Long tenantId, String telefono);
     boolean existsByTenant_IdAndTelefono(Long tenantId, String telefono);
 
+    @Query(value = """
+        select c.*
+          from customer c
+         where c.tenant_id = :tenantId
+           and regexp_replace(coalesce(c.telefono, ''), '[^0-9]', '', 'g')
+               in (:internationalDigits, :nationalDigits, :nationalFormattedDigits)
+         order by case when c.telefono = :e164 then 0 else 1 end,
+                  c.customer_id
+         limit 3
+        """, nativeQuery = true)
+    List<Customer> findPhoneCandidates(
+            @Param("tenantId") Long tenantId,
+            @Param("e164") String e164,
+            @Param("internationalDigits") String internationalDigits,
+            @Param("nationalDigits") String nationalDigits,
+            @Param("nationalFormattedDigits") String nationalFormattedDigits
+    );
+
     @Query("""
     select c
     from Customer c

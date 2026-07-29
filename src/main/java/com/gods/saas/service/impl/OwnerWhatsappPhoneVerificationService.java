@@ -23,6 +23,8 @@ public class OwnerWhatsappPhoneVerificationService {
     private static final int MAX_ATTEMPTS = 5;
     private static final Pattern INBOUND_CODE_PATTERN = Pattern.compile(
             "(?i)^\\s*VERIFICAR\\s+GODS\\s+(\\d+)\\s+(\\d{6})\\s*$");
+    private static final Pattern INBOUND_VERIFICATION_PREFIX = Pattern.compile(
+            "(?i)^\\s*VERIFICAR\\s+GODS\\b.*$");
 
     private final AppUserRepository appUserRepository;
     private final PasswordEncoder passwordEncoder;
@@ -118,8 +120,13 @@ public class OwnerWhatsappPhoneVerificationService {
 
     @Transactional
     public InboundVerificationResult verifyInbound(String rawFrom, String rawBody) {
+        String body = rawBody == null ? "" : rawBody;
+        if (!INBOUND_VERIFICATION_PREFIX.matcher(body).matches()) {
+            return new InboundVerificationResult(false, null);
+        }
+
         String phone = normalizeInboundPhone(rawFrom);
-        Matcher matcher = INBOUND_CODE_PATTERN.matcher(rawBody == null ? "" : rawBody);
+        Matcher matcher = INBOUND_CODE_PATTERN.matcher(body);
         if (phone == null || !matcher.matches()) {
             return new InboundVerificationResult(
                     false,

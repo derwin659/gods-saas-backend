@@ -6,6 +6,7 @@ public record PublicAffiliatedBranchResponse(
         String tenantCode,
         String tenantLogoUrl,
         String businessType,
+        String country,
         Long branchId,
         String branchName,
         String address,

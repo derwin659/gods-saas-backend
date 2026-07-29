@@ -5,7 +5,6 @@ import com.gods.saas.domain.dto.request.OtpRequest;
 import com.gods.saas.domain.dto.request.OtpVerifyRequest;
 import com.gods.saas.domain.dto.response.ClientLoginResponse;
 import com.gods.saas.domain.model.Customer;
-import com.gods.saas.domain.model.OtpCode;
 import com.gods.saas.service.impl.CustomerService;
 import com.gods.saas.service.impl.JwtService;
 import lombok.RequiredArgsConstructor;
@@ -33,11 +32,11 @@ public class CustomerAuthController {
 
     @PostMapping("/otp/request")
     public ResponseEntity<?> requestOtp(@RequestBody OtpRequest req) {
-        OtpCode otp = customerService.requestLoginOtp(req.getTenantId(), req.getPhone());
+        CustomerService.OtpDispatch dispatch = customerService.requestLoginOtp(req.getTenantId(), req.getPhone());
         return ResponseEntity.ok(Map.of(
-                "otpId", otp.getId(),
-                "ttl", 300,
-                "devCode", otp.getCode() // SOLO DEV
+                "otpId", dispatch.otpId(),
+                "ttl", dispatch.ttl(),
+                "channel", dispatch.channel()
         ));
     }
 
