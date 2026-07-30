@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gods.saas.domain.model.Tenant;
 import com.gods.saas.utils.RegionalDefaults;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -22,6 +23,7 @@ import java.util.Locale;
 import java.util.Map;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class TwilioVerifyOtpService {
 
@@ -62,7 +64,10 @@ public class TwilioVerifyOtpService {
         Map<String, String> form = new LinkedHashMap<>();
         form.put("To", phone);
         form.put("Channel", channel());
-        form.put("Locale", RegionalDefaults.normalizeLocale(locale, tenant == null ? null : tenant.getPais()));
+        String verifyLocale = verifyLocale(
+                RegionalDefaults.normalizeLocale(locale, tenant == null ? null : tenant.getPais())
+        );
+        if (verifyLocale != null) form.put("Locale", verifyLocale);
 
         JsonNode response = post("/Verifications", form, false);
         if (!"pending".equalsIgnoreCase(response.path("status").asText())) {
@@ -132,10 +137,30 @@ public class TwilioVerifyOtpService {
                 return objectMapper.readTree(response.body());
             }
 
+            TwilioFailure failure = parseFailure(response.statusCode(), response.body());
+            log.warn(
+                    "Twilio Verify rejected request: resource={}, status={}, code={}, to={}, message={}",
+                    resource,
+                    response.statusCode(),
+                    failure.code(),
+                    maskPhone(form.get("To")),
+                    failure.message()
+            );
+
             if (response.statusCode() == 429) {
                 throw new ResponseStatusException(
                         HttpStatus.TOO_MANY_REQUESTS,
                         "Demasiados intentos. Espera unos minutos."
+                );
+            }
+            if (failure.code() == 60203
+                    || failure.code() == 60212
+                    || failure.code() == 60238
+                    || failure.code() == 60245
+                    || failure.code() == 60412) {
+                throw new ResponseStatusException(
+                        HttpStatus.TOO_MANY_REQUESTS,
+                        "Twilio bloqueo temporalmente nuevos codigos para este numero. Espera unos minutos e intenta otra vez."
                 );
             }
             if (checkingCode && (response.statusCode() == 400 || response.statusCode() == 404)) {
@@ -145,9 +170,24 @@ public class TwilioVerifyOtpService {
                 );
             }
             if (!checkingCode && response.statusCode() == 400) {
+                if (failure.code() == 60205) {
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST,
+                            "Este numero parece ser una linea fija y no puede recibir SMS."
+                    );
+                }
+                if (failure.code() == 60006
+                        || failure.code() == 60008
+                        || failure.code() == 60200
+                        || failure.code() == 60428) {
+                    throw new ResponseStatusException(
+                            HttpStatus.BAD_REQUEST,
+                            "Verifica el pais, el prefijo y el numero. Twilio no pudo enviarlo por " + channel() + "."
+                    );
+                }
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
-                        "El numero no puede recibir el codigo de verificacion."
+                        "Twilio no pudo enviar el codigo a este numero. Revisa el numero o intenta nuevamente en unos minutos."
                 );
             }
 
@@ -199,6 +239,41 @@ public class TwilioVerifyOtpService {
 
     private String normalizePhone(Tenant tenant, String rawPhone) {
         return internationalPhoneService.normalize(tenant, rawPhone).e164();
+    }
+
+    private String verifyLocale(String locale) {
+        String value = clean(locale);
+        if (value == null) return null;
+        String language = Locale.forLanguageTag(value.replace('_', '-')).getLanguage();
+        return switch (language.toLowerCase(Locale.ROOT)) {
+            case "es", "pt", "en" -> language.toLowerCase(Locale.ROOT);
+            default -> null;
+        };
+    }
+
+    private TwilioFailure parseFailure(int status, String responseBody) {
+        try {
+            JsonNode body = objectMapper.readTree(responseBody == null ? "{}" : responseBody);
+            return new TwilioFailure(
+                    body.path("code").asInt(status),
+                    clean(body.path("message").asText()) == null
+                            ? "Sin detalle"
+                            : body.path("message").asText()
+            );
+        } catch (Exception ignored) {
+            return new TwilioFailure(status, "Respuesta no JSON");
+        }
+    }
+
+    private String maskPhone(String phone) {
+        String value = clean(phone);
+        if (value == null) return "unknown";
+        if (value.length() <= 4) return "****";
+        return "*".repeat(Math.max(4, value.length() - 4))
+                + value.substring(value.length() - 4);
+    }
+
+    private record TwilioFailure(int code, String message) {
     }
 
     private String encode(String value) {
