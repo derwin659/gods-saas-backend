@@ -10,6 +10,7 @@ import com.gods.saas.domain.model.TenantSettings;
 import com.gods.saas.domain.repository.SuscriptionRepository;
 import com.gods.saas.domain.repository.TenantRepository;
 import com.gods.saas.domain.repository.TenantSettingsRepository;
+import com.gods.saas.utils.RegionalDefaults;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -54,10 +55,10 @@ public class TenantService {
         // Crear settings por defecto
         TenantSettings settings = new TenantSettings();
         settings.setTenant(savedTenant);
-        settings.setLanguage("es");
+        settings.setLanguage(RegionalDefaults.localeForCountry(savedTenant.getPais()));
         String currency = pricingService.currencyForCountry(pricingService.countryCodeFor(savedTenant.getPais()), null);
         settings.setCurrency(currency);
-        settings.setTimezone("America/Lima");
+        settings.setTimezone(RegionalDefaults.timezoneForCountry(savedTenant.getPais()));
         settings.setCreatedAt(LocalDateTime.now());
 
         Subscription subscription = Subscription.builder()
@@ -210,4 +211,3 @@ public class TenantService {
         return dto;
     }
 }
-

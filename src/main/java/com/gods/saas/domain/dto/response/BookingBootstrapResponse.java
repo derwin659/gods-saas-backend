@@ -20,6 +20,8 @@ public class BookingBootstrapResponse {
     private String countryCode;
     private String currency;
     private String currencySymbol;
+    private String locale;
+    private String timezone;
 
     private List<BranchMiniResponse> branches;
     private List<ServiceMiniResponse> services;

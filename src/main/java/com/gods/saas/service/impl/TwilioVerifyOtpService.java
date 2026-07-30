@@ -3,6 +3,7 @@ package com.gods.saas.service.impl;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gods.saas.domain.model.Tenant;
+import com.gods.saas.utils.RegionalDefaults;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
@@ -55,12 +56,13 @@ public class TwilioVerifyOtpService {
     private final InternationalPhoneService internationalPhoneService;
     private final HttpClient httpClient = HttpClient.newHttpClient();
 
-    public void sendCode(Tenant tenant, String rawPhone) {
+    public void sendCode(Tenant tenant, String rawPhone, String locale) {
         requireConfigured();
         String phone = normalizePhone(tenant, rawPhone);
         Map<String, String> form = new LinkedHashMap<>();
         form.put("To", phone);
         form.put("Channel", channel());
+        form.put("Locale", RegionalDefaults.normalizeLocale(locale, tenant == null ? null : tenant.getPais()));
 
         JsonNode response = post("/Verifications", form, false);
         if (!"pending".equalsIgnoreCase(response.path("status").asText())) {

@@ -2,6 +2,7 @@ package com.gods.saas.service.impl;
 
 import com.gods.saas.domain.model.TenantSettings;
 import com.gods.saas.domain.repository.TenantSettingsRepository;
+import com.gods.saas.utils.RegionalDefaults;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
@@ -20,9 +21,13 @@ public class TenantTimeService {
         String timezone = tenantSettingsRepository.findByTenantId(tenantId)
                 .map(TenantSettings::getTimezone)
                 .filter(tz -> tz != null && !tz.isBlank())
-                .orElse("America/Lima");
+                .orElse(RegionalDefaults.DEFAULT_TIMEZONE);
 
-        return ZoneId.of(timezone);
+        try {
+            return ZoneId.of(timezone);
+        } catch (RuntimeException exception) {
+            return ZoneId.of(RegionalDefaults.DEFAULT_TIMEZONE);
+        }
     }
 
     public LocalDateTime now(Long tenantId) {

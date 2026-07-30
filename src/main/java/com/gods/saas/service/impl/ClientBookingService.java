@@ -6,6 +6,7 @@ import com.gods.saas.domain.dto.response.*;
 import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.*;
 import com.gods.saas.service.impl.impl.NotificationService;
+import com.gods.saas.utils.RegionalDefaults;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -15,7 +16,6 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
-import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
@@ -38,7 +38,6 @@ public class ClientBookingService {
 
     private static final LocalTime DEFAULT_OPENING_TIME = LocalTime.of(8, 0);
     private static final LocalTime DEFAULT_CLOSING_TIME = LocalTime.of(21, 0);
-    private static final ZoneId BUSINESS_ZONE = ZoneId.of("America/Lima");
 
     private final BranchRepository branchRepository;
     private final ServiceRepository serviceRepository;
@@ -51,6 +50,7 @@ public class ClientBookingService {
     private final PromotionRepository promotionRepository;
     private final UserTenantRoleRepository userTenantRoleRepository;
     private final BarberServiceAssignmentService barberServiceAssignmentService;
+    private final TenantTimeService tenantTimeService;
 
     public BookingBootstrapResponse getBootstrap(Long tenantId) {
         Tenant tenant = tenantRepository.findById(tenantId)
@@ -85,6 +85,12 @@ public class ClientBookingService {
                 .countryCode(countryCode)
                 .currency(currency)
                 .currencySymbol(resolveCurrencySymbol(currency))
+                .locale(RegionalDefaults.normalizeLocale(
+                        settings == null ? null : settings.getLanguage(), tenant.getPais()
+                ))
+                .timezone(RegionalDefaults.validTimezoneOrDefault(
+                        settings == null ? null : settings.getTimezone(), tenant.getPais()
+                ))
                 .branches(branches.stream().map(BranchMiniResponse::fromEntity).toList())
                 .services(services.stream().map(ServiceMiniResponse::fromEntity).toList())
                 .barbers(barbers.stream().map(barber -> mapBootstrapBarber(tenantId, barber)).toList())
@@ -139,7 +145,7 @@ public class ClientBookingService {
                 tenantId, branchId, serviceId, serviceIds, date, barberId);
 
         LocalDate fecha = LocalDate.parse(date);
-        validateBookingDate(fecha);
+        validateBookingDate(tenantId, fecha);
 
         Branch branch = branchRepository.findById(branchId)
                 .orElseThrow(() -> new RuntimeException("Sucursal no encontrada"));
@@ -195,7 +201,7 @@ public class ClientBookingService {
 
             LocalTime apertura = availability.getStartTime();
             LocalTime cierre = availability.getEndTime();
-            LocalTime current = normalizeStartTime(fecha, apertura, slotInterval);
+            LocalTime current = normalizeStartTime(tenantId, fecha, apertura, slotInterval);
 
             log.info("BARBER SCHEDULE WINDOW => barberId={}, apertura={}, cierre={}, normalizedStart={}",
                     barberId, apertura, cierre, current);
@@ -259,7 +265,7 @@ public class ClientBookingService {
                     .max(LocalTime::compareTo)
                     .orElse(DEFAULT_CLOSING_TIME);
 
-            LocalTime current = normalizeStartTime(fecha, apertura, slotInterval);
+            LocalTime current = normalizeStartTime(tenantId, fecha, apertura, slotInterval);
 
             log.info("GLOBAL SCHEDULE WINDOW => fecha={}, apertura={}, cierre={}, normalizedStart={}",
                     fecha, apertura, cierre, current);
@@ -327,8 +333,8 @@ public class ClientBookingService {
         LocalDate fecha = LocalDate.parse(req.getDate());
         LocalTime horaInicio = LocalTime.parse(req.getHoraInicio());
 
-        validateBookingDate(fecha);
-        validateTimeNotPast(fecha, horaInicio);
+        validateBookingDate(tenantId, fecha);
+        validateTimeNotPast(tenantId, fecha, horaInicio);
 
         int duracion = getTotalServiceDuration(selectedServices);
         LocalTime horaFin = horaInicio.plusMinutes(duracion);
@@ -466,7 +472,7 @@ public class ClientBookingService {
                 .depositOperationCode(trimToNull(req.getDepositOperationCode()))
                 .depositEvidenceUrl(trimToNull(req.getDepositEvidenceUrl()))
                 .depositNote(trimToNull(req.getDepositNote()))
-                .depositPaidAt(depositRequired ? LocalDateTime.now(BUSINESS_ZONE) : null)
+                .depositPaidAt(depositRequired ? tenantTimeService.now(tenantId) : null)
                 .build();
 
         Appointment saved = appointmentRepository.save(appointment);
@@ -507,8 +513,8 @@ public class ClientBookingService {
             throw new RuntimeException("Esta reserva ya no se puede cancelar");
         }
 
-        LocalDate today = LocalDate.now(BUSINESS_ZONE);
-        LocalTime now = LocalTime.now(BUSINESS_ZONE);
+        LocalDate today = tenantTimeService.today(tenantId);
+        LocalTime now = tenantTimeService.currentTime(tenantId);
         if (appointment.getFecha() != null
                 && appointment.getHoraInicio() != null
                 && (appointment.getFecha().isBefore(today)
@@ -563,8 +569,8 @@ public class ClientBookingService {
 
         LocalDate fecha = LocalDate.parse(req.getDate());
         LocalTime horaInicio = LocalTime.parse(req.getHoraInicio());
-        validateBookingDate(fecha);
-        validateTimeNotPast(fecha, horaInicio);
+        validateBookingDate(tenantId, fecha);
+        validateTimeNotPast(tenantId, fecha, horaInicio);
 
         Branch branch = appointment.getBranch();
         ServiceEntity service = appointment.getService();
@@ -663,12 +669,12 @@ public class ClientBookingService {
             return false;
         }
 
-        LocalDate today = LocalDate.now(BUSINESS_ZONE);
-        LocalTime now = LocalTime.now(BUSINESS_ZONE);
+        LocalDate today = tenantTimeService.today(tenantId);
+        LocalTime now = tenantTimeService.currentTime(tenantId);
 
         if (fecha.equals(today) && !horaInicio.isAfter(now)) {
             log.warn("SLOT REJECTED => time is in the past. zone={}, now={}, slotStart={}",
-                    BUSINESS_ZONE, now, horaInicio);
+                    tenantTimeService.getZone(tenantId), now, horaInicio);
             return false;
         }
 
@@ -711,8 +717,8 @@ public class ClientBookingService {
             return false;
         }
 
-        LocalDate today = LocalDate.now(BUSINESS_ZONE);
-        LocalTime now = LocalTime.now(BUSINESS_ZONE);
+        LocalDate today = tenantTimeService.today(tenantId);
+        LocalTime now = tenantTimeService.currentTime(tenantId);
         if (fecha.equals(today) && !horaInicio.isAfter(now)) {
             return false;
         }
@@ -928,17 +934,17 @@ public class ClientBookingService {
         return "Servicios reservados: " + names;
     }
 
-    private void validateBookingDate(LocalDate fecha) {
-        LocalDate today = LocalDate.now(BUSINESS_ZONE);
+    private void validateBookingDate(Long tenantId, LocalDate fecha) {
+        LocalDate today = tenantTimeService.today(tenantId);
 
         if (fecha.isBefore(today)) {
             throw new RuntimeException("No se puede reservar en una fecha pasada");
         }
     }
 
-    private void validateTimeNotPast(LocalDate fecha, LocalTime horaInicio) {
-        LocalDate today = LocalDate.now(BUSINESS_ZONE);
-        LocalTime now = LocalTime.now(BUSINESS_ZONE);
+    private void validateTimeNotPast(Long tenantId, LocalDate fecha, LocalTime horaInicio) {
+        LocalDate today = tenantTimeService.today(tenantId);
+        LocalTime now = tenantTimeService.currentTime(tenantId);
 
         if (fecha.equals(today) && !horaInicio.isAfter(now)) {
             throw new RuntimeException("No se puede reservar una hora pasada");
@@ -951,14 +957,14 @@ public class ClientBookingService {
         return 60;
     }
 
-    private LocalTime normalizeStartTime(LocalDate fecha, LocalTime apertura, int slotIntervalMinutes) {
-        LocalDate today = LocalDate.now(BUSINESS_ZONE);
+    private LocalTime normalizeStartTime(Long tenantId, LocalDate fecha, LocalTime apertura, int slotIntervalMinutes) {
+        LocalDate today = tenantTimeService.today(tenantId);
 
         if (!fecha.equals(today)) {
             return apertura;
         }
 
-        LocalTime now = LocalTime.now(BUSINESS_ZONE);
+        LocalTime now = tenantTimeService.currentTime(tenantId);
         LocalTime rounded = roundUpToNextSlot(now, slotIntervalMinutes);
 
         log.info("NORMALIZE START TIME => fecha={}, today={}, nowLima={}, rounded={}, apertura={}",
@@ -996,7 +1002,7 @@ public class ClientBookingService {
             throw new RuntimeException("La promoción seleccionada ya no está activa");
         }
 
-        LocalDateTime now = LocalDateTime.now(BUSINESS_ZONE);
+        LocalDateTime now = tenantTimeService.now(tenantId);
 
         if (promotion.getFechaInicio() != null && promotion.getFechaInicio().isAfter(now)) {
             throw new RuntimeException("La promoción aún no está disponible");

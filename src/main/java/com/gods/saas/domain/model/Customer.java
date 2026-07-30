@@ -33,6 +33,9 @@ public class Customer {
     @Column(length = 50)
     private String telefono;
 
+    @Column(name = "preferred_locale", length = 10)
+    private String preferredLocale;
+
     @Column(name = "phone_verified")
     private boolean phoneVerified;
 

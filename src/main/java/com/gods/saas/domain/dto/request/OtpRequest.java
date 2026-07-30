@@ -6,4 +6,5 @@ import lombok.Data;
 public class OtpRequest {
     private Long tenantId;
     private String phone;
+    private String locale;
 }

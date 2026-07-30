@@ -20,4 +20,9 @@ public class LoginFinalResponse {
     private String branchName;
 
     private String role;
+    private String locale;
+    private String tenantLocale;
+    private String timezone;
+    private String currency;
+    private String country;
 }

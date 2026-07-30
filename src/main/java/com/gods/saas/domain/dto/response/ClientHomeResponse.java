@@ -16,6 +16,10 @@ public class ClientHomeResponse {
     private PointsSummary points;
     private String currency;
     private String currencySymbol;
+    private String locale;
+    private String tenantLocale;
+    private String timezone;
+    private String country;
 
     // para crecer luego
     private NextAppointmentResponse nextAppointment; // null por ahora

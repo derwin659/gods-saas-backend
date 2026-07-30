@@ -14,9 +14,11 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -25,6 +27,7 @@ public class CustomerSearchServiceImpl implements CustomerSearchService {
     private final CustomerRepository customerRepository;
     private final TenantRepository tenantRepository;
     private final LoyaltyAccountRepository loyaltyAccountRepository;
+    private final InternationalPhoneService internationalPhoneService;
 
     @Override
     @Transactional(readOnly = true)
@@ -34,6 +37,24 @@ public class CustomerSearchServiceImpl implements CustomerSearchService {
 
         if (query.length() < 2) {
             return List.of();
+        }
+
+        String digits = query.replaceAll("[^0-9]", "");
+        boolean phoneQuery = digits.length() >= 6
+                && !query.matches(".*[A-Za-z].*");
+        if (phoneQuery) {
+            Tenant tenant = tenantRepository.findById(tenantId)
+                    .orElseThrow(() -> new EntityNotFoundException("Tenant no encontrado"));
+            try {
+                InternationalPhoneService.NormalizedPhone normalized =
+                        internationalPhoneService.normalize(tenant, query);
+                Optional<Customer> phoneMatch = findPhoneCandidate(tenantId, normalized);
+                if (phoneMatch.isPresent()) {
+                    return List.of(map(phoneMatch.get()));
+                }
+            } catch (ResponseStatusException ignored) {
+                // Conserva la busqueda parcial para telefonos antiguos o incompletos.
+            }
         }
 
         return customerRepository
@@ -59,18 +80,20 @@ public class CustomerSearchServiceImpl implements CustomerSearchService {
             throw new IllegalArgumentException("El teléfono es obligatorio.");
         }
 
-        if (customerRepository.existsByTenant_IdAndTelefono(tenantId, telefono)) {
-            throw new IllegalArgumentException("Ya existe un cliente con ese teléfono.");
-        }
-
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("Tenant no encontrado"));
+
+        InternationalPhoneService.NormalizedPhone normalizedPhone =
+                internationalPhoneService.normalize(tenant, telefono);
+        if (findPhoneCandidate(tenantId, normalizedPhone).isPresent()) {
+            throw new IllegalArgumentException("Ya existe un cliente con ese telefono.");
+        }
 
         Customer customer = new Customer();
         customer.setTenant(tenant);
         customer.setNombres(nombres);
         customer.setApellidos(apellidos);
-        customer.setTelefono(telefono);
+        customer.setTelefono(normalizedPhone.e164());
 
         // valores por defecto
         customer.setPhoneVerified(false);
@@ -89,6 +112,27 @@ public class CustomerSearchServiceImpl implements CustomerSearchService {
         customerRepository.save(customer);
 
         return map(customer);
+    }
+
+    private Optional<Customer> findPhoneCandidate(
+            Long tenantId,
+            InternationalPhoneService.NormalizedPhone phone
+    ) {
+        String thirdLookup = phone.lookupDigits().stream()
+                .filter(value -> !value.equals(phone.internationalDigits()))
+                .filter(value -> !value.equals(phone.nationalDigits()))
+                .findFirst()
+                .orElse(phone.nationalDigits());
+
+        return customerRepository.findPhoneCandidates(
+                        tenantId,
+                        phone.e164(),
+                        phone.internationalDigits(),
+                        phone.nationalDigits(),
+                        thirdLookup
+                )
+                .stream()
+                .findFirst();
     }
 
     private CustomerSearchResponse map(Customer c) {

@@ -14,6 +14,7 @@ import com.gods.saas.domain.repository.projection.LastVisitProjection;
 import com.gods.saas.domain.repository.projection.CustomerHistorySaleItemProjection;
 import com.gods.saas.domain.repository.projection.CustomerReportProjection;
 import com.gods.saas.service.impl.impl.LoyaltyService;
+import com.gods.saas.utils.RegionalDefaults;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -456,6 +457,17 @@ public class CustomerService {
         }
 
         Tenant tenant = customer.getTenant();
+        var settings = tenantSettingsRepository.findByTenantId(tenant.getId()).orElse(null);
+        String tenantLocale = RegionalDefaults.normalizeLocale(
+                settings == null ? null : settings.getLanguage(),
+                tenant.getPais()
+        );
+        String effectiveLocale = RegionalDefaults.normalizeLocale(customer.getPreferredLocale(), tenant.getPais());
+        String timezone = RegionalDefaults.validTimezoneOrDefault(
+                settings == null ? null : settings.getTimezone(),
+                tenant.getPais()
+        );
+        String currency = normalizeCurrency(settings == null ? null : settings.getCurrency());
 
         return ClientLoginResponse.builder()
                 .customerId(customer.getId())
@@ -464,11 +476,18 @@ public class CustomerService {
                 .tenantLogoUrl(tenant.getLogoUrl())
                 .phoneVerified(Boolean.TRUE.equals(customer.isPhoneVerified()))
                 .appActivated(Boolean.TRUE.equals(customer.getAppActivated()))
+                .locale(effectiveLocale)
+                .tenantLocale(tenantLocale)
+                .timezone(timezone)
+                .currency(currency)
+                .country(tenant.getPais())
                 .build();
     }
 
     @Transactional
-    public Customer registerFromApp(Long tenantId, String phone, String nombres, String apellidos) {
+    public Customer registerFromApp(
+            Long tenantId, String phone, String nombres, String apellidos, String locale
+    ) {
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tenant no encontrado"));
         InternationalPhoneService.NormalizedPhone normalized = internationalPhoneService.normalize(tenant, phone);
@@ -480,6 +499,7 @@ public class CustomerService {
         Customer customer = Customer.builder()
                 .tenant(tenant)
                 .telefono(normalized.e164())
+                .preferredLocale(RegionalDefaults.normalizeLocale(locale, tenant.getPais()))
                 .nombres(nombres)
                 .apellidos(apellidos)
                 .phoneVerified(false)
@@ -498,12 +518,18 @@ public class CustomerService {
         return customerRepository.save(customer);
     }
     @Transactional
-    public OtpDispatch requestLoginOtp(Long tenantId, String phone) {
+    public OtpDispatch requestLoginOtp(Long tenantId, String phone, String locale) {
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tenant no encontrado"));
         InternationalPhoneService.NormalizedPhone normalized = internationalPhoneService.normalize(tenant, phone);
         Customer customer = findActiveCustomerByPhone(tenant, normalized);
         String e164 = normalized.e164();
+        String effectiveLocale = RegionalDefaults.normalizeLocale(locale, tenant.getPais());
+        if (!effectiveLocale.equals(customer.getPreferredLocale())) {
+            customer.setPreferredLocale(effectiveLocale);
+            customer.setFechaActualizacion(LocalDateTime.now());
+            customerRepository.save(customer);
+        }
 
         LocalDateTime now = LocalDateTime.now();
         OtpCode previous = otpCodeRepository
@@ -519,7 +545,7 @@ public class CustomerService {
             );
         }
 
-        twilioVerifyOtpService.sendCode(tenant, e164);
+        twilioVerifyOtpService.sendCode(tenant, e164, effectiveLocale);
         if (previous != null) {
             previous.setUsed(true);
             otpCodeRepository.save(previous);
@@ -625,9 +651,12 @@ public class CustomerService {
 
         int faltan = Math.max(meta - disponibles, 0);
         double progreso = meta <= 0 ? 0.0 : Math.min((double) disponibles / meta, 1.0);
-        String currency = tenantSettingsRepository.findByTenantId(tenantId)
-                .map(settings -> normalizeCurrency(settings.getCurrency()))
-                .orElse("PEN");
+        var regional = tenantSettingsRepository.findByTenantId(tenantId).orElse(null);
+        String currency = normalizeCurrency(regional == null ? null : regional.getCurrency());
+        String tenantLocale = RegionalDefaults.normalizeLocale(
+                regional == null ? null : regional.getLanguage(), tenant.getPais()
+        );
+        String locale = RegionalDefaults.normalizeLocale(customer.getPreferredLocale(), tenant.getPais());
 
         ClientHomeResponse.NextAppointmentResponse nextAppointment = buildNextAppointment(tenantId, customerId);
         List<ClientHomeResponse.LastVisitResponse> lastVisits = buildLastVisits(tenantId, customerId);
@@ -643,6 +672,12 @@ public class CustomerService {
                 .customer(ClienteResponse.fromEntity(customer))
                 .currency(currency)
                 .currencySymbol(resolveCurrencySymbol(currency))
+                .locale(locale)
+                .tenantLocale(tenantLocale)
+                .timezone(RegionalDefaults.validTimezoneOrDefault(
+                        regional == null ? null : regional.getTimezone(), tenant.getPais()
+                ))
+                .country(tenant.getPais())
                 .points(ClientHomeResponse.PointsSummary.builder()
                         .disponibles(disponibles)
                         .acumulados(acumulados)

@@ -60,6 +60,9 @@ public class AppUser implements UserDetails {
     @Column(length = 20)
     private String phone;
 
+    @Column(name = "preferred_locale", length = 10)
+    private String preferredLocale;
+
     @Column(name = "whatsapp_verified_phone", length = 32)
     private String whatsappVerifiedPhone;
 

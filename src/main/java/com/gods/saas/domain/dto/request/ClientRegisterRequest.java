@@ -8,4 +8,5 @@ public class ClientRegisterRequest {
     private String phone;
     private String nombres;
     private String apellidos;
+    private String locale;
 }

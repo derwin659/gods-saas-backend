@@ -28,7 +28,7 @@ public class TenantSettings {
     @JoinColumn(name = "tenant_id")
     private Tenant tenant;
 
-    private String language = "es";  // es, en, pt
+    private String language = "es-PE";
     private String timezone = "America/Lima";
     private String currency = "PEN";
     @JdbcTypeCode(SqlTypes.JSON)

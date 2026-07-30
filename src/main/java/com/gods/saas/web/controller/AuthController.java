@@ -7,9 +7,11 @@ import com.gods.saas.domain.dto.request.ResetPasswordRequest;
 import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.AppUserRepository;
 import com.gods.saas.domain.repository.BranchRepository;
+import com.gods.saas.domain.repository.TenantSettingsRepository;
 import com.gods.saas.domain.repository.UserTenantRoleRepository;
 import com.gods.saas.service.impl.*;
 import com.gods.saas.utils.JwtUtil;
+import com.gods.saas.utils.RegionalDefaults;
 import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
@@ -53,6 +55,9 @@ public class AuthController {
 
     @Autowired
     private BranchRepository branchRepository;
+
+    @Autowired
+    private TenantSettingsRepository tenantSettingsRepository;
 
     @Autowired
     private JwtUtil jwtUtil;
@@ -140,6 +145,11 @@ public class AuthController {
                             .businessType(null)
                             .branchId(null)
                             .branchName(null)
+                            .locale(RegionalDefaults.normalizeLocale(user.getPreferredLocale(), null))
+                            .tenantLocale(RegionalDefaults.DEFAULT_LOCALE)
+                            .timezone(RegionalDefaults.DEFAULT_TIMEZONE)
+                            .currency("PEN")
+                            .country(null)
                             .build()
             );
         }
@@ -207,6 +217,16 @@ public class AuthController {
 
         Tenant tenant = utr.getTenant();
         Branch branch = selectedOwnerBranch != null ? selectedOwnerBranch : utr.getBranch();
+        TenantSettings regional = tenantSettingsRepository.findByTenantId(tenant.getId()).orElse(null);
+        String tenantLocale = RegionalDefaults.normalizeLocale(
+                regional == null ? null : regional.getLanguage(),
+                tenant.getPais()
+        );
+        String effectiveLocale = RegionalDefaults.normalizeLocale(user.getPreferredLocale(), tenant.getPais());
+        String timezone = RegionalDefaults.validTimezoneOrDefault(
+                regional == null ? null : regional.getTimezone(),
+                tenant.getPais()
+        );
 
         String token = jwtService.generateToken(
                 user,
@@ -231,6 +251,13 @@ public class AuthController {
                         .role(utr.getRole().name())
                         .branchId(branch.getId())
                         .branchName(branch.getNombre())
+                        .locale(effectiveLocale)
+                        .tenantLocale(tenantLocale)
+                        .timezone(timezone)
+                        .currency(regional == null || regional.getCurrency() == null
+                                ? "PEN"
+                                : regional.getCurrency().trim().toUpperCase(Locale.ROOT))
+                        .country(tenant.getPais())
                         .build()
         );
     }

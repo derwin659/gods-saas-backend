@@ -18,4 +18,9 @@ public class ClientLoginResponse {
     private String tenantLogoUrl;
     private Boolean phoneVerified;
     private Boolean appActivated;
+    private String locale;
+    private String tenantLocale;
+    private String timezone;
+    private String currency;
+    private String country;
 }

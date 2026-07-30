@@ -3,6 +3,9 @@ package com.gods.saas.service.impl;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gods.saas.domain.model.Notification;
+import com.gods.saas.domain.model.TenantSettings;
+import com.gods.saas.domain.repository.TenantSettingsRepository;
+import com.gods.saas.utils.RegionalDefaults;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -50,6 +53,12 @@ public class CentralWhatsappSenderService {
     @Value("${whatsapp.central.meta.template-language:" + DEFAULT_LANGUAGE + "}")
     private String metaTemplateLanguage;
 
+    @Value("${whatsapp.central.meta.booking-template-name-pt:}")
+    private String metaBookingTemplateNamePt;
+
+    @Value("${whatsapp.central.meta.booking-template-name-en:}")
+    private String metaBookingTemplateNameEn;
+
     @Value("${whatsapp.twilio.enabled:false}")
     private boolean twilioEnabled;
 
@@ -71,10 +80,17 @@ public class CentralWhatsappSenderService {
     @Value("${whatsapp.twilio.owner-booking-content-sid:}")
     private String twilioBookingContentSid;
 
+    @Value("${whatsapp.twilio.owner-booking-content-sid-pt:}")
+    private String twilioBookingContentSidPt;
+
+    @Value("${whatsapp.twilio.owner-booking-content-sid-en:}")
+    private String twilioBookingContentSidEn;
+
     @Value("${whatsapp.twilio.inbound-webhook-url:}")
     private String twilioInboundWebhookUrl;
 
     private final ObjectMapper objectMapper;
+    private final TenantSettingsRepository tenantSettingsRepository;
     private final WhatsappRecipientResolver recipientResolver;
     private final OwnerBookingWhatsappPayloadFactory ownerBookingPayloadFactory;
     private final HttpClient httpClient = HttpClient.newHttpClient();
@@ -126,6 +142,7 @@ public class CentralWhatsappSenderService {
         requireConfigured();
 
         WhatsappRecipientResolver.Recipient recipient = recipientResolver.resolve(notification);
+        TemplateSelection template = resolveBookingTemplate(notification);
         OwnerBookingWhatsappPayloadFactory.Payload payload = ownerBookingPayloadFactory
                 .from(notification)
                 .orElseThrow(() -> new RuntimeException("No se pudo construir la plantilla de nueva reserva"));
@@ -145,8 +162,9 @@ public class CentralWhatsappSenderService {
 
         return sendTemplate(
                 recipient.phoneDigits(),
-                metaBookingTemplateName,
-                twilioBookingContentSid,
+                template.metaTemplateName(),
+                template.metaLanguage(),
+                template.twilioContentSid(),
                 parameters,
                 "BOOKING",
                 notification.getId()
@@ -156,6 +174,7 @@ public class CentralWhatsappSenderService {
     private String sendTemplate(
             String phoneDigits,
             String metaTemplateName,
+            String metaLanguage,
             String twilioContentSid,
             List<String> parameters,
             String event,
@@ -163,7 +182,7 @@ public class CentralWhatsappSenderService {
     ) {
         try {
             String externalId = switch (provider()) {
-                case "META_CLOUD" -> sendMeta(phoneDigits, metaTemplateName, parameters);
+                case "META_CLOUD" -> sendMeta(phoneDigits, metaTemplateName, metaLanguage, parameters);
                 case "TWILIO" -> sendTwilio(phoneDigits, twilioContentSid, parameters);
                 default -> throw new RuntimeException("Proveedor central no soportado: " + provider());
             };
@@ -181,7 +200,12 @@ public class CentralWhatsappSenderService {
         }
     }
 
-    private String sendMeta(String phoneDigits, String templateName, List<String> parameters) throws Exception {
+    private String sendMeta(
+            String phoneDigits,
+            String templateName,
+            String templateLanguage,
+            List<String> parameters
+    ) throws Exception {
         if (!hasText(templateName)) {
             throw new RuntimeException("Falta el nombre de la plantilla Meta");
         }
@@ -201,9 +225,9 @@ public class CentralWhatsappSenderService {
         body.put("type", "template");
         body.put("template", Map.of(
                 "name", templateName,
-                "language", Map.of("code", clean(metaTemplateLanguage) == null
+                "language", Map.of("code", clean(templateLanguage) == null
                         ? DEFAULT_LANGUAGE
-                        : metaTemplateLanguage.trim()),
+                        : templateLanguage.trim()),
                 "components", List.of(Map.of(
                         "type", "body",
                         "parameters", templateParameters
@@ -300,6 +324,64 @@ public class CentralWhatsappSenderService {
     private String urlEncode(String value) {
         return URLEncoder.encode(value == null ? "" : value, StandardCharsets.UTF_8);
     }
+
+    private TemplateSelection resolveBookingTemplate(Notification notification) {
+        String locale = resolveRecipientLocale(notification);
+        boolean twilioProvider = "TWILIO".equals(provider());
+        boolean portugueseAvailable = twilioProvider
+                ? hasText(twilioBookingContentSidPt)
+                : hasText(metaBookingTemplateNamePt);
+        boolean englishAvailable = twilioProvider
+                ? hasText(twilioBookingContentSidEn)
+                : hasText(metaBookingTemplateNameEn);
+        if ("pt-BR".equals(locale) && portugueseAvailable) {
+            return new TemplateSelection(
+                    hasText(metaBookingTemplateNamePt) ? metaBookingTemplateNamePt.trim() : metaBookingTemplateName,
+                    "pt_BR",
+                    hasText(twilioBookingContentSidPt) ? twilioBookingContentSidPt.trim() : twilioBookingContentSid
+            );
+        }
+        if ("en-US".equals(locale) && englishAvailable) {
+            return new TemplateSelection(
+                    hasText(metaBookingTemplateNameEn) ? metaBookingTemplateNameEn.trim() : metaBookingTemplateName,
+                    "en_US",
+                    hasText(twilioBookingContentSidEn) ? twilioBookingContentSidEn.trim() : twilioBookingContentSid
+            );
+        }
+        return new TemplateSelection(
+                metaBookingTemplateName,
+                hasText(metaTemplateLanguage) ? metaTemplateLanguage.trim() : DEFAULT_LANGUAGE,
+                twilioBookingContentSid
+        );
+    }
+
+    private String resolveRecipientLocale(Notification notification) {
+        String locale = null;
+        if (notification != null && notification.getUser() != null) {
+            locale = notification.getUser().getPreferredLocale();
+        } else if (notification != null && notification.getCustomer() != null) {
+            locale = notification.getCustomer().getPreferredLocale();
+        }
+
+        String country = notification != null && notification.getTenant() != null
+                ? notification.getTenant().getPais()
+                : null;
+        if (!hasText(locale) && notification != null && notification.getTenant() != null
+                && notification.getTenant().getId() != null) {
+            locale = tenantSettingsRepository.findByTenant_Id(notification.getTenant().getId())
+                    .map(TenantSettings::getLanguage)
+                    .orElse(null);
+        }
+        return RegionalDefaults.normalizeLocale(locale, country);
+    }
+
+    private record TemplateSelection(
+            String metaTemplateName,
+            String metaLanguage,
+            String twilioContentSid
+    ) {
+    }
+
 
     private String normalizeSender(String value) {
         String clean = clean(value);

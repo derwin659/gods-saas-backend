@@ -17,6 +17,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -34,12 +35,16 @@ public class BarberAttendService {
     private final AppUserRepository appUserRepository;
     private final BarberAvailabilityRepository barberAvailabilityRepository;
     private final BarberTimeBlockRepository barberTimeBlockRepository;
+    private final InternationalPhoneService internationalPhoneService;
 
     @Transactional(readOnly = true)
     public CustomerLookupResponse findCustomerByPhone(Long tenantId, String phone) {
-        String normalizedPhone = normalizePhone(phone);
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new RuntimeException("Tenant no encontrado"));
+        InternationalPhoneService.NormalizedPhone normalizedPhone =
+                internationalPhoneService.normalize(tenant, phone);
 
-        return customerRepository.findByTenant_IdAndTelefono(tenantId, normalizedPhone)
+        return findPhoneCandidate(tenantId, normalizedPhone)
                 .map(c -> CustomerLookupResponse.builder()
                         .found(true)
                         .id(c.getId())
@@ -52,7 +57,7 @@ public class BarberAttendService {
                         .build())
                 .orElse(CustomerLookupResponse.builder()
                         .found(false)
-                        .phone(normalizedPhone)
+                        .phone(normalizedPhone.e164())
                         .tenantId(tenantId)
                         .puntosDisponibles(0)
                         .mensaje("Cliente no encontrado")
@@ -79,12 +84,15 @@ public class BarberAttendService {
 
     @Transactional
     public CustomerLookupResponse quickRegister(QuickRegisterCustomerRequest request) {
-        String normalizedPhone = normalizePhone(request.getTelefono());
+        Tenant tenant = tenantRepository.findById(request.getTenantId())
+                .orElseThrow(() -> new RuntimeException("Tenant no encontrado"));
+        InternationalPhoneService.NormalizedPhone normalizedPhone =
+                internationalPhoneService.normalize(tenant, request.getTelefono());
+        Optional<Customer> existingCustomer =
+                findPhoneCandidate(request.getTenantId(), normalizedPhone);
 
-        if (customerRepository.existsByTenant_IdAndTelefono(request.getTenantId(), normalizedPhone)) {
-            Customer existing = customerRepository
-                    .findByTenant_IdAndTelefono(request.getTenantId(), normalizedPhone)
-                    .orElseThrow();
+        if (existingCustomer.isPresent()) {
+            Customer existing = existingCustomer.get();
 
             return CustomerLookupResponse.builder()
                     .found(true)
@@ -98,12 +106,9 @@ public class BarberAttendService {
                     .build();
         }
 
-        Tenant tenant = tenantRepository.findById(request.getTenantId())
-                .orElseThrow(() -> new RuntimeException("Tenant no encontrado"));
-
         Customer customer = new Customer();
         customer.setTenant(tenant);
-        customer.setTelefono(normalizedPhone);
+        customer.setTelefono(normalizedPhone.e164());
         customer.setNombres(clean(request.getNombres()));
         customer.setApellidos(clean(request.getApellidos()));
         customer.setOrigenCliente(clean(request.getOrigenCliente()));
@@ -340,9 +345,25 @@ public class BarberAttendService {
         return fullName.isEmpty() ? "Cliente" : fullName;
     }
 
-    private String normalizePhone(String phone) {
-        if (phone == null) return "";
-        return phone.replaceAll("[^0-9]", "").trim();
+    private Optional<Customer> findPhoneCandidate(
+            Long tenantId,
+            InternationalPhoneService.NormalizedPhone phone
+    ) {
+        String thirdLookup = phone.lookupDigits().stream()
+                .filter(value -> !value.equals(phone.internationalDigits()))
+                .filter(value -> !value.equals(phone.nationalDigits()))
+                .findFirst()
+                .orElse(phone.nationalDigits());
+
+        return customerRepository.findPhoneCandidates(
+                        tenantId,
+                        phone.e164(),
+                        phone.internationalDigits(),
+                        phone.nationalDigits(),
+                        thirdLookup
+                )
+                .stream()
+                .findFirst();
     }
 
     private String clean(String value) {
