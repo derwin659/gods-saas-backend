@@ -10,6 +10,7 @@ import com.gods.saas.domain.dto.request.ReconcileCashRegisterRequest;
 import com.gods.saas.domain.dto.response.CashMovementResponse;
 import com.gods.saas.domain.dto.response.CashFundMovementResponse;
 import com.gods.saas.domain.dto.response.CashFundSummaryResponse;
+import com.gods.saas.domain.dto.response.CashFundRangeSummaryResponse;
 import com.gods.saas.domain.dto.response.CashAuditLogResponse;
 import com.gods.saas.domain.dto.response.CashRegisterResponse;
 import com.gods.saas.service.impl.impl.CashRegisterService;
@@ -140,6 +141,19 @@ public class CashRegisterController {
         adminPermissionService.checkOwnerOrAdminPermission("CASH_FUND_MANAGE");
         Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return cashRegisterService.getFundMovements(tenantId, effectiveBranchId, from, to);
+    }
+
+    @GetMapping("/fund/movements/summary")
+    public CashFundRangeSummaryResponse fundMovementSummary(
+            @RequestAttribute("tenantId") Long tenantId,
+            @RequestAttribute("branchId") Long sessionBranchId,
+            @RequestParam(required = false) Long branchId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
+    ) {
+        adminPermissionService.checkOwnerOrAdminPermission("CASH_FUND_MANAGE");
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
+        return cashRegisterService.getFundMovementSummary(tenantId, effectiveBranchId, from, to);
     }
 
     @PostMapping("/fund/movements")

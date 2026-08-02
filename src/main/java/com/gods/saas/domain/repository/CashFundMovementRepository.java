@@ -12,6 +12,8 @@ public interface CashFundMovementRepository extends JpaRepository<CashFundMoveme
 
     List<CashFundMovement> findByTenant_IdAndBranch_IdOrderByMovementDateDesc(Long tenantId, Long branchId);
 
+    List<CashFundMovement> findByTenant_IdOrderByMovementDateDesc(Long tenantId);
+
     @Query("""
         select movement from CashFundMovement movement
         join fetch movement.branch branch

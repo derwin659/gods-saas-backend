@@ -8,6 +8,7 @@ import com.gods.saas.domain.dto.request.ReconcileCashRegisterRequest;
 import com.gods.saas.domain.dto.response.CashMovementResponse;
 import com.gods.saas.domain.dto.response.CashFundMovementResponse;
 import com.gods.saas.domain.dto.response.CashFundSummaryResponse;
+import com.gods.saas.domain.dto.response.CashFundRangeSummaryResponse;
 import com.gods.saas.domain.dto.response.CashAuditLogResponse;
 import com.gods.saas.domain.dto.response.CashRegisterResponse;
 import com.gods.saas.domain.enums.CashMovementType;
@@ -317,6 +318,61 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 .stream()
                 .map(this::mapFundMovementResponse)
                 .toList();
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public CashFundRangeSummaryResponse getFundMovementSummary(
+            Long tenantId, Long branchId, LocalDate from, LocalDate to
+    ) {
+        Branch branch = branchRepository.findById(branchId)
+                .orElseThrow(() -> new EntityNotFoundException("Sede no encontrada"));
+        if (!branch.getTenant().getId().equals(tenantId)) {
+            throw new IllegalStateException("La sede no pertenece al tenant.");
+        }
+
+        ZoneId zoneId = getZoneIdForTenant(tenantId);
+        LocalDate effectiveFrom = from == null ? LocalDate.of(2000, 1, 1) : from;
+        LocalDate effectiveTo = to == null ? LocalDate.now(zoneId) : to;
+        if (effectiveTo.isBefore(effectiveFrom)) {
+            throw new IllegalArgumentException("La fecha hasta no puede ser anterior a la fecha desde.");
+        }
+
+        LocalDateTime start = effectiveFrom.atStartOfDay();
+        LocalDateTime end = effectiveTo.plusDays(1).atStartOfDay();
+        BigDecimal openingBalance = BigDecimal.ZERO;
+        BigDecimal totalIn = BigDecimal.ZERO;
+        BigDecimal totalOut = BigDecimal.ZERO;
+        BigDecimal currentBalance = BigDecimal.ZERO;
+
+        for (CashFundMovement movement : cashFundMovementRepository
+                .findByTenant_IdAndBranch_IdOrderByMovementDateDesc(tenantId, branchId)) {
+            BigDecimal signedAmount = signedFundAmount(movement);
+            currentBalance = currentBalance.add(signedAmount);
+            if (movement.getMovementDate().isBefore(start)) {
+                openingBalance = openingBalance.add(signedAmount);
+            } else if (movement.getMovementDate().isBefore(end)) {
+                if (signedAmount.signum() < 0) {
+                    totalOut = totalOut.add(signedAmount.abs());
+                } else {
+                    totalIn = totalIn.add(signedAmount);
+                }
+            }
+        }
+
+        BigDecimal netMovement = totalIn.subtract(totalOut);
+        return CashFundRangeSummaryResponse.builder()
+                .branchId(branch.getId())
+                .branchName(branch.getNombre())
+                .from(effectiveFrom)
+                .to(effectiveTo)
+                .openingBalance(openingBalance)
+                .totalIn(totalIn)
+                .totalOut(totalOut)
+                .netMovement(netMovement)
+                .closingBalance(openingBalance.add(netMovement))
+                .currentBalance(currentBalance)
+                .build();
     }
 
     @Override

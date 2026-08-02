@@ -8,6 +8,7 @@ import com.gods.saas.domain.dto.request.ReconcileCashRegisterRequest;
 import com.gods.saas.domain.dto.response.CashMovementResponse;
 import com.gods.saas.domain.dto.response.CashFundMovementResponse;
 import com.gods.saas.domain.dto.response.CashFundSummaryResponse;
+import com.gods.saas.domain.dto.response.CashFundRangeSummaryResponse;
 import com.gods.saas.domain.dto.response.CashRegisterResponse;
 import com.gods.saas.domain.dto.response.CashAuditLogResponse;
 
@@ -36,6 +37,8 @@ public interface CashRegisterService {
     CashFundSummaryResponse getFundSummary(Long tenantId, Long branchId);
 
     List<CashFundMovementResponse> getFundMovements(Long tenantId, Long branchId, LocalDate from, LocalDate to);
+
+    CashFundRangeSummaryResponse getFundMovementSummary(Long tenantId, Long branchId, LocalDate from, LocalDate to);
 
     CashFundMovementResponse createFundMovement(Long tenantId, Long branchId, Long actorUserId, CashFundMovementRequest request);
 

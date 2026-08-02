@@ -549,8 +549,10 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
             Long tenantId, Long branchId, LocalDate from, LocalDate to
     ) {
         validateAdvancedReportsAllowed(tenantId);
+        LocalDateTime rangeStart = startOfDay(from);
+        LocalDateTime rangeEnd = endInclusive(to);
         List<CashFundMovement> movements = cashFundMovementRepository.findReportMovements(
-                tenantId, branchId, startOfDay(from), endInclusive(to)
+                tenantId, branchId, rangeStart, rangeEnd
         );
 
         BigDecimal totalIn = BigDecimal.ZERO;
@@ -602,13 +604,31 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
             items.add(item);
         }
 
+        List<CashFundMovement> allMovements = branchId == null
+                ? cashFundMovementRepository.findByTenant_IdOrderByMovementDateDesc(tenantId)
+                : cashFundMovementRepository.findByTenant_IdAndBranch_IdOrderByMovementDateDesc(tenantId, branchId);
+        BigDecimal openingBalance = BigDecimal.ZERO;
+        BigDecimal currentBalance = BigDecimal.ZERO;
+        for (CashFundMovement movement : allMovements) {
+            BigDecimal amount = nvl(movement.getAmount());
+            BigDecimal signedAmount = isFundOut(movement.getType()) ? amount.negate() : amount;
+            currentBalance = currentBalance.add(signedAmount);
+            if (movement.getMovementDate().isBefore(rangeStart)) {
+                openingBalance = openingBalance.add(signedAmount);
+            }
+        }
+        BigDecimal netMovement = totalIn.subtract(totalOut);
+
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("from", from.toString());
         response.put("to", to.toString());
         response.put("branchId", branchId == null ? 0L : branchId);
+        response.put("openingBalance", openingBalance);
         response.put("totalIn", totalIn);
         response.put("totalOut", totalOut);
-        response.put("netMovement", totalIn.subtract(totalOut));
+        response.put("netMovement", netMovement);
+        response.put("closingBalance", openingBalance.add(netMovement));
+        response.put("currentBalance", currentBalance);
         response.put("count", items.size());
         response.put("totalsByType", totalsByType);
         response.put("paymentMethods", methodTotals.values());
