@@ -35,7 +35,7 @@ public interface CashRegisterService {
 
     CashFundSummaryResponse getFundSummary(Long tenantId, Long branchId);
 
-    List<CashFundMovementResponse> getFundMovements(Long tenantId, Long branchId);
+    List<CashFundMovementResponse> getFundMovements(Long tenantId, Long branchId, LocalDate from, LocalDate to);
 
     CashFundMovementResponse createFundMovement(Long tenantId, Long branchId, Long actorUserId, CashFundMovementRequest request);
 

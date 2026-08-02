@@ -301,8 +301,19 @@ public class CashRegisterServiceImpl implements CashRegisterService {
 
     @Override
     @Transactional(readOnly = true)
-    public List<CashFundMovementResponse> getFundMovements(Long tenantId, Long branchId) {
-        return cashFundMovementRepository.findByTenant_IdAndBranch_IdOrderByMovementDateDesc(tenantId, branchId)
+    public List<CashFundMovementResponse> getFundMovements(Long tenantId, Long branchId, LocalDate from, LocalDate to) {
+        List<CashFundMovement> movements;
+        if (from == null && to == null) {
+            movements = cashFundMovementRepository.findByTenant_IdAndBranch_IdOrderByMovementDateDesc(tenantId, branchId);
+        } else {
+            ZoneId zoneId = getZoneIdForTenant(tenantId);
+            LocalDate effectiveFrom = from == null ? LocalDate.of(2000, 1, 1) : from;
+            LocalDate effectiveTo = to == null ? LocalDate.now(zoneId) : to;
+            movements = cashFundMovementRepository.findReportMovements(
+                    tenantId, branchId, effectiveFrom.atStartOfDay(), effectiveTo.plusDays(1).atStartOfDay()
+            );
+        }
+        return movements
                 .stream()
                 .map(this::mapFundMovementResponse)
                 .toList();
@@ -856,6 +867,8 @@ public class CashRegisterServiceImpl implements CashRegisterService {
         AppUser actor = movement.getActorUser();
         return CashFundMovementResponse.builder()
                 .id(movement.getId())
+                .branchId(movement.getBranch().getId())
+                .branchName(movement.getBranch().getNombre())
                 .type(movement.getType().name())
                 .paymentMethod(normalizePaymentMethodCode(movement.getPaymentMethod()))
                 .amount(safe(movement.getAmount()))

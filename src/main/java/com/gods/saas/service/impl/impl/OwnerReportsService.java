@@ -96,6 +96,10 @@ public interface OwnerReportsService {
             String type, String paymentMethod
     );
 
+    Map<String, Object> getFundMovementReport(
+            Long tenantId, Long branchId, LocalDate from, LocalDate to
+    );
+
     PaymentSummaryResponse getPaymentSummary(
             Long tenantId,
             Long branchId,

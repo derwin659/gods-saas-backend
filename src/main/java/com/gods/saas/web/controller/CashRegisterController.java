@@ -133,11 +133,13 @@ public class CashRegisterController {
     public List<CashFundMovementResponse> fundMovements(
             @RequestAttribute("tenantId") Long tenantId,
             @RequestAttribute("branchId") Long sessionBranchId,
-            @RequestParam(required = false) Long branchId
+            @RequestParam(required = false) Long branchId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         adminPermissionService.checkOwnerOrAdminPermission("CASH_FUND_MANAGE");
         Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
-        return cashRegisterService.getFundMovements(tenantId, effectiveBranchId);
+        return cashRegisterService.getFundMovements(tenantId, effectiveBranchId, from, to);
     }
 
     @PostMapping("/fund/movements")

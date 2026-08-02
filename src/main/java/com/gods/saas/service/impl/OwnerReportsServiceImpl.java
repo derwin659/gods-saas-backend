@@ -3,13 +3,16 @@ package com.gods.saas.service.impl;
 import com.gods.saas.domain.dto.response.*;
 
 import com.gods.saas.domain.model.Subscription;
+import com.gods.saas.domain.model.CashFundMovement;
 import com.gods.saas.domain.model.CashMovement;
 import com.gods.saas.domain.model.BarberPayment;
 import com.gods.saas.domain.enums.BarberPaymentMode;
 import com.gods.saas.domain.enums.BarberPaymentStatus;
 import com.gods.saas.domain.model.RoleType;
 import com.gods.saas.domain.repository.BarberPaymentRepository;
+import com.gods.saas.domain.enums.CashFundMovementType;
 import com.gods.saas.domain.enums.CashMovementType;
+import com.gods.saas.domain.repository.CashFundMovementRepository;
 import com.gods.saas.domain.repository.CashMovementRepository;
 import com.gods.saas.domain.repository.SaleRepository;
 import com.gods.saas.domain.repository.SubscriptionRepository;
@@ -36,6 +39,7 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
     private final SaleRepository saleRepository;
     private final SubscriptionRepository subscriptionRepository;
     private final CashMovementRepository cashMovementRepository;
+    private final CashFundMovementRepository cashFundMovementRepository;
     private final BarberPaymentRepository barberPaymentRepository;
     private final BarberPaymentService barberPaymentService;
     private final UserTenantRoleRepository userTenantRoleRepository;
@@ -541,6 +545,78 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
     }
 
     @Override
+    public Map<String, Object> getFundMovementReport(
+            Long tenantId, Long branchId, LocalDate from, LocalDate to
+    ) {
+        validateAdvancedReportsAllowed(tenantId);
+        List<CashFundMovement> movements = cashFundMovementRepository.findReportMovements(
+                tenantId, branchId, startOfDay(from), endInclusive(to)
+        );
+
+        BigDecimal totalIn = BigDecimal.ZERO;
+        BigDecimal totalOut = BigDecimal.ZERO;
+        Map<String, BigDecimal> totalsByType = new LinkedHashMap<>();
+        for (CashFundMovementType value : CashFundMovementType.values()) {
+            totalsByType.put(value.name(), BigDecimal.ZERO);
+        }
+        Map<String, Map<String, Object>> methodTotals = new LinkedHashMap<>();
+        List<Map<String, Object>> items = new java.util.ArrayList<>();
+
+        for (CashFundMovement movement : movements) {
+            BigDecimal amount = nvl(movement.getAmount());
+            boolean out = isFundOut(movement.getType());
+            BigDecimal signedAmount = out ? amount.negate() : amount;
+            if (out) totalOut = totalOut.add(amount); else totalIn = totalIn.add(amount);
+            totalsByType.compute(movement.getType().name(), (key, total) -> nvl(total).add(amount));
+
+            String method = movement.getPaymentMethod() == null ? "CASH" : movement.getPaymentMethod().name();
+            Map<String, Object> methodRow = methodTotals.computeIfAbsent(method, key -> {
+                Map<String, Object> row = new LinkedHashMap<>();
+                row.put("paymentMethod", key);
+                row.put("totalIn", BigDecimal.ZERO);
+                row.put("totalOut", BigDecimal.ZERO);
+                row.put("netMovement", BigDecimal.ZERO);
+                return row;
+            });
+            methodRow.put(out ? "totalOut" : "totalIn", nvl((BigDecimal) methodRow.get(out ? "totalOut" : "totalIn")).add(amount));
+            methodRow.put("netMovement", nvl((BigDecimal) methodRow.get("netMovement")).add(signedAmount));
+
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", movement.getId());
+            item.put("date", movement.getMovementDate().toString());
+            item.put("branchId", movement.getBranch().getId());
+            item.put("branchName", movement.getBranch().getNombre());
+            item.put("type", movement.getType().name());
+            item.put("direction", out ? "OUT" : "IN");
+            item.put("paymentMethod", method);
+            item.put("amount", amount);
+            item.put("signedAmount", signedAmount);
+            item.put("concept", movement.getConcept());
+            item.put("note", movement.getNote() == null ? "" : movement.getNote());
+            item.put("cashRegisterId", movement.getCashRegister() == null ? null : movement.getCashRegister().getId());
+            item.put("actorUserId", movement.getActorUser() == null ? null : movement.getActorUser().getId());
+            item.put("actorUserName", movement.getActorUser() == null
+                    ? "Sistema"
+                    : (nvlText(movement.getActorUser().getNombre()) + " "
+                    + nvlText(movement.getActorUser().getApellido())).trim());
+            items.add(item);
+        }
+
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("from", from.toString());
+        response.put("to", to.toString());
+        response.put("branchId", branchId == null ? 0L : branchId);
+        response.put("totalIn", totalIn);
+        response.put("totalOut", totalOut);
+        response.put("netMovement", totalIn.subtract(totalOut));
+        response.put("count", items.size());
+        response.put("totalsByType", totalsByType);
+        response.put("paymentMethods", methodTotals.values());
+        response.put("items", items);
+        return response;
+    }
+
+    @Override
     public PaymentSummaryResponse getPaymentSummary(
             Long tenantId,
             Long branchId,
@@ -625,6 +701,13 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
     }
     private BigDecimal nvl(BigDecimal value) {
         return value == null ? BigDecimal.ZERO : value;
+    }
+
+    private boolean isFundOut(CashFundMovementType type) {
+        return type == CashFundMovementType.OPENING_WITHDRAWAL
+                || type == CashFundMovementType.MANUAL_WITHDRAWAL
+                || type == CashFundMovementType.EXPENSE
+                || type == CashFundMovementType.ADJUSTMENT_OUT;
     }
 
     private Long nvl(Long value) {

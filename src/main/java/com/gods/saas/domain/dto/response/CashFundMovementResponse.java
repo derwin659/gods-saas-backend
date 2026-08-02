@@ -10,6 +10,8 @@ import java.time.LocalDateTime;
 @Builder
 public class CashFundMovementResponse {
     private Long id;
+    private Long branchId;
+    private String branchName;
     private String type;
     private String paymentMethod;
     private BigDecimal amount;
