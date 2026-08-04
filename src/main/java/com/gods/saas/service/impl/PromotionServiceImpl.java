@@ -155,6 +155,16 @@ public class PromotionServiceImpl implements PromotionService {
     }
 
     @Override
+    public PromotionResponse notifyPromotion(Long tenantId, Long promotionId) {
+        validatePromotionsFeatureAllowed(tenantId);
+
+        Promotion promotion = promotionRepository.findByIdAndTenant_Id(promotionId, tenantId)
+                .orElseThrow(() -> new EntityNotFoundException("Promoción no encontrada"));
+
+        notificationService.notifyPromotionCreated(promotion, true);
+        return toOwnerResponse(promotion);
+    }
+    @Override
     public PromotionResponse togglePromotion(Long tenantId, Long promotionId) {
         validatePromotionsFeatureAllowed(tenantId);
 

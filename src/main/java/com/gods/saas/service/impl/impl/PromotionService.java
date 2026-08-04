@@ -23,5 +23,7 @@ public interface PromotionService {
 
     PromotionResponse uploadPromotionImage(Long tenantId, Long promotionId, MultipartFile file);
 
+    PromotionResponse notifyPromotion(Long tenantId, Long promotionId);
+
     void deletePromotion(Long tenantId, Long promotionId);
 }

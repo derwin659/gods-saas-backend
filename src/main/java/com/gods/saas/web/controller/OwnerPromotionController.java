@@ -71,6 +71,13 @@ public class OwnerPromotionController {
         return promotionService.uploadPromotionImage(tenantId, id, file);
     }
 
+    @PostMapping("/{id}/notify")
+    public PromotionResponse notifyCustomers(@PathVariable Long id, Authentication authentication) {
+        adminPermissionService.checkPermission("CONFIG_PROMOTIONS");
+
+        Long tenantId = extractTenantId(authentication);
+        return promotionService.notifyPromotion(tenantId, id);
+    }
     @PatchMapping("/{id}/toggle")
     public PromotionResponse toggle(@PathVariable Long id, Authentication authentication) {
         adminPermissionService.checkPermission("CONFIG_PROMOTIONS");

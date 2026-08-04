@@ -1,10 +1,16 @@
 package com.gods.saas.service.impl;
 
+import com.google.firebase.messaging.AndroidConfig;
+import com.google.firebase.messaging.AndroidNotification;
+import com.google.firebase.messaging.ApnsConfig;
+import com.google.firebase.messaging.ApnsFcmOptions;
+import com.google.firebase.messaging.Aps;
 import com.google.firebase.messaging.FirebaseMessaging;
 import com.google.firebase.messaging.Message;
 import com.google.firebase.messaging.Notification;
 import com.gods.saas.domain.model.DeviceToken;
 import com.gods.saas.domain.repository.DeviceTokenRepository;
+import com.gods.saas.domain.repository.PromotionRepository;
 import com.gods.saas.service.impl.impl.PushNotificationSender;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,6 +25,7 @@ import java.util.List;
 public class PushNotificationSenderFirebaseImpl implements PushNotificationSender {
 
     private final DeviceTokenRepository deviceTokenRepository;
+    private final PromotionRepository promotionRepository;
 
     @Override
     public String send(com.gods.saas.domain.model.Notification notification) {
@@ -36,16 +43,38 @@ public class PushNotificationSenderFirebaseImpl implements PushNotificationSende
 
         for (DeviceToken deviceToken : tokens) {
             try {
-                Message message = Message.builder()
+                String imageUrl = resolveImageUrl(notification);
+                Notification.Builder visual = Notification.builder()
+                        .setTitle(notification.getTitle())
+                        .setBody(notification.getMessage());
+                Message.Builder messageBuilder = Message.builder()
                         .setToken(deviceToken.getToken())
-                        .setNotification(Notification.builder()
-                                .setTitle(notification.getTitle())
-                                .setBody(notification.getMessage())
-                                .build())
                         .putData("notificationId", String.valueOf(notification.getId()))
                         .putData("type", notification.getType() != null ? notification.getType().name() : "")
                         .putData("referenceType", notification.getReferenceType() != null ? notification.getReferenceType() : "")
-                        .putData("referenceId", notification.getReferenceId() != null ? String.valueOf(notification.getReferenceId()) : "")
+                        .putData("referenceId", notification.getReferenceId() != null ? String.valueOf(notification.getReferenceId()) : "");
+
+                if (imageUrl != null) {
+                    visual.setImage(imageUrl);
+                    messageBuilder
+                            .putData("imageUrl", imageUrl)
+                            .setAndroidConfig(AndroidConfig.builder()
+                                    .setNotification(AndroidNotification.builder()
+                                            .setImage(imageUrl)
+                                            .build())
+                                    .build())
+                            .setApnsConfig(ApnsConfig.builder()
+                                    .setAps(Aps.builder()
+                                            .setMutableContent(true)
+                                            .build())
+                                    .setFcmOptions(ApnsFcmOptions.builder()
+                                            .setImage(imageUrl)
+                                            .build())
+                                    .build());
+                }
+
+                Message message = messageBuilder
+                        .setNotification(visual.build())
                         .build();
 
                 String firebaseMessageId = FirebaseMessaging.getInstance().send(message);
@@ -81,6 +110,18 @@ public class PushNotificationSenderFirebaseImpl implements PushNotificationSende
         return successIds.get(0);
     }
 
+    private String resolveImageUrl(com.gods.saas.domain.model.Notification notification) {
+        if (!"PROMOTION".equalsIgnoreCase(notification.getReferenceType())
+                || notification.getReferenceId() == null) {
+            return null;
+        }
+
+        return promotionRepository.findById(notification.getReferenceId())
+                .map(promotion -> promotion.getImageUrl())
+                .map(String::trim)
+                .filter(value -> !value.isEmpty())
+                .orElse(null);
+    }
     private List<DeviceToken> resolveActiveTokens(com.gods.saas.domain.model.Notification notification) {
         Long tenantId = notification.getTenant().getId();
 

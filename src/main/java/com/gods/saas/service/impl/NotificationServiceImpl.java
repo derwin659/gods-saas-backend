@@ -205,14 +205,19 @@ public class NotificationServiceImpl implements NotificationService {
     public void notifyPromotionCreated(Promotion promotion, boolean sendNotification) {
         if (!sendNotification || promotion == null || promotion.getTenant() == null) return;
         if (!promotion.isActivo()) return;
+        if (notificationRepository.existsByTypeAndReferenceTypeAndReferenceId(
+                NotificationType.PROMOTION_CREATED,
+                "PROMOTION",
+                promotion.getId()
+        )) return;
 
         Long tenantId = promotion.getTenant().getId();
         String title = safeText(promotion.getTitulo(), "Nueva promoción");
         String priceText = safeText(promotion.getPriceText(), null);
 
         String message = priceText == null
-                ? "Nueva promoción disponible: " + title + "."
-                : "Nueva promoción disponible: " + title + " - " + priceText + ".";
+                ? title + ". Visítanos hoy; puedes venir sin reservar."
+                : title + " - " + priceText + ". Visítanos hoy; puedes venir sin reservar.";
 
         broadcastToTenantCustomers(
                 promotion.getTenant(),
