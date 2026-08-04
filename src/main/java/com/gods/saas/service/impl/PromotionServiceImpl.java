@@ -267,7 +267,8 @@ public class PromotionServiceImpl implements PromotionService {
             throw new RuntimeException("Tu plan actual no permite gestionar promociones");
         }
 
-        if (hasStarterConfiguration(publicPlan)) {
+        if (hasStarterConfiguration(publicPlan)
+                && !subscription.isPromotionsEnabled()) {
             long totalPromotions = promotionRepository.countByTenant_Id(tenantId);
             if (totalPromotions >= 5) {
                 throw new RuntimeException("Tu plan permite hasta 5 promociones");

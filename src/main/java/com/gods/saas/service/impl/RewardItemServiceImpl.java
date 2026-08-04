@@ -195,7 +195,8 @@ public class RewardItemServiceImpl implements RewardItemService {
             throw new RuntimeException("Tu plan actual no permite gestionar premios personalizados");
         }
 
-        if (hasStarterConfiguration(publicPlan)) {
+        if (hasStarterConfiguration(publicPlan)
+                && !subscription.isUnlimitedRewardsEnabled()) {
             long totalRewards = repository.countByTenant_Id(tenantId);
 
             if (totalRewards >= STARTER_MAX_REWARDS) {

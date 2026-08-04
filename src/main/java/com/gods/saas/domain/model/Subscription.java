@@ -67,6 +67,9 @@ public class Subscription {
     @Column(name = "promotions_enabled", nullable = false)
     private boolean promotionsEnabled;
 
+    @Column(name = "unlimited_rewards_enabled", nullable = false)
+    private boolean unlimitedRewardsEnabled;
+
     @Column(name = "billing_cycle", nullable = false)
     private String billingCycle;
 
