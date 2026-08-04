@@ -296,6 +296,8 @@ public class OwnerCustomerController {
                         item.totalSpent(),
                         item.points(),
                         item.status(),
+                        item.loyaltyTierName(),
+                        item.loyaltyTierColor(),
                         item.whatsappTransactionalEnabled(),
                         item.whatsappMarketingEnabled(),
                         item.whatsappOptedOut()

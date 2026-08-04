@@ -29,6 +29,7 @@ import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Collections;
 import java.util.List;
+import java.util.LinkedHashMap;
 import java.util.Objects;
 import java.util.Random;
 import java.util.Map;
@@ -53,6 +54,7 @@ public class CustomerService {
     private final TenantTimeService tenantTimeService;
     private final CloudinaryStorageService cloudinaryStorageService;
     private final TenantSettingsRepository tenantSettingsRepository;
+    private final OwnerLoyaltySettingsService ownerLoyaltySettingsService;
 
     @Transactional
     public Customer registrarCliente(VentaRapidaRequest req) {
@@ -771,8 +773,10 @@ public class CustomerService {
         int cantidadCanjes = (int) rewardRedemptionRepository
                 .countCompletedOrGeneratedRedemptions(tenantId, customerId);
 
+        LoyaltyTierConfig tier = ownerLoyaltySettingsService.resolveTier(tenantId, acumulados);
+
         return ClientHomeResponse.BenefitsResponse.builder()
-                .nivel(acumulados >= 200 ? "Gold" : acumulados >= 100 ? "Silver" : "Bronze")
+                .nivel(tier != null ? tier.getName() : "Sin categoría")
                 .cantidadCanjes(cantidadCanjes)
                 .puntosMes(acumulados)
                 .racha(0)
@@ -807,6 +811,7 @@ public class CustomerService {
         long noShows = appointmentRepository.countCustomerNoShows(tenantId, customerId);
         LocalDate lastVisit = appointmentRepository.findLastCompletedCustomerVisit(tenantId, customerId);
         String customerStatus = resolveCustomerStatus(completedVisits, acumulados, lastVisit, tenantTimeService.today(tenantId));
+        LoyaltyTierConfig tier = ownerLoyaltySettingsService.resolveTier(tenantId, acumulados);
 
         return new OwnerCustomerLoyaltyResponse(
                 customer.getId(),
@@ -818,6 +823,8 @@ public class CustomerService {
                 customer.getMigrated(),
                 customer.getAppActivated(),
                 customerStatus,
+                tier != null ? tier.getName() : null,
+                tier != null ? tier.getColorHex() : null,
                 completedVisits,
                 noShows,
                 lastVisit != null ? lastVisit.toString() : null
@@ -972,7 +979,7 @@ public class CustomerService {
         );
 
         List<OwnerCustomerReportResponse.Item> items = rows.stream()
-                .map(row -> toCustomerReportItem(row, today))
+                .map(row -> toCustomerReportItem(row, today, tenantId))
                 .filter(item -> normalizedStatus == null || normalizedStatus.equals(item.status()))
                 .toList();
 
@@ -988,6 +995,14 @@ public class CustomerService {
         int vip = (int) items.stream().filter(item -> "VIP".equals(item.status())).count();
         int frequent = (int) items.stream().filter(item -> "FREQUENT".equals(item.status())).count();
         int newCustomers = (int) items.stream().filter(item -> "NEW".equals(item.status())).count();
+        Map<String, Integer> loyaltyTierCounts = items.stream()
+                .filter(item -> item.loyaltyTierName() != null && !item.loyaltyTierName().isBlank())
+                .collect(Collectors.toMap(
+                        OwnerCustomerReportResponse.Item::loyaltyTierName,
+                        item -> 1,
+                        Integer::sum,
+                        LinkedHashMap::new
+                ));
         int withMarketingWhatsapp = (int) items.stream()
                 .filter(item -> Boolean.TRUE.equals(item.whatsappMarketingEnabled()) && !Boolean.TRUE.equals(item.whatsappOptedOut()))
                 .count();
@@ -1009,7 +1024,8 @@ public class CustomerService {
                 withMarketingWhatsapp,
                 optedOut,
                 totalSpent,
-                averageSpent
+                averageSpent,
+                loyaltyTierCounts
         );
 
         return new OwnerCustomerReportResponse(
@@ -1022,11 +1038,12 @@ public class CustomerService {
         );
     }
 
-    private OwnerCustomerReportResponse.Item toCustomerReportItem(CustomerReportProjection row, LocalDate today) {
+    private OwnerCustomerReportResponse.Item toCustomerReportItem(CustomerReportProjection row, LocalDate today, Long tenantId) {
         Long visits = row.getVisits() != null ? row.getVisits() : 0L;
         Integer points = row.getPuntos() != null ? row.getPuntos() : 0;
         LocalDate lastVisit = row.getUltimaVisita() != null ? row.getUltimaVisita().toLocalDate() : null;
         String status = resolveCustomerStatus(visits, points, lastVisit, today);
+        LoyaltyTierConfig tier = ownerLoyaltySettingsService.resolveTier(tenantId, points);
         String fullName = ((row.getNombres() != null ? row.getNombres().trim() : "") + " "
                 + (row.getApellidos() != null ? row.getApellidos().trim() : "")).trim();
         if (fullName.isBlank()) fullName = "Cliente";
@@ -1044,6 +1061,8 @@ public class CustomerService {
                 row.getTotalSpent() != null ? row.getTotalSpent() : BigDecimal.ZERO,
                 points,
                 status,
+                tier != null ? tier.getName() : null,
+                tier != null ? tier.getColorHex() : null,
                 Boolean.TRUE.equals(row.getWhatsappTransactionalEnabled()),
                 Boolean.TRUE.equals(row.getWhatsappMarketingEnabled()),
                 Boolean.TRUE.equals(row.getWhatsappOptedOut())

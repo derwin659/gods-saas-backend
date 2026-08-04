@@ -11,6 +11,8 @@ public record OwnerCustomerLoyaltyResponse(
         Boolean migrated,
         Boolean appActivated,
         String customerStatus,
+        String loyaltyTierName,
+        String loyaltyTierColor,
         Long completedVisits,
         Long noShows,
         String lastVisit

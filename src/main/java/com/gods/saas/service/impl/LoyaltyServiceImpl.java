@@ -26,8 +26,6 @@ public class LoyaltyServiceImpl implements LoyaltyService {
 
     private static final int DEFAULT_POINTS_PER_CURRENCY_UNIT = 5;
     private static final String POINTS_PER_CURRENCY_UNIT_KEY = "loyaltyPointsPerCurrencyUnit";
-    private static final int BONUS_NEW_CUSTOMER = 100;
-    private static final int BONUS_MIGRATED_APP_ACTIVATION = 50;
     private static final int POINTS_EXPIRATION_DAYS = 180;
 
     private final LoyaltyAccountRepository loyaltyAccountRepository;
@@ -101,10 +99,19 @@ public class LoyaltyServiceImpl implements LoyaltyService {
             return;
         }
 
+        int bonus = resolveConfiguredInt(customer.getTenant(), OwnerLoyaltySettingsService.ACTIVATION_BONUS_POINTS_KEY, 50);
+        boolean enabled = resolveConfiguredBoolean(customer.getTenant(), OwnerLoyaltySettingsService.ACTIVATION_BONUS_ENABLED_KEY, true);
+        if (!enabled || bonus <= 0) {
+            customer.setActivationBonusGranted(true);
+            markAppActivated(customer);
+            customerRepository.save(customer);
+            return;
+        }
+
         LoyaltyAccount loyalty = getOrCreateAccount(customer.getTenant(), customer);
 
-        int disponibles = safeInt(loyalty.getPuntosDisponibles()) + BONUS_MIGRATED_APP_ACTIVATION;
-        int acumulados = safeInt(loyalty.getPuntosAcumulados()) + BONUS_MIGRATED_APP_ACTIVATION;
+        int disponibles = safeInt(loyalty.getPuntosDisponibles()) + bonus;
+        int acumulados = safeInt(loyalty.getPuntosAcumulados()) + bonus;
 
         loyalty.setPuntosDisponibles(disponibles);
         loyalty.setPuntosAcumulados(acumulados);
@@ -119,7 +126,7 @@ public class LoyaltyServiceImpl implements LoyaltyService {
         mov.setOrigen("APP_ACTIVATION");
         mov.setReferenciaId(customer.getId());
         mov.setDescripcion("Bono por activar la app");
-        mov.setPuntos(BONUS_MIGRATED_APP_ACTIVATION);
+        mov.setPuntos(bonus);
         mov.setSaldoResultante(disponibles);
         mov.setCreadoPor(null);
         mov.setFechaCreacion(LocalDateTime.now(ZoneOffset.UTC));
@@ -143,10 +150,19 @@ public class LoyaltyServiceImpl implements LoyaltyService {
             return;
         }
 
+        int bonus = resolveConfiguredInt(customer.getTenant(), OwnerLoyaltySettingsService.WELCOME_BONUS_POINTS_KEY, 100);
+        boolean enabled = resolveConfiguredBoolean(customer.getTenant(), OwnerLoyaltySettingsService.WELCOME_BONUS_ENABLED_KEY, true);
+        if (!enabled || bonus <= 0) {
+            customer.setWelcomeBonusGranted(true);
+            customer.setFechaActualizacion(LocalDateTime.now());
+            customerRepository.save(customer);
+            return;
+        }
+
         LoyaltyAccount loyalty = getOrCreateAccount(customer.getTenant(), customer);
 
-        int disponibles = safeInt(loyalty.getPuntosDisponibles()) + BONUS_NEW_CUSTOMER;
-        int acumulados = safeInt(loyalty.getPuntosAcumulados()) + BONUS_NEW_CUSTOMER;
+        int disponibles = safeInt(loyalty.getPuntosDisponibles()) + bonus;
+        int acumulados = safeInt(loyalty.getPuntosAcumulados()) + bonus;
 
         loyalty.setPuntosDisponibles(disponibles);
         loyalty.setPuntosAcumulados(acumulados);
@@ -161,7 +177,7 @@ public class LoyaltyServiceImpl implements LoyaltyService {
         mov.setOrigen("WELCOME_BONUS");
         mov.setReferenciaId(customer.getId());
         mov.setDescripcion("Bono de bienvenida");
-        mov.setPuntos(BONUS_NEW_CUSTOMER);
+        mov.setPuntos(bonus);
         mov.setSaldoResultante(disponibles);
         mov.setCreadoPor(null);
         mov.setFechaCreacion(LocalDateTime.now(ZoneOffset.UTC));
@@ -263,6 +279,26 @@ public class LoyaltyServiceImpl implements LoyaltyService {
                 .orElse(BigDecimal.valueOf(DEFAULT_POINTS_PER_CURRENCY_UNIT));
     }
 
+    private int resolveConfiguredInt(Tenant tenant, String key, int fallback) {
+        if (tenant == null || tenant.getId() == null) return fallback;
+        return tenantSettingsRepository.findByTenant_Id(tenant.getId())
+                .map(settings -> settings.getScheduleConfig())
+                .map(config -> config != null ? config.get(key) : null)
+                .map(value -> {
+                    try { return Integer.parseInt(value.toString()); }
+                    catch (Exception ignored) { return fallback; }
+                })
+                .orElse(fallback);
+    }
+
+    private boolean resolveConfiguredBoolean(Tenant tenant, String key, boolean fallback) {
+        if (tenant == null || tenant.getId() == null) return fallback;
+        return tenantSettingsRepository.findByTenant_Id(tenant.getId())
+                .map(settings -> settings.getScheduleConfig())
+                .map(config -> config != null ? config.get(key) : null)
+                .map(value -> value instanceof Boolean b ? b : Boolean.parseBoolean(value.toString()))
+                .orElse(fallback);
+    }
     private int safeInt(Integer value) {
         return value != null ? value : 0;
     }

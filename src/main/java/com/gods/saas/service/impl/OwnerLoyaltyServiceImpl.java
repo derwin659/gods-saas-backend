@@ -3,6 +3,7 @@ package com.gods.saas.service.impl;
 import com.gods.saas.domain.dto.request.ManualPointsAdjustmentRequest;
 import com.gods.saas.domain.dto.response.ManualPointsAdjustmentResponse;
 import com.gods.saas.domain.dto.response.OwnerCustomerLoyaltyResponse;
+import com.gods.saas.domain.dto.response.LoyaltyTierConfig;
 import com.gods.saas.domain.model.Customer;
 import com.gods.saas.domain.model.LoyaltyAccount;
 import com.gods.saas.domain.model.LoyaltyMovement;
@@ -25,6 +26,7 @@ public class OwnerLoyaltyServiceImpl implements OwnerLoyaltyService {
     private final CustomerRepository customerRepository;
     private final LoyaltyAccountRepository loyaltyAccountRepository;
     private final LoyaltyMovementRepository loyaltyMovementRepository;
+    private final OwnerLoyaltySettingsService ownerLoyaltySettingsService;
 
     @Override
     public OwnerCustomerLoyaltyResponse findCustomerByPhone(Long tenantId, String phone) {
@@ -40,6 +42,7 @@ public class OwnerLoyaltyServiceImpl implements OwnerLoyaltyService {
 
         int puntosDisponibles = safeInt(loyaltyAccount.getPuntosDisponibles());
         int puntosAcumulados = safeInt(loyaltyAccount.getPuntosAcumulados());
+        LoyaltyTierConfig tier = ownerLoyaltySettingsService.resolveTier(tenantId, puntosAcumulados);
 
         return new OwnerCustomerLoyaltyResponse(
                 customer.getId(),
@@ -51,6 +54,8 @@ public class OwnerLoyaltyServiceImpl implements OwnerLoyaltyService {
                 customer.getMigrated(),
                 customer.getAppActivated(),
                 "NEW",
+                tier != null ? tier.getName() : null,
+                tier != null ? tier.getColorHex() : null,
                 0L,
                 0L,
                 null
@@ -93,6 +98,7 @@ public class OwnerLoyaltyServiceImpl implements OwnerLoyaltyService {
         loyaltyAccount.setPuntosDisponibles(newPoints);
 
         int puntosAcumulados = safeInt(loyaltyAccount.getPuntosAcumulados());
+        LoyaltyTierConfig tier = ownerLoyaltySettingsService.resolveTier(tenantId, puntosAcumulados);
 
         if (request.pointsDelta() > 0) {
             loyaltyAccount.setPuntosAcumulados(puntosAcumulados + request.pointsDelta());

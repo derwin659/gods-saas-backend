@@ -2,6 +2,7 @@ package com.gods.saas.domain.dto.response;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Map;
 
 public record OwnerCustomerReportResponse(
         String from,
@@ -24,7 +25,8 @@ public record OwnerCustomerReportResponse(
             Integer withMarketingWhatsapp,
             Integer optedOutWhatsapp,
             BigDecimal totalSpent,
-            BigDecimal averageSpent
+            BigDecimal averageSpent,
+            Map<String, Integer> loyaltyTierCounts
     ) {}
 
     public record Item(
@@ -40,6 +42,8 @@ public record OwnerCustomerReportResponse(
             BigDecimal totalSpent,
             Integer points,
             String status,
+            String loyaltyTierName,
+            String loyaltyTierColor,
             Boolean whatsappTransactionalEnabled,
             Boolean whatsappMarketingEnabled,
             Boolean whatsappOptedOut
