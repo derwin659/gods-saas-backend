@@ -17,6 +17,10 @@ public class AppUserResponse {
     private Boolean activo;
     private Boolean canSell;
     private Boolean professionalProfileEnabled;
+    private Boolean salaryEnabled;
+    private java.math.BigDecimal fixedSalaryAmount;
+    private com.gods.saas.domain.enums.SalaryFrequency salaryFrequency;
+    private java.time.LocalDate salaryStartDate;
     private Long branchId;
     private List<Long> branchIds;
     private List<String> branchNames;
@@ -32,6 +36,10 @@ public class AppUserResponse {
                 .activo(user.getActivo())
                 .canSell(user.getCanSell())
                 .professionalProfileEnabled(false)
+                .salaryEnabled(Boolean.TRUE.equals(user.getSalaryMode()))
+                .fixedSalaryAmount(user.getFixedSalaryAmount())
+                .salaryFrequency(user.getSalaryFrequency())
+                .salaryStartDate(user.getSalaryStartDate())
                 .branchId(
                         user.getBranch() != null ? user.getBranch().getId() : null
                 )

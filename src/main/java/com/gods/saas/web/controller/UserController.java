@@ -80,6 +80,12 @@ public class UserController {
         return ResponseEntity.ok(userService.getUser(id));
     }
 
+    @PutMapping("/{id}/compensation")
+    public ResponseEntity<AppUserResponse> updateCompensation(
+            @PathVariable Long id,
+            @RequestBody EmployeeCompensationRequest request) {
+        return ResponseEntity.ok(userService.updateEmployeeCompensation(id, request));
+    }
     // =====================================================
     // CAMBIAR ROL ADMIN <-> BARBER
     // Usado por Flutter:

@@ -249,6 +249,27 @@ public class UserService {
     }
 
     @Transactional
+    public AppUserResponse updateEmployeeCompensation(Long userId, com.gods.saas.domain.dto.EmployeeCompensationRequest request) {
+        validarOwner();
+        Long tenantId = TenantContext.getTenantId();
+        AppUser user = userRepository.findByIdAndTenantId(userId, tenantId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Empleado no encontrado"));
+        String role = user.getRol() == null ? "" : user.getRol().trim().toUpperCase(Locale.ROOT);
+        if (!List.of("ADMIN", "CASHIER", "BARBER").contains(role)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Solo puedes configurar pagos para empleados del negocio");
+        }
+        boolean enabled = Boolean.TRUE.equals(request.getSalaryEnabled());
+        if (enabled && (request.getFixedSalaryAmount() == null || request.getFixedSalaryAmount().signum() <= 0 || request.getSalaryFrequency() == null)) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ingresa un sueldo mayor a cero y su frecuencia");
+        }
+        user.setSalaryMode(enabled);
+        user.setFixedSalaryAmount(enabled ? request.getFixedSalaryAmount() : null);
+        user.setSalaryFrequency(enabled ? request.getSalaryFrequency() : null);
+        user.setSalaryStartDate(enabled ? request.getSalaryStartDate() : null);
+        user.setFechaActualizacion(LocalDateTime.now());
+        return responseWithBranches(userRepository.save(user), tenantId);
+    }
+    @Transactional
     public AppUserResponse updateUserBranches(Long userId, List<Long> branchIds) {
         validarOwner();
         Long tenantId = TenantContext.getTenantId();

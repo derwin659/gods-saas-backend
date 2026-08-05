@@ -192,7 +192,7 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
         }
 
         if (cashRegister.getStatus() != CashRegisterStatus.OPEN) {
-            throw new IllegalStateException("Solo puedes pagar barberos con caja abierta.");
+            throw new IllegalStateException("Solo puedes pagar al equipo con caja abierta.");
         }
 
         AppUser actor = appUserRepository.findByIdAndTenant_Id(actorUserId, tenantId)
@@ -222,7 +222,7 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
             throw new IllegalStateException("El monto excede el pendiente calculado.");
         }
 
-        String concept = "Pago barbero " + fullName(barber)
+        String concept = "Pago a empleado " + fullName(barber)
                 + " [" + preview.getPeriodFrom() + " a " + preview.getPeriodTo() + "]";
 
         ZoneId zoneId = getZoneIdForTenant(tenantId);
@@ -490,28 +490,32 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
         );
 
         if (!allowed) {
-            throw new IllegalStateException("Solo OWNER o ADMIN pueden pagar a barberos.");
+            throw new IllegalStateException("Solo OWNER o ADMIN pueden pagar al equipo.");
         }
     }
 
     private AppUser resolveBarber(Long tenantId, Long branchId, Long barberUserId) {
         if (barberUserId == null) {
-            throw new IllegalStateException("Debes seleccionar un barbero.");
+            throw new IllegalStateException("Debes seleccionar un empleado.");
         }
 
         AppUser barber = appUserRepository.findByIdAndTenant_Id(barberUserId, tenantId)
-                .orElseThrow(() -> new IllegalStateException("Barbero no encontrado."));
+                .orElseThrow(() -> new IllegalStateException("Empleado no encontrado."));
 
-        boolean hasBarberRoleInBranch = userTenantRoleRepository.existsByUser_IdAndTenant_IdAndBranch_IdAndRole(
-                barberUserId,
-                tenantId,
-                branchId,
-                RoleType.BARBER
-        );
-        if (!hasBarberRoleInBranch) {
-            throw new IllegalStateException("El usuario seleccionado no es un barbero valido.");
+        boolean belongsToBranch = List.of(RoleType.BARBER, RoleType.ADMIN, RoleType.CASHIER).stream()
+                .anyMatch(role -> userTenantRoleRepository.existsByUser_IdAndTenant_IdAndBranch_IdAndRole(
+                        barberUserId, tenantId, branchId, role));
+        if (!belongsToBranch) {
+            throw new IllegalStateException("El empleado no está asignado a esta sede.");
         }
-
+        boolean professional = userTenantRoleRepository.existsByUser_IdAndTenant_IdAndBranch_IdAndRole(
+                barberUserId, tenantId, branchId, RoleType.BARBER);
+        if (!professional && (!Boolean.TRUE.equals(barber.getSalaryMode())
+                || barber.getFixedSalaryAmount() == null
+                || barber.getFixedSalaryAmount().signum() <= 0
+                || barber.getSalaryFrequency() == null)) {
+            throw new IllegalStateException("Configura el sueldo y la frecuencia de este empleado antes de pagarlo.");
+        }
         return barber;
     }
 
@@ -621,7 +625,7 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
         String nombre = user.getNombre() == null ? "" : user.getNombre().trim();
         String apellido = user.getApellido() == null ? "" : user.getApellido().trim();
         String full = (nombre + " " + apellido).trim();
-        return full.isBlank() ? "Barbero" : full;
+        return full.isBlank() ? "Empleado" : full;
     }
 
     private String trimToNull(String value) {
@@ -654,10 +658,10 @@ public class BarberPaymentServiceImpl implements BarberPaymentService {
                 : barber.getSalaryFrequency();
 
         if (fixedSalaryAmount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalStateException("El barbero no tiene sueldo fijo configurado para esta sede.");
+            throw new IllegalStateException("El empleado no tiene sueldo fijo configurado para esta sede.");
         }
         if (frequency == null) {
-            throw new IllegalStateException("El barbero no tiene periodicidad de sueldo configurada para esta sede.");
+            throw new IllegalStateException("El empleado no tiene periodicidad de sueldo configurada para esta sede.");
         }
 
         return switch (frequency) {
