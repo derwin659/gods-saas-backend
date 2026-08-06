@@ -59,6 +59,13 @@ public class Branch {
     @Column(name = "image_public_id", length = 255)
     private String imagePublicId;
 
+    @PrePersist
+    void applyDefaults() {
+        if (publicVisible == null) publicVisible = false;
+        if (directoryEnabled == null) directoryEnabled = false;
+        if (activo == null) activo = true;
+        if (fechaCreacion == null) fechaCreacion = LocalDateTime.now();
+    }
     public Branch(Long branchId) {
         this.id = branchId;
     }
