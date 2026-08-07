@@ -158,7 +158,7 @@ public class OwnerBarberController {
     @GetMapping("/{barberId}/services")
     public BarberServiceAssignmentResponse getServices(@PathVariable Long barberId, @RequestParam Long branchId, HttpServletRequest request) {
         SessionData session = extractSession(request);
-        checkConfigBarbers(session);
+        checkReadBarberServices(session);
         Long allowedBranchId = branchAccessGuard.resolve(branchId, session.branchId());
         return barberServiceAssignmentService.get(session.tenantId(), allowedBranchId, barberId);
     }
@@ -199,6 +199,13 @@ public class OwnerBarberController {
         return barberServiceCommissionService.update(session.tenantId(), allowedBranchId, barberId, session.userId(), session.role(), body);
     }
 
+    private void checkReadBarberServices(SessionData session) {
+        if ("OWNER".equalsIgnoreCase(session.role())) return;
+        boolean allowed = adminPermissionService.hasPermission(session.tenantId(), session.userId(), "CONFIG_BARBERS")
+                || adminPermissionService.hasPermission(session.tenantId(), session.userId(), "CASH_ACCESS")
+                || adminPermissionService.hasPermission(session.tenantId(), session.userId(), "AGENDA_ACCESS");
+        if (!allowed) throw new AccessDeniedException("No tienes permiso para consultar servicios del profesional");
+    }
     private void checkConfigBarbers(SessionData session) {
         if ("OWNER".equalsIgnoreCase(session.role())) {
             return;
