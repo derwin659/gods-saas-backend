@@ -5,7 +5,9 @@ import com.gods.saas.security.BranchAccessGuard;
 import com.gods.saas.domain.dto.response.SimpleBarberResponse;
 import com.gods.saas.domain.dto.response.SimpleCustomerResponse;
 import com.gods.saas.domain.dto.response.SimpleServiceResponse;
+import com.gods.saas.domain.dto.response.ProductResponse;
 import com.gods.saas.service.impl.impl.OwnerCatalogService;
+import com.gods.saas.service.impl.impl.OwnerProductService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestAttribute;
@@ -21,6 +23,7 @@ import java.util.List;
 public class OwnerCatalogController {
 
     private final OwnerCatalogService ownerCatalogService;
+    private final OwnerProductService ownerProductService;
     private final BranchAccessGuard branchAccessGuard;
 
     @GetMapping("/barbers")
@@ -40,6 +43,15 @@ public class OwnerCatalogController {
         return ownerCatalogService.getServices(tenantId);
     }
 
+    @GetMapping("/products")
+    public List<ProductResponse> getProducts(
+            @RequestAttribute("tenantId") Long tenantId,
+            @RequestAttribute("branchId") Long sessionBranchId,
+            @RequestParam(required = false) Long branchId
+    ) {
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
+        return ownerProductService.findAll(tenantId, effectiveBranchId, true);
+    }
     @GetMapping("/customers/search")
     public List<SimpleCustomerResponse> searchCustomers(
             @RequestAttribute("tenantId") Long tenantId,
