@@ -12,6 +12,7 @@ public interface VerifiedBusinessReviewRepository extends JpaRepository<Verified
     Optional<VerifiedBusinessReview> findByAppointment_IdAndCustomer_Id(Long appointmentId, Long customerId);
     long countByBranch_Id(Long branchId);
     List<VerifiedBusinessReview> findTop200ByTenant_IdOrderByCreatedAtDesc(Long tenantId);
+    List<VerifiedBusinessReview> findTop20ByBranch_IdAndCommentIsNotNullOrderByCreatedAtDesc(Long branchId);
 
     @Query("select avg(r.rating) from VerifiedBusinessReview r where r.branch.id = :branchId")
     Double findAverageRatingByBranchId(Long branchId);

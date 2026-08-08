@@ -118,9 +118,18 @@ public class PublicAffiliatedBusinessDiscoveryService {
                         item.getBadge(), item.getImageUrl(), item.getPriceText()))
                 .toList();
 
+        var reviews = reviewRepository
+                .findTop20ByBranch_IdAndCommentIsNotNullOrderByCreatedAtDesc(branchId)
+                .stream()
+                .filter(item -> item.getComment() != null && !item.getComment().isBlank())
+                .map(item -> new PublicAffiliatedBranchDetailResponse.PublicReviewSummary(
+                        item.getId(), item.getRating(), item.getComment().trim(),
+                        publicCustomerName(item.getCustomer().getNombres(), item.getCustomer().getApellidos()),
+                        item.getCreatedAt(), true))
+                .toList();
         return new PublicAffiliatedBranchDetailResponse(
                 toResponse(branch, false, null, null), openNow, statusLabel,
-                todayHours, services, promotions);
+                todayHours, services, promotions, reviews);
     }
     private PublicAffiliatedBranchResponse toResponse(Branch branch, boolean hasLocation, Double latitude, Double longitude) {
         Tenant tenant = branch.getTenant();
@@ -240,6 +249,14 @@ public class PublicAffiliatedBusinessDiscoveryService {
         return tenantBusinessType.equals(businessType);
     }
 
+    private String publicCustomerName(String firstNames, String lastNames) {
+        String firstName = firstNames == null || firstNames.isBlank()
+                ? "Cliente"
+                : firstNames.trim().split("\\s+")[0];
+        if (lastNames == null || lastNames.isBlank()) return firstName;
+        String lastName = lastNames.trim().split("\\s+")[0];
+        return lastName.isEmpty() ? firstName : firstName + " " + lastName.substring(0, 1).toUpperCase() + ".";
+    }
     private String firstNonBlank(String first, String second) {
         if (first != null && !first.trim().isEmpty()) return first.trim();
         if (second != null && !second.trim().isEmpty()) return second.trim();

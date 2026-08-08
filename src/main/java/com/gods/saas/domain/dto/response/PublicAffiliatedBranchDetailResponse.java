@@ -1,6 +1,7 @@
 package com.gods.saas.domain.dto.response;
 
 import java.util.List;
+import java.time.LocalDateTime;
 
 public record PublicAffiliatedBranchDetailResponse(
         PublicAffiliatedBranchResponse branch,
@@ -8,7 +9,8 @@ public record PublicAffiliatedBranchDetailResponse(
         String openStatusLabel,
         String todayHours,
         List<PublicServiceSummary> services,
-        List<PublicPromotionSummary> promotions
+        List<PublicPromotionSummary> promotions,
+        List<PublicReviewSummary> reviews
 ) {
     public record PublicServiceSummary(
             Long id,
@@ -19,6 +21,15 @@ public record PublicAffiliatedBranchDetailResponse(
             Double price,
             Boolean variablePrice,
             String imageUrl
+    ) {}
+
+    public record PublicReviewSummary(
+            Long id,
+            Integer rating,
+            String comment,
+            String customerDisplayName,
+            LocalDateTime createdAt,
+            Boolean verified
     ) {}
 
     public record PublicPromotionSummary(
