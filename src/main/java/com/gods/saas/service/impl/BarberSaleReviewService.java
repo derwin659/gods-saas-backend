@@ -24,7 +24,10 @@ public class BarberSaleReviewService {
     public BarberSaleReviewResponse getReviewHistory(Authentication authentication) {
         AppUser barber = currentUser(authentication);
         Long tenantId = currentTenantId(authentication);
-        List<Sale> sales = saleRepository.findBarberSaleReviewHistory(tenantId, barber.getId());
+        List<Sale> sales = saleRepository.findBarberSaleReviewIds(tenantId, barber.getId()).stream()
+                .map(id -> saleRepository.findById(id).orElse(null))
+                .filter(java.util.Objects::nonNull)
+                .toList();
         List<BarberSaleReviewResponse.Item> items = sales.stream().map(this::toItem).toList();
         return BarberSaleReviewResponse.builder()
                 .pendingCount(items.stream().filter(i -> "PENDING".equals(i.getStatus())).count())

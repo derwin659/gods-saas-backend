@@ -6,7 +6,6 @@ import com.gods.saas.domain.repository.projection.*;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.stereotype.Repository;
 
 import java.math.BigDecimal;
@@ -17,18 +16,24 @@ import java.util.Optional;
 @Repository
 public interface SaleRepository extends JpaRepository<Sale, Long> {
 
-    @EntityGraph(attributePaths = {"items", "customer", "branch", "validatedByUser"})
-    @Query("""
-        select distinct s from Sale s join s.items i
-        where s.tenant.id = :tenantId
-          and i.barberUser.id = :barberUserId
-          and (upper(coalesce(s.createdByRole, '')) = 'BARBER'
-               or upper(coalesce(s.paymentValidationStatus, 'APPROVED')) in ('PENDING_VALIDATION', 'REJECTED'))
-        order by coalesce(s.saleDate, s.fechaCreacion) desc
-    """)
-    List<Sale> findBarberSaleReviewHistory(@Param("tenantId") Long tenantId,
-            @Param("barberUserId") Long barberUserId);
-
+    @Query(value = """
+        select distinct s.sale_id
+        from sale s
+        left join sale_item si on si.sale_id = s.sale_id
+        where s.tenant_id = :tenantId
+          and (s.user_id = :barberUserId or si.barber_user_id = :barberUserId)
+          and (
+            upper(coalesce(s.created_by_role, '')) = 'BARBER'
+            or upper(coalesce(s.payment_validation_status, 'APPROVED'))
+                in ('PENDING_VALIDATION', 'PENDING', 'REJECTED')
+          )
+        order by s.sale_id desc
+        limit 100
+    """, nativeQuery = true)
+    List<Long> findBarberSaleReviewIds(
+            @Param("tenantId") Long tenantId,
+            @Param("barberUserId") Long barberUserId
+    );
     Optional<Sale> findByIdAndTenant_IdAndCustomer_Id(Long id, Long tenantId, Long customerId);
 
     @Query("""
