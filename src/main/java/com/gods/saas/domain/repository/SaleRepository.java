@@ -34,6 +34,25 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
             @Param("tenantId") Long tenantId,
             @Param("barberUserId") Long barberUserId
     );
+    @Query(value = """
+        select coalesce(sum(coalesce(si.cantidad, 1)), 0)
+        from sale s
+        join sale_item si on si.sale_id = s.sale_id
+        where s.tenant_id = :tenantId
+          and (:branchId is null or s.branch_id = :branchId)
+          and (si.barber_user_id = :barberUserId or (si.barber_user_id is null and s.user_id = :barberUserId))
+          and (si.service_id is not null or upper(coalesce(si.tipo_item, 'SERVICE')) = 'SERVICE')
+          and upper(coalesce(s.payment_validation_status, 'APPROVED')) = 'APPROVED'
+          and coalesce(s.sale_date, s.fecha_creacion) >= :start
+          and coalesce(s.sale_date, s.fecha_creacion) < :end
+    """, nativeQuery = true)
+    long countApprovedServicesByBarberRange(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("barberUserId") Long barberUserId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
     Optional<Sale> findByIdAndTenant_IdAndCustomer_Id(Long id, Long tenantId, Long customerId);
 
     @Query("""

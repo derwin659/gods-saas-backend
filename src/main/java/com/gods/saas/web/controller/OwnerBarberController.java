@@ -19,6 +19,7 @@ import com.gods.saas.service.impl.BarberServiceAssignmentService;
 import com.gods.saas.service.impl.BarberServiceCommissionService;
 import com.gods.saas.service.impl.BarberSafeDeletionService;
 import com.gods.saas.service.impl.OwnerProfessionalProfileService;
+import com.gods.saas.service.impl.OwnerBarberActivityService;
 import com.gods.saas.service.impl.JwtService;
 import com.gods.saas.service.impl.impl.OwnerBarberService;
 import com.gods.saas.utils.JwtUtil;
@@ -45,6 +46,7 @@ public class OwnerBarberController {
     private final BarberServiceAssignmentService barberServiceAssignmentService;
     private final BarberServiceCommissionService barberServiceCommissionService;
     private final OwnerProfessionalProfileService ownerProfessionalProfileService;
+    private final OwnerBarberActivityService ownerBarberActivityService;
     private final BarberSafeDeletionService barberSafeDeletionService;
 
     @GetMapping
@@ -155,6 +157,8 @@ public class OwnerBarberController {
         return ownerProfessionalProfileService.disable(session.tenantId(), session.userId());
     }
 
+    @GetMapping("/{barberId}/service-counts")
+    public Map<String,Object> serviceCounts(@PathVariable Long barberId,@RequestParam(required=false) Long branchId,HttpServletRequest request){SessionData session=extractSession(request);checkConfigBarbers(session);Long allowed=branchAccessGuard.resolveOptionalForOwner(branchId,session.branchId());return ownerBarberActivityService.counts(session.tenantId(),allowed,barberId);}
     @GetMapping("/{barberId}/services")
     public BarberServiceAssignmentResponse getServices(@PathVariable Long barberId, @RequestParam Long branchId, HttpServletRequest request) {
         SessionData session = extractSession(request);
