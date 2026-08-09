@@ -8,9 +8,9 @@ import com.gods.saas.domain.model.SaleItem;
 import com.gods.saas.domain.repository.AppUserRepository;
 import com.gods.saas.domain.repository.SaleRepository;
 import lombok.RequiredArgsConstructor;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Map;
 
@@ -20,10 +20,11 @@ public class BarberSaleReviewService {
     private final SaleRepository saleRepository;
     private final AppUserRepository appUserRepository;
 
+    @Transactional(readOnly = true)
     public BarberSaleReviewResponse getReviewHistory(Authentication authentication) {
         AppUser barber = currentUser(authentication);
         Long tenantId = currentTenantId(authentication);
-        List<Sale> sales = saleRepository.findBarberSaleReviewHistory(tenantId, barber.getId(), PageRequest.of(0, 100));
+        List<Sale> sales = saleRepository.findBarberSaleReviewHistory(tenantId, barber.getId());
         List<BarberSaleReviewResponse.Item> items = sales.stream().map(this::toItem).toList();
         return BarberSaleReviewResponse.builder()
                 .pendingCount(items.stream().filter(i -> "PENDING".equals(i.getStatus())).count())

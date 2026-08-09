@@ -6,7 +6,6 @@ import com.gods.saas.domain.repository.projection.*;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
-import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.stereotype.Repository;
 
@@ -28,7 +27,7 @@ public interface SaleRepository extends JpaRepository<Sale, Long> {
         order by coalesce(s.saleDate, s.fechaCreacion) desc
     """)
     List<Sale> findBarberSaleReviewHistory(@Param("tenantId") Long tenantId,
-            @Param("barberUserId") Long barberUserId, Pageable pageable);
+            @Param("barberUserId") Long barberUserId);
 
     Optional<Sale> findByIdAndTenant_IdAndCustomer_Id(Long id, Long tenantId, Long customerId);
 
