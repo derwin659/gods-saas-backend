@@ -168,6 +168,18 @@ public class CloudinaryStorageService {
         int extension = transformed.lastIndexOf('.');
         return extension > transformed.lastIndexOf('/') ? transformed.substring(0, extension) + ".jpg" : transformed + ".jpg";
     }
+    public void deleteShowcaseMedia(String publicId, String mediaType) {
+        if (publicId == null || publicId.isBlank()) return;
+        try {
+            String resourceType = "VIDEO".equalsIgnoreCase(mediaType) ? "video" : "image";
+            cloudinary.uploader().destroy(
+                    publicId,
+                    ObjectUtils.asMap("resource_type", resourceType, "invalidate", true)
+            );
+        } catch (IOException e) {
+            throw new IllegalStateException("No se pudo eliminar el archivo del trabajo", e);
+        }
+    }
     public void deleteImage(String publicId) {
         if (publicId == null || publicId.isBlank()) {
             return;
