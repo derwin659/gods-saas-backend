@@ -48,6 +48,19 @@ public class Branch {
     @Column(name = "public_description", length = 500)
     private String publicDescription;
 
+    @Builder.Default
+    @Column(name = "walk_in_enabled", nullable = false)
+    private Boolean walkInEnabled = false;
+
+    @Builder.Default
+    @Column(name = "walk_in_paused", nullable = false)
+    private Boolean walkInPaused = false;
+
+    @Column(name = "walk_in_estimated_wait_minutes")
+    private Integer walkInEstimatedWaitMinutes;
+
+    @Column(name = "walk_in_message", length = 200)
+    private String walkInMessage;
     private Boolean activo;
 
     @Column(name = "fecha_creacion")
@@ -63,6 +76,8 @@ public class Branch {
     void applyDefaults() {
         if (publicVisible == null) publicVisible = false;
         if (directoryEnabled == null) directoryEnabled = false;
+        if (walkInEnabled == null) walkInEnabled = false;
+        if (walkInPaused == null) walkInPaused = false;
         if (activo == null) activo = true;
         if (fechaCreacion == null) fechaCreacion = LocalDateTime.now();
     }

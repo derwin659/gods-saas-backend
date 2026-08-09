@@ -19,6 +19,12 @@ public record PublicAffiliatedBranchResponse(
         Double distanceKm,
         String distanceLabel,
         String availabilityLabel,
+        Boolean walkInEnabled,
+        Boolean walkInPaused,
+        Integer walkInEstimatedWaitMinutes,
+        String walkInMessage,
+        String walkInStatusLabel,
+        Boolean walkInAvailableNow,
         Boolean near,
         Double ratingAverage,
         Long reviewCount

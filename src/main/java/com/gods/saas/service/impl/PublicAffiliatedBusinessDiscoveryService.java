@@ -149,6 +149,7 @@ public class PublicAffiliatedBusinessDiscoveryService {
                         ? "Disponible en tu zona"
                         : "Afiliado disponible";
 
+        WalkInPublicStatus walkInStatus = resolveWalkInStatus(branch);
         return new PublicAffiliatedBranchResponse(
                 tenant == null ? null : tenant.getId(),
                 tenant == null ? null : tenant.getNombre(),
@@ -168,12 +169,45 @@ public class PublicAffiliatedBusinessDiscoveryService {
                 distance,
                 distance == null ? null : String.format("%.1f km", distance),
                 availabilityLabel,
+                Boolean.TRUE.equals(branch.getWalkInEnabled()),
+                Boolean.TRUE.equals(branch.getWalkInPaused()),
+                branch.getWalkInEstimatedWaitMinutes(),
+                branch.getWalkInMessage(),
+                walkInStatus.label(),
+                walkInStatus.availableNow(),
                 near,
                 reviewRepository.findAverageRatingByBranchId(branch.getId()),
                 reviewRepository.countByBranch_IdAndModerationStatusNot(branch.getId(), "HIDDEN")
         );
     }
 
+    private WalkInPublicStatus resolveWalkInStatus(Branch branch) {
+        if (!Boolean.TRUE.equals(branch.getWalkInEnabled())) {
+            return new WalkInPublicStatus("Solo con reserva", false);
+        }
+        if (Boolean.TRUE.equals(branch.getWalkInPaused())) {
+            return new WalkInPublicStatus("Llegadas sin reserva pausadas", false);
+        }
+        int dayOfWeek = LocalDate.now().getDayOfWeek().getValue();
+        var schedules = availabilityRepository
+                .findByTenant_IdAndBranch_IdAndDayOfWeekAndIsWorkingTrueOrderByStartTimeAsc(
+                        branch.getTenant().getId(), branch.getId(), dayOfWeek);
+        LocalTime opensAt = schedules.stream().map(BarberAvailability::getStartTime)
+                .filter(java.util.Objects::nonNull).min(LocalTime::compareTo).orElse(null);
+        LocalTime closesAt = schedules.stream().map(BarberAvailability::getEndTime)
+                .filter(java.util.Objects::nonNull).max(LocalTime::compareTo).orElse(null);
+        if (opensAt == null || closesAt == null) return new WalkInPublicStatus("Cerrado hoy", false);
+        LocalTime now = LocalTime.now();
+        if (now.isBefore(opensAt)) {
+            return new WalkInPublicStatus("Sin reserva desde " + opensAt.format(DateTimeFormatter.ofPattern("HH:mm")), false);
+        }
+        if (!now.isBefore(closesAt)) return new WalkInPublicStatus("Cerrado hoy", false);
+        Integer wait = branch.getWalkInEstimatedWaitMinutes();
+        if (wait == null || wait <= 0) return new WalkInPublicStatus("Disponible sin reserva", true);
+        return new WalkInPublicStatus("Espera aprox. " + wait + " min", true);
+    }
+
+    private record WalkInPublicStatus(String label, boolean availableNow) {}
     private Comparator<PublicAffiliatedBranchResponse> comparator(boolean hasLocation) {
         Comparator<PublicAffiliatedBranchResponse> byName = Comparator
                 .comparing((PublicAffiliatedBranchResponse item) -> safe(item.tenantName()), String.CASE_INSENSITIVE_ORDER)

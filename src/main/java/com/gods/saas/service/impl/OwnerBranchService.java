@@ -69,6 +69,10 @@ public class OwnerBranchService {
                 .publicVisible(Boolean.TRUE.equals(request.publicVisible()))
                 .directoryEnabled(Boolean.TRUE.equals(request.directoryEnabled()))
                 .publicDescription(normalizeNullable(request.publicDescription()))
+                .walkInEnabled(Boolean.TRUE.equals(request.walkInEnabled()))
+                .walkInPaused(Boolean.TRUE.equals(request.walkInPaused()))
+                .walkInEstimatedWaitMinutes(normalizeWalkInWait(request.walkInEstimatedWaitMinutes()))
+                .walkInMessage(normalizeNullable(request.walkInMessage()))
                 .activo(request.activo() != null ? request.activo() : true)
                 .fechaCreacion(LocalDateTime.now())
                 .build();
@@ -97,6 +101,10 @@ public class OwnerBranchService {
         branch.setPublicVisible(Boolean.TRUE.equals(request.publicVisible()));
         branch.setDirectoryEnabled(Boolean.TRUE.equals(request.directoryEnabled()));
         branch.setPublicDescription(normalizeNullable(request.publicDescription()));
+        branch.setWalkInEnabled(Boolean.TRUE.equals(request.walkInEnabled()));
+        branch.setWalkInPaused(Boolean.TRUE.equals(request.walkInPaused()));
+        branch.setWalkInEstimatedWaitMinutes(normalizeWalkInWait(request.walkInEstimatedWaitMinutes()));
+        branch.setWalkInMessage(normalizeNullable(request.walkInMessage()));
 
         if (request.activo() != null) {
             branch.setActivo(request.activo());
@@ -170,6 +178,10 @@ public class OwnerBranchService {
                 Boolean.TRUE.equals(branch.getPublicVisible()),
                 Boolean.TRUE.equals(branch.getDirectoryEnabled()),
                 branch.getPublicDescription(),
+                Boolean.TRUE.equals(branch.getWalkInEnabled()),
+                Boolean.TRUE.equals(branch.getWalkInPaused()),
+                branch.getWalkInEstimatedWaitMinutes(),
+                branch.getWalkInMessage(),
                 followRepository.countByTenant_Id(branch.getTenant().getId()),
                 discoveryEventRepository.countByTenant_IdAndBranch_IdAndEventType(branch.getTenant().getId(), branch.getId(), "VIEW"),
                 discoveryEventRepository.countByTenant_IdAndBranch_IdAndEventType(branch.getTenant().getId(), branch.getId(), "ROUTE"),
@@ -187,6 +199,13 @@ public class OwnerBranchService {
         return Math.round((confirmed * 1000.0) / views) / 10.0;
     }
 
+    private Integer normalizeWalkInWait(Integer value) {
+        if (value == null) return null;
+        if (value < 0 || value > 240) {
+            throw new BusinessException("La espera estimada debe estar entre 0 y 240 minutos");
+        }
+        return value;
+    }
     private String normalizeRequired(String value) {
         if (value == null || value.trim().isEmpty()) {
             throw new BusinessException("El nombre de la sede es obligatorio");

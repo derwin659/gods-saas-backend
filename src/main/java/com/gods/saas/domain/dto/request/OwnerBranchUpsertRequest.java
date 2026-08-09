@@ -35,6 +35,15 @@ public record OwnerBranchUpsertRequest(
         Boolean directoryEnabled,
 
         @Size(max = 500, message = "La descripcion publica no puede exceder 500 caracteres")
-        String publicDescription
+        String publicDescription,
+
+        Boolean walkInEnabled,
+
+        Boolean walkInPaused,
+
+        Integer walkInEstimatedWaitMinutes,
+
+        @Size(max = 200, message = "El mensaje sin reserva no puede exceder 200 caracteres")
+        String walkInMessage
 ) {
 }
