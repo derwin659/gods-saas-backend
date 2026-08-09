@@ -1,0 +1,3 @@
+package com.gods.saas.web.controller;
+import com.gods.saas.domain.dto.response.ShowcaseResponse;import com.gods.saas.service.impl.ProfessionalShowcaseService;import lombok.RequiredArgsConstructor;import org.springframework.web.bind.annotation.*;import java.util.List;
+@RestController @RequestMapping("/api/public/showcase") @RequiredArgsConstructor public class PublicShowcaseController {private final ProfessionalShowcaseService service;@GetMapping public List<ShowcaseResponse> list(@RequestParam Long tenantId,@RequestParam Long branchId,@RequestParam(required=false)Long professionalUserId){return service.published(tenantId,branchId,professionalUserId);}}

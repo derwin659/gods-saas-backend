@@ -1,0 +1,5 @@
+package com.gods.saas.web.controller;
+import com.gods.saas.domain.dto.response.ShowcaseResponse;import com.gods.saas.service.impl.*;import lombok.RequiredArgsConstructor;import org.springframework.web.bind.annotation.*;import java.util.*;
+@RestController @RequestMapping("/api/owner/showcase") @RequiredArgsConstructor public class OwnerShowcaseController {private final ProfessionalShowcaseService service;private final AdminPermissionService permissions;
+@GetMapping public List<ShowcaseResponse> list(@RequestAttribute("tenantId")Long tenantId,@RequestParam(required=false)String status){permissions.checkPermission("CONFIG_BARBERS");return service.ownerList(tenantId,status);}
+@PostMapping("/{id}/moderate") public ShowcaseResponse moderate(@RequestAttribute("tenantId")Long tenantId,@RequestAttribute("userId")Long userId,@PathVariable Long id,@RequestBody Map<String,Object> body){permissions.checkPermission("CONFIG_BARBERS");return service.moderate(tenantId,userId,id,String.valueOf(body.get("status")),body.get("reason")==null?null:String.valueOf(body.get("reason")));}}

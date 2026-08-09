@@ -16,6 +16,8 @@ import java.util.Set;
 public class CloudinaryStorageService {
 
     private static final long MAX_FILE_SIZE_BYTES = 5L * 1024L * 1024L;
+    private static final long MAX_VIDEO_SIZE_BYTES = 35L * 1024L * 1024L;
+    private static final Set<String> ALLOWED_VIDEO_TYPES = Set.of("video/mp4", "video/quicktime", "video/webm");
 
     private static final Set<String> ALLOWED_CONTENT_TYPES = Set.of(
             "image/jpeg",
@@ -121,6 +123,51 @@ public class CloudinaryStorageService {
         }
     }
 
+    public UploadResult uploadShowcaseImage(Long tenantId, Long professionalId, MultipartFile file) {
+        validateImage(file);
+        try {
+            String folder = "super-gods/tenants/" + tenantId + "/showcase";
+            Map<?, ?> result = cloudinary.uploader().upload(
+                    file.getBytes(),
+                    ObjectUtils.asMap(
+                            "folder", folder,
+                            "resource_type", "image",
+                            "public_id", "work_" + professionalId + "_" + System.currentTimeMillis(),
+                            "overwrite", false,
+                            "transformation", "c_limit,w_1800,h_1800,q_auto:good,f_auto"
+                    )
+            );
+            return new UploadResult(String.valueOf(result.get("secure_url")), String.valueOf(result.get("public_id")));
+        } catch (IOException e) {
+            throw new IllegalStateException("No se pudo subir la foto del trabajo", e);
+        }
+    }
+    public UploadResult uploadShowcaseVideo(Long tenantId, Long professionalId, MultipartFile file) {
+        validateVideo(file);
+        try {
+            String folder = "super-gods/tenants/" + tenantId + "/showcase/videos";
+            Map<?, ?> result = cloudinary.uploader().uploadLarge(
+                    file.getBytes(),
+                    ObjectUtils.asMap(
+                            "folder", folder,
+                            "resource_type", "video",
+                            "public_id", "work_video_" + professionalId + "_" + System.currentTimeMillis(),
+                            "overwrite", false,
+                            "eager", "c_limit,w_1280,h_1280,q_auto:good"
+                    )
+            );
+            return new UploadResult(String.valueOf(result.get("secure_url")), String.valueOf(result.get("public_id")));
+        } catch (IOException e) {
+            throw new IllegalStateException("No se pudo subir el video del trabajo", e);
+        }
+    }
+
+    public String videoThumbnailUrl(String secureVideoUrl) {
+        if (secureVideoUrl == null || secureVideoUrl.isBlank()) return null;
+        String transformed = secureVideoUrl.replace("/upload/", "/upload/so_0,c_fill,w_900,h_900,q_auto:good,f_jpg/");
+        int extension = transformed.lastIndexOf('.');
+        return extension > transformed.lastIndexOf('/') ? transformed.substring(0, extension) + ".jpg" : transformed + ".jpg";
+    }
     public void deleteImage(String publicId) {
         if (publicId == null || publicId.isBlank()) {
             return;
@@ -136,6 +183,14 @@ public class CloudinaryStorageService {
         }
     }
 
+    private void validateVideo(MultipartFile file) {
+        if (file == null || file.isEmpty()) throw new IllegalArgumentException("El video es obligatorio");
+        if (file.getSize() > MAX_VIDEO_SIZE_BYTES) throw new IllegalArgumentException("El video no debe pesar mas de 35 MB");
+        String contentType = file.getContentType();
+        if (contentType == null || !ALLOWED_VIDEO_TYPES.contains(contentType.toLowerCase(Locale.ROOT))) {
+            throw new IllegalArgumentException("Formato no permitido. Usa MP4, MOV o WEBM");
+        }
+    }
     private void validateImage(MultipartFile file) {
         if (file == null || file.isEmpty()) {
             throw new IllegalArgumentException("La imagen es obligatoria");
