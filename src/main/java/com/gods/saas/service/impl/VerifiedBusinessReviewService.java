@@ -127,6 +127,8 @@ public class VerifiedBusinessReviewService {
             row.put("customerName", item.getCustomer().getNombres());
             row.put("createdAt", item.getCreatedAt());
             row.put("verified", true);
+            row.put("ownerReply", item.getOwnerReply());
+            row.put("ownerRepliedAt", item.getOwnerRepliedAt());
             return row;
         }).toList();
         var result = new java.util.LinkedHashMap<String, Object>();
@@ -134,5 +136,23 @@ public class VerifiedBusinessReviewService {
         result.put("total", all.size());
         result.put("distribution", distribution);
         result.put("reviews", rows);
+        return result;
+    }
+    @Transactional
+    public java.util.Map<String, Object> reply(Long tenantId, Long actorUserId, Long reviewId, String rawReply) {
+        VerifiedBusinessReview review = reviewRepository.findByIdAndTenant_Id(reviewId, tenantId)
+                .orElseThrow(() -> new BusinessException("Reseña no encontrada"));
+        String reply = rawReply == null ? "" : rawReply.trim();
+        if (reply.isEmpty()) throw new BusinessException("Escribe una respuesta");
+        if (reply.length() > 500) throw new BusinessException("La respuesta no puede superar 500 caracteres");
+        review.setOwnerReply(reply);
+        review.setOwnerRepliedAt(java.time.LocalDateTime.now());
+        review.setOwnerRepliedByUserId(actorUserId);
+        reviewRepository.save(review);
+
+        var result = new java.util.LinkedHashMap<String, Object>();
+        result.put("reviewId", review.getId());
+        result.put("ownerReply", review.getOwnerReply());
+        result.put("ownerRepliedAt", review.getOwnerRepliedAt());
         return result;
     }}

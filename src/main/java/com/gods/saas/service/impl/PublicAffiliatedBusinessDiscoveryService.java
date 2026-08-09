@@ -125,7 +125,7 @@ public class PublicAffiliatedBusinessDiscoveryService {
                 .map(item -> new PublicAffiliatedBranchDetailResponse.PublicReviewSummary(
                         item.getId(), item.getRating(), item.getComment().trim(),
                         publicCustomerName(item.getCustomer().getNombres(), item.getCustomer().getApellidos()),
-                        item.getCreatedAt(), true))
+                        item.getCreatedAt(), true, item.getOwnerReply(), item.getOwnerRepliedAt()))
                 .toList();
         return new PublicAffiliatedBranchDetailResponse(
                 toResponse(branch, false, null, null), openNow, statusLabel,

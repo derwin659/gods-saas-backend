@@ -1,6 +1,8 @@
 package com.gods.saas.web.controller;
 
 import com.gods.saas.security.SecurityUtils;
+import com.gods.saas.domain.dto.request.OwnerReviewReplyRequest;
+import jakarta.validation.Valid;
 import com.gods.saas.service.impl.VerifiedBusinessReviewService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -21,4 +23,14 @@ public class OwnerVerifiedReviewController {
         }
         return service.ownerInbox(SecurityUtils.getCurrentTenantId(), branchId, rating);
     }
-}
+
+    @PutMapping("/{reviewId}/reply")
+    public Map<String, Object> reply(
+            @PathVariable Long reviewId,
+            @Valid @RequestBody OwnerReviewReplyRequest request) {
+        return service.reply(
+                SecurityUtils.getCurrentTenantId(),
+                SecurityUtils.getCurrentUserId(),
+                reviewId,
+                request.reply());
+    }}

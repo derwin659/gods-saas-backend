@@ -29,7 +29,9 @@ public record PublicAffiliatedBranchDetailResponse(
             String comment,
             String customerDisplayName,
             LocalDateTime createdAt,
-            Boolean verified
+            Boolean verified,
+            String ownerReply,
+            LocalDateTime ownerRepliedAt
     ) {}
 
     public record PublicPromotionSummary(

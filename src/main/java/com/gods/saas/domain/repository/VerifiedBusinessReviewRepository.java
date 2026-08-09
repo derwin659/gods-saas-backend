@@ -10,6 +10,7 @@ public interface VerifiedBusinessReviewRepository extends JpaRepository<Verified
     boolean existsByAppointment_Id(Long appointmentId);
     boolean existsBySale_Id(Long saleId);
     Optional<VerifiedBusinessReview> findByAppointment_IdAndCustomer_Id(Long appointmentId, Long customerId);
+    Optional<VerifiedBusinessReview> findByIdAndTenant_Id(Long reviewId, Long tenantId);
     long countByBranch_Id(Long branchId);
     List<VerifiedBusinessReview> findTop200ByTenant_IdOrderByCreatedAtDesc(Long tenantId);
     List<VerifiedBusinessReview> findTop20ByBranch_IdAndCommentIsNotNullOrderByCreatedAtDesc(Long branchId);

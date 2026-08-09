@@ -26,6 +26,9 @@ public class VerifiedBusinessReview {
     private Sale sale;
     @Column(nullable = false) private Integer rating;
     @Column(length = 500) private String comment;
+    @Column(name = "owner_reply", length = 500) private String ownerReply;
+    @Column(name = "owner_replied_at") private LocalDateTime ownerRepliedAt;
+    @Column(name = "owner_replied_by_user_id") private Long ownerRepliedByUserId;
     @Column(name = "created_at", nullable = false) @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
 }
