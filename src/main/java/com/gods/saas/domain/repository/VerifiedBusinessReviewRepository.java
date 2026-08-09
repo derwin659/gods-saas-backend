@@ -11,10 +11,11 @@ public interface VerifiedBusinessReviewRepository extends JpaRepository<Verified
     boolean existsBySale_Id(Long saleId);
     Optional<VerifiedBusinessReview> findByAppointment_IdAndCustomer_Id(Long appointmentId, Long customerId);
     Optional<VerifiedBusinessReview> findByIdAndTenant_Id(Long reviewId, Long tenantId);
-    long countByBranch_Id(Long branchId);
+    long countByBranch_IdAndModerationStatusNot(Long branchId, String moderationStatus);
     List<VerifiedBusinessReview> findTop200ByTenant_IdOrderByCreatedAtDesc(Long tenantId);
     List<VerifiedBusinessReview> findTop20ByBranch_IdAndCommentIsNotNullOrderByCreatedAtDesc(Long branchId);
+    List<VerifiedBusinessReview> findTop500ByOrderByCreatedAtDesc();
 
-    @Query("select avg(r.rating) from VerifiedBusinessReview r where r.branch.id = :branchId")
+    @Query("select avg(r.rating) from VerifiedBusinessReview r where r.branch.id = :branchId and r.moderationStatus <> 'HIDDEN'")
     Double findAverageRatingByBranchId(Long branchId);
 }

@@ -129,6 +129,10 @@ public class VerifiedBusinessReviewService {
             row.put("verified", true);
             row.put("ownerReply", item.getOwnerReply());
             row.put("ownerRepliedAt", item.getOwnerRepliedAt());
+            row.put("moderationStatus", item.getModerationStatus());
+            row.put("reportReason", item.getReportReason());
+            row.put("reportDetails", item.getReportDetails());
+            row.put("reportedAt", item.getReportedAt());
             return row;
         }).toList();
         var result = new java.util.LinkedHashMap<String, Object>();
@@ -154,5 +158,92 @@ public class VerifiedBusinessReviewService {
         result.put("reviewId", review.getId());
         result.put("ownerReply", review.getOwnerReply());
         result.put("ownerRepliedAt", review.getOwnerRepliedAt());
+        return result;
+    }
+    @Transactional
+    public java.util.Map<String, Object> report(Long tenantId, Long actorUserId, Long reviewId,
+                                                String rawReason, String rawDetails) {
+        VerifiedBusinessReview review = reviewRepository.findByIdAndTenant_Id(reviewId, tenantId)
+                .orElseThrow(() -> new BusinessException("Reseña no encontrada"));
+        if ("HIDDEN".equalsIgnoreCase(review.getModerationStatus())) {
+            throw new BusinessException("Esta reseña ya fue moderada y solo Super Gods puede restaurarla");
+        }
+        String reason = rawReason == null ? "" : rawReason.trim().toUpperCase();
+        Set<String> allowed = Set.of("OFFENSIVE", "PERSONAL_DATA", "FALSE_CONTENT", "SPAM", "OTHER");
+        if (!allowed.contains(reason)) throw new BusinessException("Motivo de reporte no válido");
+        String details = rawDetails == null || rawDetails.trim().isEmpty() ? null : rawDetails.trim();
+        review.setReportReason(reason);
+        review.setReportDetails(details);
+        review.setReportedAt(java.time.LocalDateTime.now());
+        review.setReportedByUserId(actorUserId);
+        review.setModerationStatus("PENDING_REVIEW");
+        reviewRepository.save(review);
+        return moderationResult(review);
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.Map<String, Object> moderationInbox(String status) {
+        String normalized = status == null || status.isBlank() ? null : status.trim().toUpperCase();
+        var reviews = reviewRepository.findTop500ByOrderByCreatedAtDesc().stream()
+                .filter(item -> normalized == null || normalized.equals(item.getModerationStatus()))
+                .filter(item -> normalized != null || item.getReportedAt() != null)
+                .map(this::moderationRow)
+                .toList();
+        var result = new java.util.LinkedHashMap<String, Object>();
+        result.put("total", reviews.size());
+        result.put("reviews", reviews);
+        return result;
+    }
+
+    @Transactional
+    public java.util.Map<String, Object> moderate(Long actorUserId, Long reviewId,
+                                                  String rawStatus, String rawNote) {
+        VerifiedBusinessReview review = reviewRepository.findById(reviewId)
+                .orElseThrow(() -> new BusinessException("Reseña no encontrada"));
+        String status = rawStatus == null ? "" : rawStatus.trim().toUpperCase();
+        if (!Set.of("PUBLISHED", "HIDDEN").contains(status)) {
+            throw new BusinessException("Decisión de moderación no válida");
+        }
+        String note = rawNote == null ? "" : rawNote.trim();
+        if (note.isEmpty()) throw new BusinessException("Explica la decisión");
+        if (note.length() > 500) throw new BusinessException("La nota no puede superar 500 caracteres");
+        review.setModerationStatus(status);
+        review.setModerationNote(note);
+        review.setModeratedAt(java.time.LocalDateTime.now());
+        review.setModeratedByUserId(actorUserId);
+        reviewRepository.save(review);
+        return moderationResult(review);
+    }
+
+    private java.util.Map<String, Object> moderationRow(VerifiedBusinessReview item) {
+        var row = new java.util.LinkedHashMap<String, Object>();
+        row.put("reviewId", item.getId());
+        row.put("tenantId", item.getTenant().getId());
+        row.put("tenantName", item.getTenant().getNombre());
+        row.put("branchId", item.getBranch().getId());
+        row.put("branchName", item.getBranch().getNombre());
+        row.put("customerName", item.getCustomer().getNombres());
+        row.put("rating", item.getRating());
+        row.put("comment", item.getComment());
+        row.put("createdAt", item.getCreatedAt());
+        row.put("ownerReply", item.getOwnerReply());
+        row.put("moderationStatus", item.getModerationStatus());
+        row.put("reportReason", item.getReportReason());
+        row.put("reportDetails", item.getReportDetails());
+        row.put("reportedAt", item.getReportedAt());
+        row.put("moderationNote", item.getModerationNote());
+        row.put("moderatedAt", item.getModeratedAt());
+        return row;
+    }
+
+    private java.util.Map<String, Object> moderationResult(VerifiedBusinessReview item) {
+        var result = new java.util.LinkedHashMap<String, Object>();
+        result.put("reviewId", item.getId());
+        result.put("moderationStatus", item.getModerationStatus());
+        result.put("reportReason", item.getReportReason());
+        result.put("reportDetails", item.getReportDetails());
+        result.put("reportedAt", item.getReportedAt());
+        result.put("moderationNote", item.getModerationNote());
+        result.put("moderatedAt", item.getModeratedAt());
         return result;
     }}

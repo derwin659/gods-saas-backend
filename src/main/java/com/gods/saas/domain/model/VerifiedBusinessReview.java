@@ -29,6 +29,16 @@ public class VerifiedBusinessReview {
     @Column(name = "owner_reply", length = 500) private String ownerReply;
     @Column(name = "owner_replied_at") private LocalDateTime ownerRepliedAt;
     @Column(name = "owner_replied_by_user_id") private Long ownerRepliedByUserId;
+    @Builder.Default
+    @Column(name = "moderation_status", nullable = false, length = 24)
+    private String moderationStatus = "PUBLISHED";
+    @Column(name = "report_reason", length = 40) private String reportReason;
+    @Column(name = "report_details", length = 500) private String reportDetails;
+    @Column(name = "reported_at") private LocalDateTime reportedAt;
+    @Column(name = "reported_by_user_id") private Long reportedByUserId;
+    @Column(name = "moderated_at") private LocalDateTime moderatedAt;
+    @Column(name = "moderated_by_user_id") private Long moderatedByUserId;
+    @Column(name = "moderation_note", length = 500) private String moderationNote;
     @Column(name = "created_at", nullable = false) @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();
 }

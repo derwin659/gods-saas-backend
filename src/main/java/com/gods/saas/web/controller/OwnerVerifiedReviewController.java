@@ -2,6 +2,7 @@ package com.gods.saas.web.controller;
 
 import com.gods.saas.security.SecurityUtils;
 import com.gods.saas.domain.dto.request.OwnerReviewReplyRequest;
+import com.gods.saas.domain.dto.request.ReportVerifiedReviewRequest;
 import jakarta.validation.Valid;
 import com.gods.saas.service.impl.VerifiedBusinessReviewService;
 import lombok.RequiredArgsConstructor;
@@ -33,4 +34,15 @@ public class OwnerVerifiedReviewController {
                 SecurityUtils.getCurrentUserId(),
                 reviewId,
                 request.reply());
+    }
+    @PostMapping("/{reviewId}/report")
+    public Map<String, Object> report(
+            @PathVariable Long reviewId,
+            @Valid @RequestBody ReportVerifiedReviewRequest request) {
+        return service.report(
+                SecurityUtils.getCurrentTenantId(),
+                SecurityUtils.getCurrentUserId(),
+                reviewId,
+                request.reason(),
+                request.details());
     }}

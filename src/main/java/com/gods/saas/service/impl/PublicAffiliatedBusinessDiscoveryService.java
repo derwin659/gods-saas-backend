@@ -122,6 +122,7 @@ public class PublicAffiliatedBusinessDiscoveryService {
                 .findTop20ByBranch_IdAndCommentIsNotNullOrderByCreatedAtDesc(branchId)
                 .stream()
                 .filter(item -> item.getComment() != null && !item.getComment().isBlank())
+                .filter(item -> !"HIDDEN".equalsIgnoreCase(item.getModerationStatus()))
                 .map(item -> new PublicAffiliatedBranchDetailResponse.PublicReviewSummary(
                         item.getId(), item.getRating(), item.getComment().trim(),
                         publicCustomerName(item.getCustomer().getNombres(), item.getCustomer().getApellidos()),
@@ -169,7 +170,7 @@ public class PublicAffiliatedBusinessDiscoveryService {
                 availabilityLabel,
                 near,
                 reviewRepository.findAverageRatingByBranchId(branch.getId()),
-                reviewRepository.countByBranch_Id(branch.getId())
+                reviewRepository.countByBranch_IdAndModerationStatusNot(branch.getId(), "HIDDEN")
         );
     }
 
