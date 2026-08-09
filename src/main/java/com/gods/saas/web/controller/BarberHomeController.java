@@ -2,7 +2,9 @@ package com.gods.saas.web.controller;
 
 import com.gods.saas.domain.dto.response.BarberCommissionResponse;
 import com.gods.saas.domain.dto.response.BarberHomeResponse;
+import com.gods.saas.domain.dto.response.BarberSaleReviewResponse;
 import com.gods.saas.service.impl.BarberCommissionService;
+import com.gods.saas.service.impl.BarberSaleReviewService;
 import com.gods.saas.service.impl.impl.BarberHomeService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
@@ -21,6 +23,7 @@ public class BarberHomeController {
 
     private final BarberHomeService barberHomeService;
     private final BarberCommissionService barberCommissionService;
+    private final BarberSaleReviewService barberSaleReviewService;
 
     @GetMapping("/home")
     public BarberHomeResponse getHome(Authentication authentication) {
@@ -51,4 +54,8 @@ public class BarberHomeController {
     ) {
         return ResponseEntity.ok(barberCommissionService.getCommissions(from, to));
     }
-}
+
+    @GetMapping("/sales/review-history")
+    public BarberSaleReviewResponse getSaleReviewHistory(Authentication authentication) {
+        return barberSaleReviewService.getReviewHistory(authentication);
+    }}
