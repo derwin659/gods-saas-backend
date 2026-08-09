@@ -11,7 +11,7 @@ import java.time.LocalDateTime;
 import java.util.*;
 @Service @RequiredArgsConstructor
 public class ProfessionalShowcaseService {
- private final ProfessionalShowcaseRepository repository; private final TenantRepository tenantRepository; private final BranchRepository branchRepository; private final AppUserRepository appUserRepository; private final ServiceRepository serviceRepository; private final UserTenantRoleRepository roleRepository; private final CloudinaryStorageService storage;
+ private final ProfessionalShowcaseRepository repository; private final TenantRepository tenantRepository; private final BranchRepository branchRepository; private final AppUserRepository appUserRepository; private final ServiceRepository serviceRepository; private final UserTenantRoleRepository roleRepository; private final SubscriptionRepository subscriptionRepository; private final CloudinaryStorageService storage;
  @Transactional(readOnly=true) public List<ShowcaseResponse> mine(Long tenantId,Long userId){return repository.findByTenant_IdAndProfessional_IdOrderByCreatedAtDesc(tenantId,userId).stream().map(ShowcaseResponse::from).toList();}
  @Transactional public ShowcaseResponse create(Long tenantId,Long userId,Long branchId,Long serviceId,String title,String description,String mediaType,Integer durationSeconds,boolean consent,MultipartFile file){
   if(!consent)throw new IllegalArgumentException("Debes confirmar la autorizacion de uso de imagen."); String clean=title==null?"":title.trim();if(clean.isEmpty()||clean.length()>120)throw new IllegalArgumentException("Escribe un titulo de hasta 120 caracteres.");
@@ -20,9 +20,9 @@ public class ProfessionalShowcaseService {
   ServiceEntity service=serviceId==null?null:serviceRepository.findByIdAndTenant_IdAndDeletedAtIsNull(serviceId,tenantId).orElseThrow(()->new IllegalArgumentException("Servicio no encontrado."));
   String type=mediaType==null?"IMAGE":mediaType.trim().toUpperCase();
   if(!List.of("IMAGE","VIDEO").contains(type))throw new IllegalArgumentException("Tipo de medio invalido.");
-  String plan=tenant.getPlan()==null?"BASIC":tenant.getPlan().trim().toUpperCase();
-  int totalLimit=switch(plan){case "STARTER"->50;case "PRO"->200;case "PREMIUM","ENTERPRISE"->500;default->10;};
-  int videoLimit=switch(plan){case "STARTER"->10;case "PRO"->50;case "PREMIUM","ENTERPRISE"->150;default->0;};
+  String plan=subscriptionRepository.findTopByTenantIdOrderByFechaInicioDesc(tenantId).map(Subscription::getPlan).map(SubscriptionPlanCatalog::publicPlan).orElseGet(()->{try{return SubscriptionPlanCatalog.publicPlan(tenant.getPlan());}catch(RuntimeException ignored){return SubscriptionPlanCatalog.FREE;}});
+  int totalLimit=switch(plan){case "BASIC"->25;case "STARTER"->50;case "GROWTH"->100;case "PRO"->200;case "ENTERPRISE"->500;default->10;};
+  int videoLimit=switch(plan){case "BASIC"->5;case "STARTER"->10;case "GROWTH"->25;case "PRO"->50;case "ENTERPRISE"->150;default->0;};
   long current=repository.countByTenant_IdAndProfessional_IdAndStatusNot(tenantId,userId,ShowcaseStatus.ARCHIVED);
   if(current>=totalLimit)throw new IllegalStateException("Alcanzaste el limite de "+totalLimit+" trabajos activos de tu plan.");
   if("VIDEO".equals(type)){long videos=repository.countByTenant_IdAndProfessional_IdAndMediaTypeAndStatusNot(tenantId,userId,"VIDEO",ShowcaseStatus.ARCHIVED);if(videos>=videoLimit)throw new IllegalStateException(videoLimit==0?"Tu plan no incluye videos en la vitrina.":"Alcanzaste el limite de videos de tu plan.");}
