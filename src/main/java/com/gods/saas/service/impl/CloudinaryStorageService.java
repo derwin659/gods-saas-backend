@@ -152,13 +152,12 @@ public class CloudinaryStorageService {
                             "folder", folder,
                             "resource_type", "video",
                             "public_id", "work_video_" + professionalId + "_" + System.currentTimeMillis(),
-                            "overwrite", false,
-                            "eager", "c_limit,w_1280,h_1280,q_auto:good"
+                            "overwrite", false
                     )
             );
             return new UploadResult(String.valueOf(result.get("secure_url")), String.valueOf(result.get("public_id")));
-        } catch (IOException e) {
-            throw new IllegalStateException("No se pudo subir el video del trabajo", e);
+        } catch (IOException | RuntimeException e) {
+            throw new IllegalStateException("No se pudo procesar el video. Inténtalo nuevamente.", e);
         }
     }
 
