@@ -26,4 +26,14 @@ public class ClientVerifiedReviewController {
         String token = authHeader.replace("Bearer ", "");
         return service.find(jwtUtil.getTenantIdFromToken(token), jwtUtil.getCustomerIdFromToken(token), appointmentId);
     }
-}
+    @GetMapping("/mine")
+    public java.util.List<java.util.Map<String,Object>> mine(@RequestHeader("Authorization") String authHeader) {
+        String token = authHeader.replace("Bearer ", "");
+        return service.myReviews(jwtUtil.getTenantIdFromToken(token), jwtUtil.getCustomerIdFromToken(token));
+    }
+    @GetMapping("/public")
+    public java.util.List<java.util.Map<String,Object>> publicReviews(@RequestHeader("Authorization") String authHeader,
+            @RequestParam(required=false) Long branchId,@RequestParam(required=false) Long professionalId) {
+        String token = authHeader.replace("Bearer ", "");
+        return service.publicReviews(jwtUtil.getTenantIdFromToken(token), branchId, professionalId);
+    }}

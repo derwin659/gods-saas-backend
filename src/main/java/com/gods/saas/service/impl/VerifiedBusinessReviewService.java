@@ -103,6 +103,40 @@ public class VerifiedBusinessReviewService {
     }
 
     @Transactional(readOnly = true)
+    public java.util.List<java.util.Map<String,Object>> myReviews(Long tenantId, Long customerId) {
+        return reviewRepository.findTop100ByTenant_IdAndCustomer_IdOrderByCreatedAtDesc(tenantId, customerId)
+                .stream().map(item -> clientRow(item, true)).toList();
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.List<java.util.Map<String,Object>> publicReviews(Long tenantId, Long branchId, Long professionalId) {
+        return reviewRepository.findTop100ByTenant_IdOrderByCreatedAtDesc(tenantId).stream()
+                .filter(item -> !"HIDDEN".equalsIgnoreCase(item.getModerationStatus()))
+                .filter(item -> item.getComment() != null && !item.getComment().isBlank())
+                .filter(item -> branchId == null || item.getBranch().getId().equals(branchId))
+                .filter(item -> professionalId == null || java.util.Objects.equals(professionalId, professional(item) == null ? null : professional(item).getId()))
+                .map(item -> clientRow(item, false)).toList();
+    }
+
+    private java.util.Map<String,Object> clientRow(VerifiedBusinessReview item, boolean own) {
+        var row = new java.util.LinkedHashMap<String,Object>();
+        var professional = professional(item);
+        row.put("reviewId", item.getId()); row.put("rating", item.getRating()); row.put("comment", item.getComment());
+        row.put("customerDisplayName", own ? "Tu reseña" : publicName(item.getCustomer().getNombres()));
+        row.put("createdAt", item.getCreatedAt()); row.put("branchId", item.getBranch().getId()); row.put("branchName", item.getBranch().getNombre());
+        row.put("ownerReply", item.getOwnerReply()); row.put("ownerRepliedAt", item.getOwnerRepliedAt());
+        row.put("professionalId", professional == null ? null : professional.getId());
+        row.put("professionalName", professional == null ? null : fullName(professional));
+        row.put("professionalPhotoUrl", professional == null ? null : professional.getPhotoUrl()); row.put("verified", true); return row;
+    }
+    private com.gods.saas.domain.model.AppUser professional(VerifiedBusinessReview item) {
+        if (item.getAppointment() != null && item.getAppointment().getUser() != null) return item.getAppointment().getUser();
+        if (item.getSale() != null && item.getSale().getItems() != null) return item.getSale().getItems().stream().filter(x -> x.getBarberUser() != null).map(com.gods.saas.domain.model.SaleItem::getBarberUser).findFirst().orElse(null);
+        return null;
+    }
+    private String publicName(String raw) { if (raw == null || raw.isBlank()) return "Cliente"; String clean=raw.trim(); return clean.length()<=1?clean.toUpperCase():clean.substring(0,1).toUpperCase()+"."; }
+    private String fullName(com.gods.saas.domain.model.AppUser user) { String value=((user.getNombre()==null?"":user.getNombre())+" "+(user.getApellido()==null?"":user.getApellido())).trim(); return value.isBlank()?"Profesional":value; }
+    @Transactional(readOnly = true)
     public java.util.Map<String, Object> ownerInbox(Long tenantId, Long branchId, Integer rating) {
         var all = reviewRepository.findTop200ByTenant_IdOrderByCreatedAtDesc(tenantId);
         var filtered = all.stream()
