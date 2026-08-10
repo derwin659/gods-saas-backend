@@ -472,7 +472,29 @@ public class OwnerReportsServiceImpl implements OwnerReportsService {
         response.put("status", selectedStatus == null ? "ALL" : selectedStatus.name()); response.put("count", items.size());
         response.put("totalSalary", totalSalary); response.put("totalCommissions", totalCommissions);
         response.put("totalTips", totalTips); response.put("totalAdvances", totalAdvances);
-        response.put("totalPaid", totalPaid); response.put("totalPending", totalPending); response.put("items", items);
+        List<CashMovement> advanceMovements = cashMovementRepository.findAdvanceReportMovements(
+                tenantId, branchId, barberUserId, startOfDay(from), endInclusive(to));
+        BigDecimal totalAdvancesDelivered = advanceMovements.stream().map(CashMovement::getAmount)
+                .map(this::nvl).reduce(BigDecimal.ZERO, BigDecimal::add);
+        List<Map<String,Object>> advanceItems = advanceMovements.stream().map(movement -> {
+            Map<String,Object> row = new LinkedHashMap<>();
+            row.put("movementId", movement.getId());
+            row.put("barberUserId", movement.getBarberUser().getId());
+            row.put("barberName", (nvlText(movement.getBarberUser().getNombre()) + " " + nvlText(movement.getBarberUser().getApellido())).trim());
+            row.put("branchId", movement.getBranch().getId()); row.put("branchName", movement.getBranch().getNombre());
+            row.put("amount", nvl(movement.getAmount())); row.put("date", movement.getMovementDate().toString());
+            row.put("concept", nvlText(movement.getConcept())); row.put("note", nvlText(movement.getNote()));
+            row.put("paymentMethod", movement.getPaymentMethod() == null ? "" : movement.getPaymentMethod().name());
+            row.put("fundingSource", movement.getFundingSource() == null ? "" : movement.getFundingSource().name());
+            return row;
+        }).toList();
+        List<Map<String,Object>> professionals = userTenantRoleRepository
+                .findActiveUsersByTenantBranchAndRole(tenantId, branchId, RoleType.BARBER).stream()
+                .map(user -> { Map<String,Object> row = new LinkedHashMap<>(); row.put("barberUserId", user.getId());
+                    row.put("barberName", (nvlText(user.getNombre()) + " " + nvlText(user.getApellido())).trim()); return row; }).toList();
+        response.put("totalPaid", totalPaid); response.put("totalPending", totalPending);
+        response.put("totalAdvancesDelivered", totalAdvancesDelivered); response.put("advanceItems", advanceItems);
+        response.put("professionals", professionals); response.put("items", items);
         return response;
     }
 

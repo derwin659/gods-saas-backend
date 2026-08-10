@@ -29,6 +29,24 @@ public interface CashMovementRepository extends JpaRepository<CashMovement, Long
 
 
     @Query("""
+        select cm from CashMovement cm
+        join fetch cm.branch b
+        join fetch cm.barberUser bu
+        where cm.tenant.id = :tenantId
+          and (:branchId is null or b.id = :branchId)
+          and (:barberUserId is null or bu.id = :barberUserId)
+          and cm.type = com.gods.saas.domain.enums.CashMovementType.ADVANCE_BARBER
+          and cm.movementDate >= :start and cm.movementDate < :end
+        order by cm.movementDate desc
+    """)
+    List<CashMovement> findAdvanceReportMovements(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("barberUserId") Long barberUserId,
+            @Param("start") java.time.LocalDateTime start,
+            @Param("end") java.time.LocalDateTime end
+    );
+    @Query("""
     select coalesce(sum(cm.amount), 0)
     from CashMovement cm
     where cm.tenant.id = :tenantId
