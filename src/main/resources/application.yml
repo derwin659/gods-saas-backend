@@ -51,7 +51,8 @@ ia:
     timeout-seconds: 600
 jwt:
   secret: "XJ9mA72kLq84HbUTpQwensF53vDb1ZyWRtMUa6C0xVgYpN4rKjBsfE8LdQPTh29J"
-  expiration-ms: 2592000000
+  expiration-ms: ${JWT_EXPIRATION_MS:2592000000}
+  customer-expiration-ms: ${JWT_CUSTOMER_EXPIRATION_MS:15552000000}
 
 runpod:
   enabled: ${RUNPOD_ENABLED:true}
