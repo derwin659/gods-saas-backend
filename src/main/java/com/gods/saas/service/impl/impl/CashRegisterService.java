@@ -42,7 +42,7 @@ public interface CashRegisterService {
 
     CashFundMovementResponse createFundMovement(Long tenantId, Long branchId, Long actorUserId, CashFundMovementRequest request);
 
-    List<CashMovementResponse> getMovements(Long tenantId, Long branchId, Long cashRegisterId);
+    List<CashMovementResponse> getMovements(Long tenantId, Long branchId, Long cashRegisterId, LocalDate from, LocalDate to);
 
     CashMovementResponse createMovement(Long tenantId, Long branchId, Long cashRegisterId, Long actorUserId, CashMovementRequest request);
 

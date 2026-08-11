@@ -431,9 +431,16 @@ public class CashRegisterServiceImpl implements CashRegisterService {
     }
     @Override
     @Transactional(readOnly = true)
-    public List<CashMovementResponse> getMovements(Long tenantId, Long branchId, Long cashRegisterId) {
+    public List<CashMovementResponse> getMovements(
+            Long tenantId, Long branchId, Long cashRegisterId, LocalDate from, LocalDate to
+    ) {
         CashRegister cashRegister = getCashRegisterInBranch(tenantId, branchId, cashRegisterId);
-        LocalDateTime[] range = cashRegisterBusinessRange(cashRegister);
+        LocalDateTime[] range = from != null || to != null
+                ? new LocalDateTime[]{
+                    (from == null ? to : from).atStartOfDay(),
+                    (to == null ? from : to).plusDays(1).atStartOfDay()
+                }
+                : cashRegisterBusinessRange(cashRegister);
         return cashMovementRepository
                 .findByTenant_IdAndBranch_IdAndMovementDateGreaterThanEqualAndMovementDateLessThanOrderByMovementDateDesc(
                         tenantId, branchId, range[0], range[1]

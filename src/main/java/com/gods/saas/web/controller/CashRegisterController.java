@@ -173,10 +173,15 @@ public class CashRegisterController {
             @RequestAttribute("tenantId") Long tenantId,
             @RequestAttribute("branchId") Long sessionBranchId,
             @PathVariable Long cashRegisterId,
-            @RequestParam(required = false) Long branchId
+            @RequestParam(required = false) Long branchId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to
     ) {
         Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
-        return protectFundMovements(cashRegisterService.getMovements(tenantId, effectiveBranchId, cashRegisterId), canManageFund());
+        return protectFundMovements(
+                cashRegisterService.getMovements(tenantId, effectiveBranchId, cashRegisterId, from, to),
+                canManageFund()
+        );
     }
 
     @PostMapping("/{cashRegisterId}/movements")
