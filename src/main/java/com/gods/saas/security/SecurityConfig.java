@@ -138,6 +138,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/owner/cash-registers/fund", "/api/owner/cash-registers/fund/**")
                         .hasAnyRole("OWNER", "ADMIN")
                         .requestMatchers("/api/owner/cash-registers/**").hasAnyRole("OWNER", "ADMIN", "CASHIER")
+                        .requestMatchers("/api/owner/qz-signing/**").hasAnyRole("OWNER", "ADMIN", "CASHIER")
                         .requestMatchers("/api/owner/cash-sales/**").hasAnyRole("OWNER", "ADMIN", "CASHIER")
                         .requestMatchers("/api/owner/local-consumption-orders/**").hasAnyRole("OWNER", "ADMIN", "CASHIER")
                         .requestMatchers("/api/owner/marketing-campaigns/**").hasAnyRole("OWNER", "ADMIN")

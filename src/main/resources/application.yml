@@ -99,3 +99,8 @@ twilio:
     api-secret: ${TWILIO_VERIFY_API_SECRET:}
     ttl-seconds: ${TWILIO_VERIFY_TTL_SECONDS:600}
     resend-cooldown-seconds: ${TWILIO_VERIFY_RESEND_COOLDOWN_SECONDS:60}
+
+qz:
+  signing:
+    certificate-base64: ${QZ_SIGNING_CERTIFICATE_BASE64:}
+    private-key-base64: ${QZ_SIGNING_PRIVATE_KEY_BASE64:}
