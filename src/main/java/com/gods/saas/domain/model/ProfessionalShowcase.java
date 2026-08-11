@@ -1,16 +1,30 @@
 package com.gods.saas.domain.model;
+
 import com.gods.saas.domain.enums.ShowcaseStatus;
 import jakarta.persistence.*;
 import lombok.*;
 import java.time.LocalDateTime;
-@Entity @Table(name="professional_showcase")
+import java.util.LinkedHashSet;
+import java.util.Set;
+
+@Entity
+@Table(name = "professional_showcase")
 @Getter @Setter @Builder @NoArgsConstructor @AllArgsConstructor
 public class ProfessionalShowcase {
  @Id @GeneratedValue(strategy=GenerationType.IDENTITY) @Column(name="showcase_id") private Long id;
  @ManyToOne(fetch=FetchType.LAZY,optional=false) @JoinColumn(name="tenant_id") private Tenant tenant;
- @ManyToOne(fetch=FetchType.LAZY,optional=false) @JoinColumn(name="branch_id") private Branch branch;
- @ManyToOne(fetch=FetchType.LAZY,optional=false) @JoinColumn(name="professional_user_id") private AppUser professional;
+ @ManyToOne(fetch=FetchType.LAZY) @JoinColumn(name="branch_id") private Branch branch;
+ @ManyToOne(fetch=FetchType.LAZY) @JoinColumn(name="professional_user_id") private AppUser professional;
  @ManyToOne(fetch=FetchType.LAZY) @JoinColumn(name="service_id") private ServiceEntity service;
+ @ManyToOne(fetch=FetchType.LAZY) @JoinColumn(name="created_by_user_id") private AppUser createdBy;
+ @ManyToMany(fetch=FetchType.LAZY)
+ @JoinTable(name="professional_showcase_branch",joinColumns=@JoinColumn(name="showcase_id"),inverseJoinColumns=@JoinColumn(name="branch_id"))
+ @Builder.Default private Set<Branch> selectedBranches=new LinkedHashSet<>();
+ @Column(name="origin_type",nullable=false,length=30) @Builder.Default private String originType="PROFESSIONAL_WORK";
+ @Column(name="visibility_scope",nullable=false,length=30) @Builder.Default private String visibilityScope="ORIGIN_BRANCH";
+ @Column(length=80) private String category;
+ @Column(nullable=false) private boolean featured;
+ @Column(name="sort_order",nullable=false) private int sortOrder;
  @Column(nullable=false,length=120) private String title;
  @Column(length=600) private String description;
  @Column(name="media_type",nullable=false,length=20) private String mediaType;
@@ -27,6 +41,6 @@ public class ProfessionalShowcase {
  @Column(name="updated_at",nullable=false) private LocalDateTime updatedAt;
  @Column(name="published_at") private LocalDateTime publishedAt;
  @Column(name="archived_at") private LocalDateTime archivedAt;
- @PrePersist void create(){var now=LocalDateTime.now();if(status==null)status=ShowcaseStatus.PENDING_APPROVAL;if(mediaType==null)mediaType="IMAGE";if(createdAt==null)createdAt=now;updatedAt=now;}
+ @PrePersist void create(){var now=LocalDateTime.now();if(status==null)status=ShowcaseStatus.PENDING_APPROVAL;if(mediaType==null)mediaType="IMAGE";if(originType==null)originType="PROFESSIONAL_WORK";if(visibilityScope==null)visibilityScope="ORIGIN_BRANCH";if(createdAt==null)createdAt=now;updatedAt=now;}
  @PreUpdate void update(){updatedAt=LocalDateTime.now();}
 }
