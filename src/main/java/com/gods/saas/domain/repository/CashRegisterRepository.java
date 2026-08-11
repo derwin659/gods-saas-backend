@@ -51,6 +51,35 @@ public interface CashRegisterRepository extends JpaRepository<CashRegister, Long
             @Param("end") LocalDateTime end
     );
     @Query("""
+        select cr
+        from CashRegister cr
+        where cr.tenant.id = :tenantId
+          and cr.branch.id = :branchId
+          and (
+            (cr.openedAt >= :start and cr.openedAt < :end)
+            or exists (
+                select 1 from Sale s
+                where s.cashRegister = cr
+                  and (s.paymentValidationStatus is null or s.paymentValidationStatus = 'APPROVED')
+                  and coalesce(s.saleDate, s.fechaCreacion) >= :start
+                  and coalesce(s.saleDate, s.fechaCreacion) < :end
+            )
+            or exists (
+                select 1 from CashMovement cm
+                where cm.cashRegister = cr
+                  and cm.movementDate >= :start
+                  and cm.movementDate < :end
+            )
+          )
+        order by cr.openedAt desc
+        """)
+    List<CashRegister> findForBusinessDateActivity(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end
+    );
+    @Query("""
         select distinct cr
         from CashRegister cr
         where cr.tenant.id = :tenantId

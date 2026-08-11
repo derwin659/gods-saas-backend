@@ -568,11 +568,9 @@ public class CashRegisterServiceImpl implements CashRegisterService {
         LocalDateTime start = day.atStartOfDay();
         LocalDateTime end = day.plusDays(1).atStartOfDay();
 
-        return cashRegisterRepository
-                .findFirstByTenant_IdAndBranch_IdAndOpenedAtGreaterThanEqualAndOpenedAtLessThanOrderByOpenedAtDesc(
-                        tenantId, branchId, start, end
-                )
-                .orElse(fallback);
+        List<CashRegister> matchingRegisters = cashRegisterRepository
+                .findForBusinessDateActivity(tenantId, branchId, start, end);
+        return matchingRegisters.isEmpty() ? fallback : matchingRegisters.get(0);
     }
     private PaymentMethod resolvePaymentMethod(CashMovementType type, PaymentMethod paymentMethod) {
         if (type == CashMovementType.PAYMENT_METHOD_TRANSFER) {
