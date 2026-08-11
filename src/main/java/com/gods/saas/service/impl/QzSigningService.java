@@ -14,18 +14,23 @@ import java.util.Base64;
 @Service
 public class QzSigningService {
     private final String certificate;
-    private final PrivateKey privateKey;
+    private final String privateKeyPem;
 
     public QzSigningService(
             @Value("${qz.signing.certificate-base64:}") String certificateBase64,
             @Value("${qz.signing.private-key-base64:}") String privateKeyBase64
     ) {
-        this.certificate = decodeConfig(certificateBase64);
-        this.privateKey = parsePrivateKey(decodeConfig(privateKeyBase64));
+        // La impresion es opcional: una variable invalida nunca debe impedir
+        // que arranquen caja, reportes o el resto de la aplicacion.
+        this.certificate = decodeConfigSafely(certificateBase64);
+        this.privateKeyPem = decodeConfigSafely(privateKeyBase64);
     }
 
     public String certificate() {
         requireConfigured();
+        if (!certificate.contains("-----BEGIN CERTIFICATE-----")) {
+            throw new IllegalStateException("QZ_SIGNING_CERTIFICATE_BASE64 no contiene un certificado valido.");
+        }
         return certificate;
     }
 
@@ -36,31 +41,39 @@ public class QzSigningService {
         }
         try {
             Signature signer = Signature.getInstance("SHA512withRSA");
-            signer.initSign(privateKey);
+            signer.initSign(parsePrivateKey(privateKeyPem));
             signer.update(payload.getBytes(StandardCharsets.UTF_8));
             return Base64.getEncoder().encodeToString(signer.sign());
+        } catch (IllegalStateException ex) {
+            throw ex;
         } catch (Exception ex) {
             throw new IllegalStateException("No se pudo firmar la solicitud QZ.", ex);
         }
     }
 
     private void requireConfigured() {
-        if (!StringUtils.hasText(certificate) || privateKey == null) {
+        if (!StringUtils.hasText(certificate) || !StringUtils.hasText(privateKeyPem)) {
             throw new IllegalStateException("La firma QZ no esta configurada en el servidor.");
         }
     }
 
-    private static String decodeConfig(String value) {
+    private static String decodeConfigSafely(String value) {
         if (!StringUtils.hasText(value)) return "";
         try {
             return new String(Base64.getDecoder().decode(value.trim()), StandardCharsets.UTF_8);
         } catch (IllegalArgumentException ex) {
-            throw new IllegalStateException("Configuracion QZ Base64 invalida.", ex);
+            // Mantener el backend disponible; el endpoint QZ informara el error.
+            return "";
         }
     }
 
     private static PrivateKey parsePrivateKey(String pem) {
-        if (!StringUtils.hasText(pem)) return null;
+        if (!pem.contains("-----BEGIN PRIVATE KEY-----")) {
+            if (pem.contains("-----BEGIN CERTIFICATE-----")) {
+                throw new IllegalStateException("Las variables QZ estan intercambiadas: la clave privada contiene el certificado.");
+            }
+            throw new IllegalStateException("QZ_SIGNING_PRIVATE_KEY_BASE64 no contiene una clave PKCS#8 valida.");
+        }
         try {
             String body = pem.replace("-----BEGIN PRIVATE KEY-----", "")
                     .replace("-----END PRIVATE KEY-----", "")
