@@ -122,7 +122,7 @@ public class VerifiedBusinessReviewService {
         var row = new java.util.LinkedHashMap<String,Object>();
         var professional = professional(item);
         row.put("reviewId", item.getId()); row.put("rating", item.getRating()); row.put("comment", item.getComment());
-        row.put("customerDisplayName", own ? "Tu reseña" : publicName(item.getCustomer().getNombres()));
+        row.put("customerDisplayName", own ? ownCustomerName(item.getCustomer().getNombres()) : publicName(item.getCustomer().getNombres()));
         row.put("createdAt", item.getCreatedAt()); row.put("branchId", item.getBranch().getId()); row.put("branchName", item.getBranch().getNombre());
         row.put("ownerReply", item.getOwnerReply()); row.put("ownerRepliedAt", item.getOwnerRepliedAt());
         row.put("professionalId", professional == null ? null : professional.getId());
@@ -134,7 +134,8 @@ public class VerifiedBusinessReviewService {
         if (item.getSale() != null && item.getSale().getItems() != null) return item.getSale().getItems().stream().filter(x -> x.getBarberUser() != null).map(com.gods.saas.domain.model.SaleItem::getBarberUser).findFirst().orElse(null);
         return null;
     }
-    private String publicName(String raw) { if (raw == null || raw.isBlank()) return "Cliente"; String clean=raw.trim(); return clean.length()<=1?clean.toUpperCase():clean.substring(0,1).toUpperCase()+"."; }
+    private String publicName(String raw) { if (raw == null || raw.isBlank()) return "Cliente"; String clean=raw.trim().replaceAll("\\s+", " "); return clean.split(" ")[0]; }
+    private String ownCustomerName(String raw) { return raw == null || raw.isBlank() ? "Cliente" : raw.trim().replaceAll("\\s+", " "); }
     private String fullName(com.gods.saas.domain.model.AppUser user) { String value=((user.getNombre()==null?"":user.getNombre())+" "+(user.getApellido()==null?"":user.getApellido())).trim(); return value.isBlank()?"Profesional":value; }
     @Transactional(readOnly = true)
     public java.util.Map<String, Object> ownerInbox(Long tenantId, Long branchId, Integer rating) {
