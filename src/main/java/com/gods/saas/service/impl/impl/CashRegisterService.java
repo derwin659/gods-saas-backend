@@ -42,6 +42,10 @@ public interface CashRegisterService {
 
     CashFundMovementResponse createFundMovement(Long tenantId, Long branchId, Long actorUserId, CashFundMovementRequest request);
 
+    CashFundMovementResponse updateFundMovement(Long tenantId, Long branchId, Long movementId, Long actorUserId, String auditReason, CashFundMovementRequest request);
+
+    void deleteFundMovement(Long tenantId, Long branchId, Long movementId, Long actorUserId, String auditReason);
+
     List<CashMovementResponse> getMovements(Long tenantId, Long branchId, Long cashRegisterId, LocalDate from, LocalDate to);
 
     CashMovementResponse createMovement(Long tenantId, Long branchId, Long cashRegisterId, Long actorUserId, CashMovementRequest request);

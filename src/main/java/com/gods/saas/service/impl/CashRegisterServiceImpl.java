@@ -429,6 +429,111 @@ public class CashRegisterServiceImpl implements CashRegisterService {
         );
         return mapFundMovementResponse(movement);
     }
+
+    @Override
+    public CashFundMovementResponse updateFundMovement(
+            Long tenantId, Long branchId, Long movementId, Long actorUserId,
+            String auditReason, CashFundMovementRequest request
+    ) {
+        validateCashActor(actorUserId, tenantId);
+        adminPermissionService.checkOwnerOrAdminPermission("CASH_FUND_MANAGE");
+        String reason = requireAuditReason(auditReason);
+        CashFundMovement movement = getEditableFundMovement(tenantId, branchId, movementId);
+        String before = fundMovementAuditSnapshot(movement);
+
+        CashFundMovementType type = request.getType() == null ? movement.getType() : request.getType();
+        validateManualFundType(type);
+        PaymentMethod method = request.getPaymentMethod() == null ? movement.getPaymentMethod() : request.getPaymentMethod();
+        BigDecimal amount = safe(request.getAmount());
+        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalStateException("El monto debe ser mayor a cero.");
+        }
+        validateFundCorrectionBalance(movement.getBranch(), movement, type, method, amount);
+
+        movement.setType(type);
+        movement.setPaymentMethod(method);
+        movement.setAmount(amount);
+        movement.setConcept(resolveFundConcept(type, request.getConcept()));
+        movement.setNote(trimToNull(request.getNote()));
+        if (request.getMovementDate() != null) {
+            LocalDateTime current = movement.getMovementDate();
+            movement.setMovementDate(request.getMovementDate().atTime(current.toLocalTime()));
+        }
+        CashFundMovement saved = cashFundMovementRepository.save(movement);
+        registerCashAudit(saved.getTenant(), saved.getBranch(), null, actorUserId,
+                "CASH_FUND_MOVEMENT", saved.getId(), "UPDATE", reason,
+                before, fundMovementAuditSnapshot(saved));
+        return mapFundMovementResponse(saved);
+    }
+
+    @Override
+    public void deleteFundMovement(
+            Long tenantId, Long branchId, Long movementId, Long actorUserId, String auditReason
+    ) {
+        validateCashActor(actorUserId, tenantId);
+        adminPermissionService.checkOwnerOrAdminPermission("CASH_FUND_MANAGE");
+        String reason = requireAuditReason(auditReason);
+        CashFundMovement movement = getEditableFundMovement(tenantId, branchId, movementId);
+        validateFundCorrectionBalance(movement.getBranch(), movement, null, null, BigDecimal.ZERO);
+        String before = fundMovementAuditSnapshot(movement);
+        registerCashAudit(movement.getTenant(), movement.getBranch(), null, actorUserId,
+                "CASH_FUND_MOVEMENT", movement.getId(), "DELETE", reason, before, null);
+        cashFundMovementRepository.delete(movement);
+    }
+
+    private CashFundMovement getEditableFundMovement(Long tenantId, Long branchId, Long movementId) {
+        CashFundMovement movement = cashFundMovementRepository.findById(movementId)
+                .orElseThrow(() -> new IllegalStateException("Movimiento de fondo no encontrado."));
+        if (!movement.getTenant().getId().equals(tenantId) || !movement.getBranch().getId().equals(branchId)) {
+            throw new IllegalStateException("El movimiento no pertenece a esta sede.");
+        }
+        validateManualFundType(movement.getType());
+        if (movement.getCashRegister() != null) {
+            throw new IllegalStateException("Los movimientos ligados a una caja se corrigen desde la caja de origen.");
+        }
+        return movement;
+    }
+
+    private void validateManualFundType(CashFundMovementType type) {
+        if (type != CashFundMovementType.MANUAL_DEPOSIT
+                && type != CashFundMovementType.MANUAL_WITHDRAWAL
+                && type != CashFundMovementType.ADJUSTMENT_IN
+                && type != CashFundMovementType.ADJUSTMENT_OUT) {
+            throw new IllegalStateException("Los movimientos automaticos de apertura, cierre o gasto no se editan desde el historial del fondo.");
+        }
+    }
+
+    private void validateFundCorrectionBalance(
+            Branch branch, CashFundMovement original, CashFundMovementType newType,
+            PaymentMethod newMethod, BigDecimal newAmount
+    ) {
+        java.util.Map<String, BigDecimal> balances = buildFundSummary(branch).getBalances().stream()
+                .collect(java.util.stream.Collectors.toMap(
+                        row -> normalizePaymentMethodCode(row.getPaymentMethod()),
+                        row -> safe(row.getTotalAmount()), BigDecimal::add));
+        String oldCode = normalizePaymentMethodCode(original.getPaymentMethod().name());
+        balances.merge(oldCode, signedFundAmount(original).negate(), BigDecimal::add);
+        if (newType != null && newMethod != null && newAmount.compareTo(BigDecimal.ZERO) > 0) {
+            String newCode = normalizePaymentMethodCode(newMethod.name());
+            BigDecimal signed = isFundOut(newType) ? newAmount.negate() : newAmount;
+            balances.merge(newCode, signed, BigDecimal::add);
+        }
+        balances.forEach((method, balance) -> {
+            if (balance.compareTo(BigDecimal.ZERO) < 0) {
+                throw new IllegalStateException("La correccion dejaria el fondo " + paymentMethodLabel(method) + " en negativo.");
+            }
+        });
+    }
+
+    private String fundMovementAuditSnapshot(CashFundMovement movement) {
+        return "{fundMovementId=" + movement.getId()
+                + ",type=" + movement.getType()
+                + ",paymentMethod=" + movement.getPaymentMethod()
+                + ",amount=" + movement.getAmount()
+                + ",concept=" + movement.getConcept()
+                + ",note=" + movement.getNote()
+                + ",movementDate=" + movement.getMovementDate() + "}";
+    }
     @Override
     @Transactional(readOnly = true)
     public List<CashMovementResponse> getMovements(

@@ -168,6 +168,36 @@ public class CashRegisterController {
         Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
         return cashRegisterService.createFundMovement(tenantId, effectiveBranchId, userId, request);
     }
+
+    @PutMapping("/fund/movements/{movementId}")
+    public CashFundMovementResponse updateFundMovement(
+            @RequestAttribute("tenantId") Long tenantId,
+            @RequestAttribute("branchId") Long sessionBranchId,
+            @RequestAttribute("userId") Long userId,
+            @PathVariable Long movementId,
+            @RequestParam(required = false) Long branchId,
+            @RequestParam String auditReason,
+            @RequestBody CashFundMovementRequest request
+    ) {
+        adminPermissionService.checkOwnerOrAdminPermission("CASH_FUND_MANAGE");
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
+        return cashRegisterService.updateFundMovement(tenantId, effectiveBranchId, movementId, userId, auditReason, request);
+    }
+
+    @DeleteMapping("/fund/movements/{movementId}")
+    public ResponseEntity<Void> deleteFundMovement(
+            @RequestAttribute("tenantId") Long tenantId,
+            @RequestAttribute("branchId") Long sessionBranchId,
+            @RequestAttribute("userId") Long userId,
+            @PathVariable Long movementId,
+            @RequestParam(required = false) Long branchId,
+            @RequestParam String auditReason
+    ) {
+        adminPermissionService.checkOwnerOrAdminPermission("CASH_FUND_MANAGE");
+        Long effectiveBranchId = branchAccessGuard.resolve(branchId, sessionBranchId);
+        cashRegisterService.deleteFundMovement(tenantId, effectiveBranchId, movementId, userId, auditReason);
+        return ResponseEntity.noContent().build();
+    }
     @GetMapping("/{cashRegisterId}/movements")
     public List<CashMovementResponse> movements(
             @RequestAttribute("tenantId") Long tenantId,
