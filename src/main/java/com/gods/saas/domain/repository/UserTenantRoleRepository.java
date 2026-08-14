@@ -122,4 +122,18 @@ public interface UserTenantRoleRepository extends JpaRepository<UserTenantRole, 
             @Param("role") RoleType role
     );
 
+    @Query("""
+    select distinct r.user
+    from UserTenantRole r
+    join r.user u
+    where r.tenant.id = :tenantId
+      and (:branchId is null or r.branch.id = :branchId)
+      and r.role = :role
+    order by u.activo desc, u.nombre asc
+""")
+    List<com.gods.saas.domain.model.AppUser> findUsersByTenantBranchAndRole(
+            @Param("tenantId") Long tenantId,
+            @Param("branchId") Long branchId,
+            @Param("role") RoleType role
+    );
 }

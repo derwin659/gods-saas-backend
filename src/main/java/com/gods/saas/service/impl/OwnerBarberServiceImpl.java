@@ -44,10 +44,10 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
     private final GeneralAuditService generalAuditService;
 
     @Override
-    public List<BarberResponse> listBarbers(Long tenantId, Long branchId) {
-        List<AppUser> users = (branchId != null)
-                ? userTenantRoleRepository.findActiveUsersByTenantBranchAndRole(tenantId, branchId, RoleType.BARBER)
-                : userTenantRoleRepository.findActiveUsersByTenantBranchAndRole(tenantId, null, RoleType.BARBER);
+    public List<BarberResponse> listBarbers(Long tenantId, Long branchId, boolean includeInactive) {
+        List<AppUser> users = includeInactive
+                ? userTenantRoleRepository.findUsersByTenantBranchAndRole(tenantId, branchId, RoleType.BARBER)
+                : userTenantRoleRepository.findActiveUsersByTenantBranchAndRole(tenantId, branchId, RoleType.BARBER);
 
         return users.stream()
                 .map(user -> toResponse(user, tenantId))

@@ -52,13 +52,14 @@ public class OwnerBarberController {
     @GetMapping
     public List<BarberResponse> listBarbers(
             @RequestParam(required = false) Long branchId,
+            @RequestParam(defaultValue = "false") boolean includeInactive,
             HttpServletRequest request
     ) {
         SessionData session = extractSession(request);
         checkConfigBarbers(session);
 
         Long effectiveBranchId = branchAccessGuard.resolveOptionalForOwner(branchId, session.branchId());
-        return ownerBarberService.listBarbers(session.tenantId(), effectiveBranchId);
+        return ownerBarberService.listBarbers(session.tenantId(), effectiveBranchId, includeInactive);
     }
 
     @PostMapping

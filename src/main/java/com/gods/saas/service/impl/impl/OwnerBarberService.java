@@ -10,7 +10,7 @@ import java.util.List;
 
 public interface OwnerBarberService {
 
-    List<BarberResponse> listBarbers(Long tenantId, Long branchId);
+    List<BarberResponse> listBarbers(Long tenantId, Long branchId, boolean includeInactive);
 
     BarberResponse createBarber(Long tenantId, BarberCreateRequest request);
 
