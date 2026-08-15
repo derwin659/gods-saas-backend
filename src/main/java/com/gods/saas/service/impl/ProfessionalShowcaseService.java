@@ -6,6 +6,8 @@ import com.gods.saas.domain.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.web.multipart.MultipartFile;
 import java.time.LocalDateTime;
 import java.util.*;
@@ -45,6 +47,31 @@ public class ProfessionalShowcaseService {
   String type=mediaType==null?"IMAGE":mediaType.trim().toUpperCase();if(!List.of("IMAGE","VIDEO").contains(type))throw new IllegalArgumentException("Tipo de medio invalido.");if("VIDEO".equals(type)&&(durationSeconds==null||durationSeconds<1||durationSeconds>90))throw new IllegalArgumentException("El video debe durar entre 1 y 90 segundos.");
   var upload="VIDEO".equals(type)?storage.uploadShowcaseVideo(tenantId,actorId,file):storage.uploadShowcaseImage(tenantId,actorId,file);String thumbnail="VIDEO".equals(type)?storage.videoThumbnailUrl(upload.getSecureUrl()):upload.getSecureUrl();
   ProfessionalShowcase item=ProfessionalShowcase.builder().tenant(tenant).branch(origin).professional(null).createdBy(actor).selectedBranches(selected).service(service).originType("TENANT_CATALOG").visibilityScope(scope).category(category==null?null:category.trim()).title(clean).description(description==null?null:description.trim()).mediaType(type).imageUrl(upload.getSecureUrl()).thumbnailUrl(thumbnail).imagePublicId(upload.getPublicId()).durationSeconds("VIDEO".equals(type)?durationSeconds:null).status(ShowcaseStatus.PUBLISHED).clientImageConsent(true).publishedAt(LocalDateTime.now()).moderatedBy(actor).moderatedAt(LocalDateTime.now()).build();return ShowcaseResponse.from(repository.save(item));
+ }
+ @Transactional public ShowcaseResponse reviseRejectedMine(Long tenantId,Long userId,Long id,String title,String description){
+  ProfessionalShowcase x=owned(tenantId,userId,id);
+  if(x.getStatus()!=ShowcaseStatus.REJECTED)throw new IllegalStateException("Solo puedes corregir trabajos rechazados.");
+  String clean=title==null?"":title.trim();
+  if(clean.isEmpty()||clean.length()>120)throw new IllegalArgumentException("Escribe un titulo de hasta 120 caracteres.");
+  String detail=description==null?null:description.trim();
+  if(detail!=null&&detail.length()>600)throw new IllegalArgumentException("La descripcion puede tener hasta 600 caracteres.");
+  x.setTitle(clean);x.setDescription(detail==null||detail.isEmpty()?null:detail);x.setStatus(ShowcaseStatus.PENDING_APPROVAL);x.setRejectionReason(null);x.setModeratedAt(null);x.setModeratedBy(null);x.setPublishedAt(null);x.setArchivedAt(null);
+  return ShowcaseResponse.from(repository.save(x));
+ }
+ @Transactional public ShowcaseResponse reviseRejectedMineWithMedia(Long tenantId,Long userId,Long id,String title,String description,String mediaType,Integer durationSeconds,MultipartFile file){
+  ProfessionalShowcase x=owned(tenantId,userId,id);
+  if(x.getStatus()!=ShowcaseStatus.REJECTED)throw new IllegalStateException("Solo puedes corregir trabajos rechazados.");
+  if(file==null||file.isEmpty())throw new IllegalArgumentException("Selecciona la nueva foto o video.");
+  String clean=title==null?"":title.trim();if(clean.isEmpty()||clean.length()>120)throw new IllegalArgumentException("Escribe un titulo de hasta 120 caracteres.");
+  String detail=description==null?null:description.trim();if(detail!=null&&detail.length()>600)throw new IllegalArgumentException("La descripcion puede tener hasta 600 caracteres.");
+  String type=mediaType==null?"IMAGE":mediaType.trim().toUpperCase();if(!List.of("IMAGE","VIDEO").contains(type))throw new IllegalArgumentException("Tipo de medio invalido.");
+  if("VIDEO".equals(type)&&(durationSeconds==null||durationSeconds<1||durationSeconds>90))throw new IllegalArgumentException("El video debe durar entre 1 y 90 segundos.");
+  var upload="VIDEO".equals(type)?storage.uploadShowcaseVideo(tenantId,userId,file):storage.uploadShowcaseImage(tenantId,userId,file);
+  String oldPublicId=x.getImagePublicId();String oldMediaType=x.getMediaType();
+  x.setTitle(clean);x.setDescription(detail==null||detail.isEmpty()?null:detail);x.setMediaType(type);x.setImageUrl(upload.getSecureUrl());x.setThumbnailUrl("VIDEO".equals(type)?storage.videoThumbnailUrl(upload.getSecureUrl()):upload.getSecureUrl());x.setImagePublicId(upload.getPublicId());x.setDurationSeconds("VIDEO".equals(type)?durationSeconds:null);x.setStatus(ShowcaseStatus.PENDING_APPROVAL);x.setRejectionReason(null);x.setModeratedAt(null);x.setModeratedBy(null);x.setPublishedAt(null);x.setArchivedAt(null);
+  ShowcaseResponse response=ShowcaseResponse.from(repository.save(x));
+  TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization(){@Override public void afterCommit(){try{storage.deleteShowcaseMedia(oldPublicId,oldMediaType);}catch(RuntimeException ignored){}}});
+  return response;
  } @Transactional public ShowcaseResponse restoreMine(Long tenantId,Long userId,Long id){ProfessionalShowcase x=owned(tenantId,userId,id);if(x.getStatus()!=ShowcaseStatus.ARCHIVED)throw new IllegalStateException("Solo puedes restaurar trabajos archivados.");x.setStatus(ShowcaseStatus.PENDING_APPROVAL);x.setArchivedAt(null);x.setPublishedAt(null);x.setModeratedAt(null);x.setModeratedBy(null);x.setRejectionReason(null);return ShowcaseResponse.from(repository.save(x));}
  @Transactional public void deleteMine(Long tenantId,Long userId,Long id){ProfessionalShowcase x=owned(tenantId,userId,id);if(x.getStatus()!=ShowcaseStatus.ARCHIVED)throw new IllegalStateException("Archiva el trabajo antes de eliminarlo.");storage.deleteShowcaseMedia(x.getImagePublicId(),x.getMediaType());repository.delete(x);}
  private ProfessionalShowcase owned(Long tenantId,Long userId,Long id){ProfessionalShowcase x=repository.findByIdAndTenant_Id(id,tenantId).orElseThrow(()->new IllegalArgumentException("Trabajo no encontrado."));if(x.getProfessional()==null||!x.getProfessional().getId().equals(userId))throw new IllegalStateException("No puedes modificar este trabajo.");return x;} @Transactional public ShowcaseResponse archiveMine(Long tenantId,Long userId,Long id){ProfessionalShowcase x=owned(tenantId,userId,id);x.setStatus(ShowcaseStatus.ARCHIVED);x.setArchivedAt(LocalDateTime.now());return ShowcaseResponse.from(repository.save(x));}
