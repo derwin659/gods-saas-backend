@@ -45,6 +45,17 @@ public class GlobalExceptionHandler {
         ));
     }
 
+    @ExceptionHandler(ShowcaseUploadRateLimitException.class)
+    public ResponseEntity<?> handleShowcaseUploadRateLimit(ShowcaseUploadRateLimitException ex) {
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(ex.getRetryAfterSeconds()))
+                .body(Map.of(
+                        "code", "SHOWCASE_UPLOAD_RATE_LIMIT",
+                        "message", ex.getMessage(),
+                        "retryAfterSeconds", ex.getRetryAfterSeconds(),
+                        "timestamp", LocalDateTime.now()
+                ));
+    }
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<?> handleMaxUploadSize(MaxUploadSizeExceededException ex) {
         return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(Map.of(

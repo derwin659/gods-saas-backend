@@ -28,11 +28,13 @@ public class CloudinaryStorageService {
     );
 
     private final Cloudinary cloudinary;
+    private final ShowcaseUploadRateLimitService showcaseUploadRateLimit;
 
     public CloudinaryStorageService(
             @Value("${cloudinary.cloud-name}") String cloudName,
             @Value("${cloudinary.api-key}") String apiKey,
-            @Value("${cloudinary.api-secret}") String apiSecret
+            @Value("${cloudinary.api-secret}") String apiSecret,
+            ShowcaseUploadRateLimitService showcaseUploadRateLimit
     ) {
         this.cloudinary = new Cloudinary(ObjectUtils.asMap(
                 "cloud_name", cloudName,
@@ -40,6 +42,7 @@ public class CloudinaryStorageService {
                 "api_secret", apiSecret,
                 "secure", true
         ));
+        this.showcaseUploadRateLimit = showcaseUploadRateLimit;
     }
 
     public UploadResult uploadAppointmentDepositEvidence(
@@ -126,47 +129,53 @@ public class CloudinaryStorageService {
 
     public UploadResult uploadShowcaseImage(Long tenantId, Long professionalId, MultipartFile file) {
         validateImage(file);
-        try {
-            String folder = "super-gods/tenants/" + tenantId + "/showcase";
-            Map<?, ?> result = cloudinary.uploader().upload(
-                    file.getBytes(),
-                    ObjectUtils.asMap(
-                            "folder", folder,
-                            "resource_type", "image",
-                            "public_id", "work_" + professionalId + "_" + System.currentTimeMillis(),
-                            "overwrite", false,
-                            "transformation", "c_limit,w_1800,h_1800,q_auto:good,f_auto"
-                    )
-            );
-            return new UploadResult(String.valueOf(result.get("secure_url")), String.valueOf(result.get("public_id")));
-        } catch (IOException e) {
-            throw new IllegalStateException("No se pudo subir la foto del trabajo", e);
-        }
-    }
-    public UploadResult uploadShowcaseVideo(Long tenantId, Long professionalId, MultipartFile file) {
-        validateVideo(file);
-        try {
-            String folder = "super-gods/tenants/" + tenantId + "/showcase/videos";
-            Map<?, ?> result = cloudinary.uploader().uploadLarge(
-                    file.getBytes(),
-                    ObjectUtils.asMap(
-                            "folder", folder,
-                            "resource_type", "video",
-                            "public_id", "work_video_" + professionalId + "_" + System.currentTimeMillis(),
-                            "overwrite", false
-                    )
-            );
-            String secureUrl = String.valueOf(result.get("secure_url"));
-            String publicId = String.valueOf(result.get("public_id"));
-            validateUploadedVideoDuration(result, publicId);
-            return new UploadResult(secureUrl, publicId);
-        } catch (IllegalArgumentException e) {
-            throw e;
-        } catch (IOException | RuntimeException e) {
-            throw new IllegalStateException("No se pudo procesar el video. Inténtalo nuevamente.", e);
+        try (ShowcaseUploadRateLimitService.Lease ignored =
+                     showcaseUploadRateLimit.acquire(tenantId, professionalId, "IMAGE")) {
+            try {
+                String folder = "super-gods/tenants/" + tenantId + "/showcase";
+                Map<?, ?> result = cloudinary.uploader().upload(
+                        file.getBytes(),
+                        ObjectUtils.asMap(
+                                "folder", folder,
+                                "resource_type", "image",
+                                "public_id", "work_" + professionalId + "_" + System.currentTimeMillis(),
+                                "overwrite", false,
+                                "transformation", "c_limit,w_1800,h_1800,q_auto:good,f_auto"
+                        )
+                );
+                return new UploadResult(String.valueOf(result.get("secure_url")), String.valueOf(result.get("public_id")));
+            } catch (IOException e) {
+                throw new IllegalStateException("No se pudo subir la foto del trabajo", e);
+            }
         }
     }
 
+    public UploadResult uploadShowcaseVideo(Long tenantId, Long professionalId, MultipartFile file) {
+        validateVideo(file);
+        try (ShowcaseUploadRateLimitService.Lease ignored =
+                     showcaseUploadRateLimit.acquire(tenantId, professionalId, "VIDEO")) {
+            try {
+                String folder = "super-gods/tenants/" + tenantId + "/showcase/videos";
+                Map<?, ?> result = cloudinary.uploader().uploadLarge(
+                        file.getBytes(),
+                        ObjectUtils.asMap(
+                                "folder", folder,
+                                "resource_type", "video",
+                                "public_id", "work_video_" + professionalId + "_" + System.currentTimeMillis(),
+                                "overwrite", false
+                        )
+                );
+                String secureUrl = String.valueOf(result.get("secure_url"));
+                String publicId = String.valueOf(result.get("public_id"));
+                validateUploadedVideoDuration(result, publicId);
+                return new UploadResult(secureUrl, publicId);
+            } catch (IllegalArgumentException e) {
+                throw e;
+            } catch (IOException | RuntimeException e) {
+                throw new IllegalStateException("No se pudo procesar el video. Inténtalo nuevamente.", e);
+            }
+        }
+    }
     public String videoThumbnailUrl(String secureVideoUrl) {
         if (secureVideoUrl == null || secureVideoUrl.isBlank()) return null;
         String transformed = secureVideoUrl.replace("/upload/", "/upload/so_0,c_fill,w_900,h_900,q_auto:good,f_jpg/");
