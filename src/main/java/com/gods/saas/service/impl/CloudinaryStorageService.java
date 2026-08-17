@@ -8,6 +8,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.io.InputStream;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
@@ -155,7 +156,12 @@ public class CloudinaryStorageService {
                             "overwrite", false
                     )
             );
-            return new UploadResult(String.valueOf(result.get("secure_url")), String.valueOf(result.get("public_id")));
+            String secureUrl = String.valueOf(result.get("secure_url"));
+            String publicId = String.valueOf(result.get("public_id"));
+            validateUploadedVideoDuration(result, publicId);
+            return new UploadResult(secureUrl, publicId);
+        } catch (IllegalArgumentException e) {
+            throw e;
         } catch (IOException | RuntimeException e) {
             throw new IllegalStateException("No se pudo procesar el video. Inténtalo nuevamente.", e);
         }
@@ -195,29 +201,130 @@ public class CloudinaryStorageService {
     }
 
     private void validateVideo(MultipartFile file) {
-        if (file == null || file.isEmpty()) throw new IllegalArgumentException("El video es obligatorio");
-        if (file.getSize() > MAX_VIDEO_SIZE_BYTES) throw new IllegalArgumentException("El video no debe pesar mas de 35 MB");
-        String contentType = file.getContentType();
-        if (contentType == null || !ALLOWED_VIDEO_TYPES.contains(contentType.toLowerCase(Locale.ROOT))) {
+        validateBasicFile(file, MAX_VIDEO_SIZE_BYTES, "El video es obligatorio", "El video no debe pesar más de 35 MB");
+        String contentType = normalizedContentType(file);
+        if (!ALLOWED_VIDEO_TYPES.contains(contentType)) {
             throw new IllegalArgumentException("Formato no permitido. Usa MP4, MOV o WEBM");
         }
+        byte[] header = readHeader(file, 16);
+        boolean isoVideo = hasAscii(header, 4, "ftyp");
+        boolean webm = startsWith(header, 0x1A, 0x45, 0xDF, 0xA3);
+        boolean signatureMatches = switch (contentType) {
+            case "video/mp4", "video/quicktime" -> isoVideo;
+            case "video/webm" -> webm;
+            default -> false;
+        };
+        if (!signatureMatches) {
+            throw new IllegalArgumentException("El archivo no contiene un video válido o su formato fue alterado");
+        }
+        validateExtension(file, contentType, Map.of(
+                "video/mp4", Set.of("mp4", "m4v"),
+                "video/quicktime", Set.of("mov"),
+                "video/webm", Set.of("webm")
+        ));
     }
+
     private void validateImage(MultipartFile file) {
-        if (file == null || file.isEmpty()) {
-            throw new IllegalArgumentException("La imagen es obligatoria");
-        }
-
-        if (file.getSize() > MAX_FILE_SIZE_BYTES) {
-            throw new IllegalArgumentException("La imagen no debe pesar más de 5 MB");
-        }
-
-        String contentType = file.getContentType();
-
-        if (contentType == null || !ALLOWED_CONTENT_TYPES.contains(contentType.toLowerCase(Locale.ROOT))) {
+        validateBasicFile(file, MAX_FILE_SIZE_BYTES, "La imagen es obligatoria", "La imagen no debe pesar más de 5 MB");
+        String contentType = normalizedContentType(file);
+        if (!ALLOWED_CONTENT_TYPES.contains(contentType)) {
             throw new IllegalArgumentException("Formato no permitido. Usa JPG, PNG o WEBP");
         }
+        byte[] header = readHeader(file, 16);
+        boolean jpeg = startsWith(header, 0xFF, 0xD8, 0xFF);
+        boolean png = startsWith(header, 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A);
+        boolean webp = hasAscii(header, 0, "RIFF") && hasAscii(header, 8, "WEBP");
+        boolean signatureMatches = switch (contentType) {
+            case "image/jpeg", "image/jpg" -> jpeg;
+            case "image/png" -> png;
+            case "image/webp" -> webp;
+            default -> false;
+        };
+        if (!signatureMatches) {
+            throw new IllegalArgumentException("El archivo no contiene una imagen válida o su formato fue alterado");
+        }
+        validateExtension(file, contentType, Map.of(
+                "image/jpeg", Set.of("jpg", "jpeg"),
+                "image/jpg", Set.of("jpg", "jpeg"),
+                "image/png", Set.of("png"),
+                "image/webp", Set.of("webp")
+        ));
     }
 
+    private void validateBasicFile(MultipartFile file, long maxBytes, String requiredMessage, String sizeMessage) {
+        if (file == null || file.isEmpty() || file.getSize() <= 0) {
+            throw new IllegalArgumentException(requiredMessage);
+        }
+        if (file.getSize() > maxBytes) {
+            throw new IllegalArgumentException(sizeMessage);
+        }
+        String filename = file.getOriginalFilename();
+        if (filename == null || filename.isBlank() || filename.indexOf('\0') >= 0) {
+            throw new IllegalArgumentException("El archivo no tiene un nombre válido");
+        }
+    }
+
+    private String normalizedContentType(MultipartFile file) {
+        String contentType = file.getContentType();
+        return contentType == null ? "" : contentType.trim().toLowerCase(Locale.ROOT);
+    }
+
+    private byte[] readHeader(MultipartFile file, int length) {
+        try (InputStream input = file.getInputStream()) {
+            return input.readNBytes(length);
+        } catch (IOException e) {
+            throw new IllegalArgumentException("No se pudo leer el archivo. Selecciónalo nuevamente", e);
+        }
+    }
+
+    private boolean startsWith(byte[] bytes, int... signature) {
+        if (bytes.length < signature.length) return false;
+        for (int i = 0; i < signature.length; i++) {
+            if ((bytes[i] & 0xFF) != signature[i]) return false;
+        }
+        return true;
+    }
+
+    private boolean hasAscii(byte[] bytes, int offset, String expected) {
+        if (offset < 0 || bytes.length < offset + expected.length()) return false;
+        for (int i = 0; i < expected.length(); i++) {
+            if ((bytes[offset + i] & 0xFF) != expected.charAt(i)) return false;
+        }
+        return true;
+    }
+
+    private void validateExtension(MultipartFile file, String contentType, Map<String, Set<String>> allowed) {
+        String filename = file.getOriginalFilename();
+        int dot = filename == null ? -1 : filename.lastIndexOf('.');
+        String extension = dot < 0 ? "" : filename.substring(dot + 1).toLowerCase(Locale.ROOT);
+        if (!allowed.getOrDefault(contentType, Set.of()).contains(extension)) {
+            throw new IllegalArgumentException("La extensión del archivo no coincide con su contenido");
+        }
+    }
+
+    private void validateUploadedVideoDuration(Map<?, ?> result, String publicId) {
+        Object rawDuration = result.get("duration");
+        double duration;
+        try {
+            duration = rawDuration instanceof Number number
+                    ? number.doubleValue()
+                    : Double.parseDouble(String.valueOf(rawDuration));
+        } catch (RuntimeException invalidDuration) {
+            deleteInvalidUploadedVideo(publicId);
+            throw new IllegalArgumentException("No se pudo verificar la duración real del video");
+        }
+        if (Double.isFinite(duration) && duration >= 1 && duration <= 90) return;
+        deleteInvalidUploadedVideo(publicId);
+        throw new IllegalArgumentException("El video debe durar entre 1 y 90 segundos");
+    }
+
+    private void deleteInvalidUploadedVideo(String publicId) {
+        try {
+            cloudinary.uploader().destroy(publicId, ObjectUtils.asMap("resource_type", "video", "invalidate", true));
+        } catch (IOException cleanupError) {
+            throw new IllegalStateException("El video no cumple las reglas y no pudo limpiarse", cleanupError);
+        }
+    }
     @Getter
     public static class UploadResult {
         private final String secureUrl;
