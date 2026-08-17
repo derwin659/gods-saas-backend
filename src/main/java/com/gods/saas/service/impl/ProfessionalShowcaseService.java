@@ -1,9 +1,11 @@
 package com.gods.saas.service.impl;
+import com.gods.saas.domain.dto.response.ShowcasePageResponse;
 import com.gods.saas.domain.dto.response.ShowcaseResponse;
 import com.gods.saas.domain.enums.ShowcaseStatus;
 import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
@@ -85,4 +87,5 @@ public class ProfessionalShowcaseService {
  @Transactional public ShowcaseResponse publishByOwner(Long tenantId,Long actorId,Long id){ProfessionalShowcase x=tenantItem(tenantId,id);if(x.getStatus()!=ShowcaseStatus.ARCHIVED)throw new IllegalStateException("Solo puedes volver a publicar trabajos pausados.");AppUser actor=appUserRepository.findByIdAndTenant_Id(actorId,tenantId).orElseThrow();x.setStatus(ShowcaseStatus.PUBLISHED);x.setArchivedAt(null);x.setPublishedAt(LocalDateTime.now());x.setModeratedBy(actor);x.setModeratedAt(LocalDateTime.now());x.setRejectionReason(null);return ShowcaseResponse.from(repository.save(x));}
  @Transactional public void deleteByOwner(Long tenantId,Long id){ProfessionalShowcase x=tenantItem(tenantId,id);if(x.getStatus()!=ShowcaseStatus.ARCHIVED)throw new IllegalStateException("Pausa el trabajo antes de eliminarlo.");storage.deleteShowcaseMedia(x.getImagePublicId(),x.getMediaType());repository.delete(x);}
  private ProfessionalShowcase tenantItem(Long tenantId,Long id){return repository.findByIdAndTenant_Id(id,tenantId).orElseThrow(()->new IllegalArgumentException("Trabajo no encontrado."));} @Transactional(readOnly=true) public List<ShowcaseResponse> published(Long tenantId,Long branchId,Long professionalId){return repository.findPublishedForBranch(tenantId,branchId,professionalId,ShowcaseStatus.PUBLISHED).stream().limit(60).map(ShowcaseResponse::from).toList();}
+ @Transactional(readOnly=true) public ShowcasePageResponse publishedPage(Long tenantId,Collection<Long> branchIds,Long professionalId,int page,int size){if(branchIds==null||branchIds.isEmpty())throw new IllegalArgumentException("Selecciona al menos una sede.");List<Long> clean=branchIds.stream().filter(Objects::nonNull).distinct().limit(25).toList();if(clean.isEmpty())throw new IllegalArgumentException("Selecciona al menos una sede.");int safePage=Math.max(0,page);int safeSize=Math.max(1,Math.min(size,24));var result=repository.findPublishedPage(tenantId,clean,professionalId,ShowcaseStatus.PUBLISHED,PageRequest.of(safePage,safeSize));return new ShowcasePageResponse(result.getContent().stream().map(ShowcaseResponse::from).toList(),safePage,safeSize,result.hasNext(),result.getTotalElements());}
 }
