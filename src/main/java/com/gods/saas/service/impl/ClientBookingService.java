@@ -51,6 +51,7 @@ public class ClientBookingService {
     private final UserTenantRoleRepository userTenantRoleRepository;
     private final BarberServiceAssignmentService barberServiceAssignmentService;
     private final TenantTimeService tenantTimeService;
+    private final InternationalPhoneService internationalPhoneService;
 
     public BookingBootstrapResponse getBootstrap(Long tenantId) {
         Tenant tenant = tenantRepository.findById(tenantId)
@@ -1205,7 +1206,9 @@ public class ClientBookingService {
     }
 
     private Customer resolveOrCreatePublicCustomer(Tenant tenant, PublicCreateAppointmentRequest request) {
-        String phone = normalizePhone(request.getCustomerPhone());
+        InternationalPhoneService.NormalizedPhone normalizedPhone =
+                internationalPhoneService.normalize(tenant, request.getCustomerPhone());
+        String phone = normalizedPhone.e164();
         String email = trimToNull(request.getCustomerEmail());
         String firstName = trimToNull(request.getCustomerName());
         String lastName = trimToNull(request.getCustomerLastName());
@@ -1218,11 +1221,25 @@ public class ClientBookingService {
             throw new RuntimeException("Ingresa el nombre del cliente.");
         }
 
-        Customer existing = customerRepository.findByTenant_IdAndTelefonoAndActivoTrue(tenant.getId(), phone)
-                .orElse(null);
+        String legacyNational = normalizedPhone.belongsToTenantRegion()
+                ? normalizedPhone.nationalDigits() : normalizedPhone.internationalDigits();
+        String legacyFormatted = normalizedPhone.belongsToTenantRegion()
+                ? normalizedPhone.lookupDigits().stream().skip(2).findFirst().orElse(legacyNational)
+                : normalizedPhone.internationalDigits();
+        List<Customer> candidates = customerRepository.findPhoneCandidates(
+                tenant.getId(), phone, normalizedPhone.internationalDigits(), legacyNational, legacyFormatted)
+                .stream().filter(item -> item.getActivo() == null || Boolean.TRUE.equals(item.getActivo())).toList();
+        if (candidates.size() > 1) {
+            throw new IllegalStateException("Hay más de un cliente con este teléfono. El negocio debe resolver el duplicado antes de reservar.");
+        }
+        Customer existing = candidates.isEmpty() ? null : candidates.get(0);
 
         if (existing != null) {
             boolean changed = false;
+            if (!phone.equals(existing.getTelefono())) {
+                existing.setTelefono(phone);
+                changed = true;
+            }
 
             if (trimToNull(existing.getNombres()) == null) {
                 existing.setNombres(firstName);

@@ -7,9 +7,11 @@ import com.gods.saas.domain.dto.response.LoyaltyTierConfig;
 import com.gods.saas.domain.model.Customer;
 import com.gods.saas.domain.model.LoyaltyAccount;
 import com.gods.saas.domain.model.LoyaltyMovement;
+import com.gods.saas.domain.model.Tenant;
 import com.gods.saas.domain.repository.CustomerRepository;
 import com.gods.saas.domain.repository.LoyaltyAccountRepository;
 import com.gods.saas.domain.repository.LoyaltyMovementRepository;
+import com.gods.saas.domain.repository.TenantRepository;
 import com.gods.saas.service.impl.impl.OwnerLoyaltyService;
 import jakarta.persistence.EntityNotFoundException;
 import jakarta.transaction.Transactional;
@@ -18,6 +20,7 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -27,18 +30,40 @@ public class OwnerLoyaltyServiceImpl implements OwnerLoyaltyService {
     private final LoyaltyAccountRepository loyaltyAccountRepository;
     private final LoyaltyMovementRepository loyaltyMovementRepository;
     private final OwnerLoyaltySettingsService ownerLoyaltySettingsService;
+    private final TenantRepository tenantRepository;
+    private final InternationalPhoneService internationalPhoneService;
 
     @Override
     public OwnerCustomerLoyaltyResponse findCustomerByPhone(Long tenantId, String phone) {
-        final String normalizedPhone = normalizePhone(phone);
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new EntityNotFoundException("Negocio no encontrado."));
+        InternationalPhoneService.NormalizedPhone normalized = internationalPhoneService.normalize(tenant, phone);
+        String legacyNational = normalized.belongsToTenantRegion()
+                ? normalized.nationalDigits()
+                : normalized.internationalDigits();
+        String legacyFormatted = normalized.belongsToTenantRegion()
+                ? normalized.lookupDigits().stream().skip(2).findFirst().orElse(legacyNational)
+                : normalized.internationalDigits();
+        List<Customer> candidates = customerRepository.findPhoneCandidates(
+                tenantId, normalized.e164(), normalized.internationalDigits(), legacyNational, legacyFormatted);
+        if (candidates.isEmpty()) {
+            throw new EntityNotFoundException("Cliente no encontrado para ese telÃ©fono.");
+        }
+        if (candidates.size() > 1) {
+            throw new IllegalStateException("Hay mÃ¡s de un cliente con este telÃ©fono. Revisa los duplicados antes de ajustar puntos.");
+        }
+        Customer customer = candidates.get(0);
+        if (!normalized.e164().equals(customer.getTelefono())) {
+            customer.setTelefono(normalized.e164());
+            customer.setFechaActualizacion(LocalDateTime.now());
+            customer = customerRepository.save(customer);
+        }
 
-        Customer customer = customerRepository
-                .findByTenant_IdAndTelefono(tenantId, normalizedPhone)
-                .orElseThrow(() -> new EntityNotFoundException("Cliente no encontrado para ese teléfono."));
+        Customer resolvedCustomer = customer;
 
         LoyaltyAccount loyaltyAccount = loyaltyAccountRepository
                 .findByTenant_IdAndCustomer_Id(tenantId, customer.getId())
-                .orElseGet(() -> createEmptyAccount(customer));
+                .orElseGet(() -> createEmptyAccount(resolvedCustomer));
 
         int puntosDisponibles = safeInt(loyaltyAccount.getPuntosDisponibles());
         int puntosAcumulados = safeInt(loyaltyAccount.getPuntosAcumulados());
@@ -84,9 +109,11 @@ public class OwnerLoyaltyServiceImpl implements OwnerLoyaltyService {
             throw new IllegalArgumentException("El cliente no pertenece al tenant actual.");
         }
 
+        Customer resolvedCustomer = customer;
+
         LoyaltyAccount loyaltyAccount = loyaltyAccountRepository
                 .findByTenant_IdAndCustomer_Id(tenantId, customer.getId())
-                .orElseGet(() -> createEmptyAccount(customer));
+                .orElseGet(() -> createEmptyAccount(resolvedCustomer));
 
         int previousPoints = safeInt(loyaltyAccount.getPuntosDisponibles());
         int newPoints = previousPoints + request.pointsDelta();
@@ -153,7 +180,4 @@ public class OwnerLoyaltyServiceImpl implements OwnerLoyaltyService {
         return value == null ? 0 : value;
     }
 
-    private String normalizePhone(String phone) {
-        return phone == null ? "" : phone.trim();
-    }
 }
