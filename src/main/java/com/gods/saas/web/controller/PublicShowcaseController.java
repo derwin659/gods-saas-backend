@@ -23,6 +23,11 @@ public class PublicShowcaseController {
     private final ProfessionalShowcaseService service;
     private final ShowcaseMetricsService metrics;
 
+    @GetMapping("/{showcaseId}")
+    public ShowcaseResponse detail(@PathVariable Long showcaseId) {
+        return service.publicDetail(showcaseId);
+    }
+
     @PostMapping("/{showcaseId}/events")
     public void event(@PathVariable Long showcaseId, @RequestBody Map<String, Object> body) {
         metrics.record(

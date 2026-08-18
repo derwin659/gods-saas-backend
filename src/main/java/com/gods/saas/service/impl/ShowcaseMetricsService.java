@@ -11,7 +11,7 @@ import java.util.Set;
 @Service
 public class ShowcaseMetricsService {
     private static final Set<String> ALLOWED_EVENTS = Set.of(
-            "VIEW", "VIDEO_START", "VIDEO_COMPLETE", "RESERVE_CLICK", "BOOKING_CONFIRMED"
+            "VIEW", "VIDEO_START", "VIDEO_COMPLETE", "RESERVE_CLICK", "BOOKING_CONFIRMED", "SHARE"
     );
     private final JdbcTemplate jdbc;
 
@@ -52,6 +52,7 @@ public class ShowcaseMetricsService {
                        COUNT(e.showcase_event_id) FILTER (WHERE e.event_type='VIDEO_COMPLETE') AS "videoCompletes",
                        COUNT(e.showcase_event_id) FILTER (WHERE e.event_type='RESERVE_CLICK') AS "reserveClicks",
                        COUNT(e.showcase_event_id) FILTER (WHERE e.event_type='BOOKING_CONFIRMED') AS bookings,
+                       COUNT(e.showcase_event_id) FILTER (WHERE e.event_type='SHARE') AS shares,
                        (SELECT COUNT(*) FROM showcase_favorite f WHERE f.showcase_id=p.showcase_id) AS favorites
                 FROM professional_showcase p
                 LEFT JOIN showcase_event e ON e.showcase_id=p.showcase_id
