@@ -45,6 +45,8 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
 
     List<AppUser> findByTenant_IdAndRol(Long tenantId, String rol);
 
+    List<AppUser> findByTenant_IdAndRetiredAtIsNotNullOrderByRetiredAtDesc(Long tenantId);
+
     List<AppUser> findByTenant_IdAndBranch_IdAndRol(Long tenantId, Long branchId, String rol);
 
     Optional<AppUser> findByEmailAndTenant_Id(String email, Long tenantId);

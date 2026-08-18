@@ -5,6 +5,7 @@ import lombok.Data;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Data
@@ -28,4 +29,7 @@ public class BarberResponse {
     private String salaryFrequency;
     private BigDecimal fixedSalaryAmount;
     private LocalDate salaryStartDate;
+    private LocalDateTime retiredAt;
+    private Long retiredByUserId;
+    private String retirementReason;
 }

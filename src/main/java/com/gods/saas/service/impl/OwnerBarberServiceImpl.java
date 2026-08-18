@@ -49,7 +49,13 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
                 ? userTenantRoleRepository.findUsersByTenantBranchAndRole(tenantId, branchId, RoleType.BARBER)
                 : userTenantRoleRepository.findActiveUsersByTenantBranchAndRole(tenantId, branchId, RoleType.BARBER);
 
-        return users.stream()
+        Map<Long, AppUser> visible = new LinkedHashMap<>();
+        users.forEach(user -> visible.put(user.getId(), user));
+        if (includeInactive && branchId == null) {
+            appUserRepository.findByTenant_IdAndRetiredAtIsNotNullOrderByRetiredAtDesc(tenantId)
+                    .forEach(user -> visible.putIfAbsent(user.getId(), user));
+        }
+        return visible.values().stream()
                 .map(user -> toResponse(user, tenantId))
                 .toList();
     }
@@ -357,6 +363,9 @@ public class OwnerBarberServiceImpl implements OwnerBarberService {
                 .salaryFrequency(user.getSalaryFrequency() != null ? user.getSalaryFrequency().name() : null)
                 .fixedSalaryAmount(user.getFixedSalaryAmount())
                 .salaryStartDate(user.getSalaryStartDate())
+                .retiredAt(user.getRetiredAt())
+                .retiredByUserId(user.getRetiredByUserId())
+                .retirementReason(user.getRetirementReason())
                 .build();
     }
 
