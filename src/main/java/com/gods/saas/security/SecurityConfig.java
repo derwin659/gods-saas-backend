@@ -114,6 +114,9 @@ public class SecurityConfig {
                                 "/api/owner/whatsapp-settings/**"
                         )
                         .hasRole("OWNER")
+                        .requestMatchers("/api/owner/electronic-invoicing",
+                                "/api/owner/electronic-invoicing/**")
+                        .hasRole("OWNER")
                         .requestMatchers("/api/owner/regional-settings", "/api/owner/regional-settings/**")
                         .hasAnyRole("OWNER", "ADMIN")
                         .requestMatchers("/api/public/**").permitAll()

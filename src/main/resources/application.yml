@@ -104,3 +104,11 @@ qz:
   signing:
     certificate-base64: ${QZ_SIGNING_CERTIFICATE_BASE64:}
     private-key-base64: ${QZ_SIGNING_PRIVATE_KEY_BASE64:}
+
+electronic-invoicing:
+  mifact:
+    # Desactivado por defecto: desplegar el backend no emite comprobantes.
+    enabled: ${MIFACT_ENABLED:false}
+    base-url: ${MIFACT_BASE_URL:https://demo.mifact.net.pe/api/invoiceService.svc}
+    connect-timeout-seconds: ${MIFACT_CONNECT_TIMEOUT_SECONDS:10}
+    read-timeout-seconds: ${MIFACT_READ_TIMEOUT_SECONDS:30}

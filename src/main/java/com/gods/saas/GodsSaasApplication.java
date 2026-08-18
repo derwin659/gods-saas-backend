@@ -14,7 +14,8 @@ import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 @EnableScheduling
 @EnableConfigurationProperties({
         com.gods.saas.config.RunpodProperties.class,
-        com.gods.saas.config.IaIlustrativaProperties.class
+        com.gods.saas.config.IaIlustrativaProperties.class,
+        com.gods.saas.config.MifactProperties.class
 })
 public class GodsSaasApplication {
 
