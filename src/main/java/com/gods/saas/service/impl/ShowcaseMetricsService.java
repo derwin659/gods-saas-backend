@@ -53,7 +53,8 @@ public class ShowcaseMetricsService {
                        COUNT(e.showcase_event_id) FILTER (WHERE e.event_type='RESERVE_CLICK') AS "reserveClicks",
                        COUNT(e.showcase_event_id) FILTER (WHERE e.event_type='BOOKING_CONFIRMED') AS bookings,
                        COUNT(e.showcase_event_id) FILTER (WHERE e.event_type='SHARE') AS shares,
-                       (SELECT COUNT(*) FROM showcase_favorite f WHERE f.showcase_id=p.showcase_id) AS favorites
+                       (SELECT COUNT(*) FROM showcase_favorite f WHERE f.showcase_id=p.showcase_id) AS favorites,
+                       (SELECT COUNT(*) FROM showcase_report r WHERE r.showcase_id=p.showcase_id AND r.status='OPEN') AS "openReports"
                 FROM professional_showcase p
                 LEFT JOIN showcase_event e ON e.showcase_id=p.showcase_id
                 WHERE p.tenant_id=?

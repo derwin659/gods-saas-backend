@@ -3,6 +3,7 @@ package com.gods.saas.web.controller;
 import com.gods.saas.domain.dto.response.ShowcaseResponse;
 import com.gods.saas.service.impl.ProfessionalShowcaseService;
 import com.gods.saas.service.impl.ShowcaseMetricsService;
+import com.gods.saas.service.impl.ShowcaseReportService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -22,12 +23,22 @@ import java.util.List;
 public class PublicShowcaseController {
     private final ProfessionalShowcaseService service;
     private final ShowcaseMetricsService metrics;
+    private final ShowcaseReportService reports;
 
     @GetMapping("/{showcaseId}")
     public ShowcaseResponse detail(@PathVariable Long showcaseId) {
         return service.publicDetail(showcaseId);
     }
 
+    @PostMapping("/{showcaseId}/reports")
+    public void report(@PathVariable Long showcaseId, @RequestBody Map<String, Object> body) {
+        reports.report(
+                showcaseId,
+                body.get("reason") == null ? null : String.valueOf(body.get("reason")),
+                body.get("details") == null ? null : String.valueOf(body.get("details")),
+                body.get("reporterKey") == null ? null : String.valueOf(body.get("reporterKey"))
+        );
+    }
     @PostMapping("/{showcaseId}/events")
     public void event(@PathVariable Long showcaseId, @RequestBody Map<String, Object> body) {
         metrics.record(
