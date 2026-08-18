@@ -21,6 +21,7 @@ public interface ProfessionalShowcaseRepository extends JpaRepository<Profession
   select distinct p from ProfessionalShowcase p
   left join p.selectedBranches sb
   where p.tenant.id=:tenantId and p.status=:status
+    and p.publishedAt<=CURRENT_TIMESTAMP
     and ((p.originType='PROFESSIONAL_WORK' and p.branch.id=:branchId)
       or (p.originType='TENANT_CATALOG' and (p.visibilityScope='ALL_BRANCHES' or p.branch.id=:branchId or sb.id=:branchId)))
     and (:professionalId is null or p.professional.id=:professionalId)
@@ -31,6 +32,7 @@ public interface ProfessionalShowcaseRepository extends JpaRepository<Profession
   select distinct p from ProfessionalShowcase p
   left join p.selectedBranches sb
   where p.tenant.id=:tenantId and p.status=:status
+    and p.publishedAt<=CURRENT_TIMESTAMP
     and ((p.originType='PROFESSIONAL_WORK' and p.branch.id in :branchIds)
       or (p.originType='TENANT_CATALOG' and (p.visibilityScope='ALL_BRANCHES' or p.branch.id in :branchIds or sb.id in :branchIds)))
     and (:professionalId is null or p.professional.id=:professionalId)
@@ -39,6 +41,7 @@ public interface ProfessionalShowcaseRepository extends JpaRepository<Profession
   select count(distinct p.id) from ProfessionalShowcase p
   left join p.selectedBranches sb
   where p.tenant.id=:tenantId and p.status=:status
+    and p.publishedAt<=CURRENT_TIMESTAMP
     and ((p.originType='PROFESSIONAL_WORK' and p.branch.id in :branchIds)
       or (p.originType='TENANT_CATALOG' and (p.visibilityScope='ALL_BRANCHES' or p.branch.id in :branchIds or sb.id in :branchIds)))
     and (:professionalId is null or p.professional.id=:professionalId)

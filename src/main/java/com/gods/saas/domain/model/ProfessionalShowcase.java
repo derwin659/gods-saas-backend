@@ -23,6 +23,7 @@ public class ProfessionalShowcase {
  @Column(name="origin_type",nullable=false,length=30) @Builder.Default private String originType="PROFESSIONAL_WORK";
  @Column(name="visibility_scope",nullable=false,length=30) @Builder.Default private String visibilityScope="ORIGIN_BRANCH";
  @Column(length=80) private String category;
+ @Column(name="collection_name",length=80) private String collectionName;
  @Column(nullable=false) private boolean featured;
  @Column(name="sort_order",nullable=false) private int sortOrder;
  @Column(nullable=false,length=120) private String title;
