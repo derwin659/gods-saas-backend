@@ -12,6 +12,8 @@ public record UpdateElectronicInvoicingSettingsRequest(
         String annexCode,
         String invoiceSeries,
         String receiptSeries,
+        Long nextInvoiceNumber,
+        Long nextReceiptNumber,
         String credentialAlias,
         BigDecimal igvRate,
         boolean enabled

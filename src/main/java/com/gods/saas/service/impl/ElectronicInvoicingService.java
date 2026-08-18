@@ -60,6 +60,8 @@ public class ElectronicInvoicingService {
         s.setUbigeo(r.ubigeo().trim()); s.setSalesPointCode(r.salesPointCode().trim());
         s.setAnnexCode(normal(r.annexCode(), "0000")); s.setInvoiceSeries(r.invoiceSeries().trim().toUpperCase());
         s.setReceiptSeries(r.receiptSeries().trim().toUpperCase()); s.setCredentialAlias(r.credentialAlias().trim());
+        if (r.nextInvoiceNumber() != null) s.setNextInvoiceNumber(r.nextInvoiceNumber());
+        if (r.nextReceiptNumber() != null) s.setNextReceiptNumber(r.nextReceiptNumber());
         s.setIgvRate(r.igvRate()); s.setEnabled(r.enabled()); s.setUpdatedAt(LocalDateTime.now());
         if (r.enabled()) credentials.resolveToken(r.credentialAlias());
         return settingsResponse(settingsRepository.save(s));
@@ -172,13 +174,15 @@ public class ElectronicInvoicingService {
         if (blank(r.legalName()) || blank(r.fiscalAddress()) || r.ubigeo() == null || !r.ubigeo().matches("\\d{6}")) throw new IllegalArgumentException("Razon social, direccion y ubigeo son obligatorios");
         if (blank(r.salesPointCode()) || r.invoiceSeries() == null || !r.invoiceSeries().matches("(?i)F[A-Z0-9]{3}") || r.receiptSeries() == null || !r.receiptSeries().matches("(?i)B[A-Z0-9]{3}")) throw new IllegalArgumentException("Punto de venta y series F/B validas son obligatorios");
         if (blank(r.credentialAlias()) || r.igvRate() == null || r.igvRate().signum() < 0) throw new IllegalArgumentException("Alias e IGV son obligatorios");
+        if ((r.nextInvoiceNumber() != null && r.nextInvoiceNumber() < 1) || (r.nextReceiptNumber() != null && r.nextReceiptNumber() < 1))
+            throw new IllegalArgumentException("Los siguientes correlativos deben ser mayores a cero");
     }
     private boolean blank(String v) { return v == null || v.isBlank(); }
     private String trim(String v) { return v == null ? null : v.trim(); }
     private String normal(String v, String fallback) { return blank(v) ? fallback : v.trim(); }
     private ElectronicInvoicingSettingsResponse settingsResponse(ElectronicInvoicingSettings s) {
         boolean configured; try { credentials.resolveToken(s.getCredentialAlias()); configured = true; } catch (RuntimeException e) { configured = false; }
-        return new ElectronicInvoicingSettingsResponse(s.getFiscalRuc(), s.getLegalName(), s.getCommercialName(), s.getFiscalAddress(), s.getUbigeo(), s.getSalesPointCode(), s.getAnnexCode(), s.getInvoiceSeries(), s.getReceiptSeries(), s.getCredentialAlias(), s.getIgvRate(), s.isEnabled(), configured);
+        return new ElectronicInvoicingSettingsResponse(s.getFiscalRuc(), s.getLegalName(), s.getCommercialName(), s.getFiscalAddress(), s.getUbigeo(), s.getSalesPointCode(), s.getAnnexCode(), s.getInvoiceSeries(), s.getReceiptSeries(), s.getNextInvoiceNumber(), s.getNextReceiptNumber(), s.getCredentialAlias(), s.getIgvRate(), s.isEnabled(), configured);
     }
     private ElectronicDocumentResponse documentResponse(ElectronicDocument d) {
         return new ElectronicDocumentResponse(d.getId(), d.getSale().getId(), d.getBranch().getId(), d.getDocumentType(), d.getStatus(), d.getSeries(), d.getSequence(), d.getProviderStatus(), d.getSunatResponseCode(), d.getSunatDescription(), d.getErrorMessage(), d.getDocumentUrl(), d.getAttemptCount(), d.getLastAttemptAt(), d.getAcceptedAt(), d.getCreatedAt());
