@@ -4,11 +4,13 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.gods.saas.config.MifactProperties;
 import com.gods.saas.domain.dto.request.IssueElectronicDocumentRequest;
 import com.gods.saas.domain.dto.request.UpdateElectronicInvoicingSettingsRequest;
 import com.gods.saas.domain.dto.response.ElectronicDocumentResponse;
 import com.gods.saas.domain.dto.response.ElectronicDocumentFilesResponse;
 import com.gods.saas.domain.dto.response.ElectronicInvoicingSettingsResponse;
+import com.gods.saas.domain.dto.response.ElectronicInvoicingAccessResponse;
 import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.*;
 import com.gods.saas.invoicing.*;
@@ -31,24 +33,37 @@ public class ElectronicInvoicingService {
     private final ElectronicInvoiceProvider provider;
     private final MifactSalePayloadFactory payloadFactory;
     private final ObjectMapper mapper;
+    private final MifactProperties properties;
 
     public ElectronicInvoicingService(ElectronicInvoicingSettingsRepository settingsRepository,
             ElectronicDocumentRepository documentRepository, TenantRepository tenantRepository,
             SaleRepository saleRepository, MifactCredentialResolver credentials,
-            ElectronicInvoiceProvider provider, MifactSalePayloadFactory payloadFactory, ObjectMapper mapper) {
+            ElectronicInvoiceProvider provider, MifactSalePayloadFactory payloadFactory, ObjectMapper mapper, MifactProperties properties) {
         this.settingsRepository = settingsRepository; this.documentRepository = documentRepository;
         this.tenantRepository = tenantRepository; this.saleRepository = saleRepository;
         this.credentials = credentials; this.provider = provider;
-        this.payloadFactory = payloadFactory; this.mapper = mapper;
+        this.payloadFactory = payloadFactory; this.mapper = mapper; this.properties = properties;
+    }
+
+    @Transactional(readOnly = true)
+    public ElectronicInvoicingAccessResponse getAccess(Long tenantId) {
+        ElectronicInvoicingSettings settings = settingsRepository.findByTenantId(tenantId).orElse(null);
+        boolean available = hasAccess(tenantId);
+        return new ElectronicInvoicingAccessResponse(available, settings != null,
+                available && settings != null && settings.isEnabled(),
+                available ? "Facturacion electronica disponible"
+                        : "Modulo no contratado. Solicita la activacion de facturacion electronica para tu RUC.");
     }
 
     @Transactional(readOnly = true)
     public ElectronicInvoicingSettingsResponse getSettings(Long tenantId) {
+        requireAccess(tenantId);
         return settingsRepository.findByTenantId(tenantId).map(this::settingsResponse).orElse(null);
     }
 
     @Transactional
     public ElectronicInvoicingSettingsResponse updateSettings(Long tenantId, UpdateElectronicInvoicingSettingsRequest r) {
+        requireAccess(tenantId);
         validateSettings(r);
         ElectronicInvoicingSettings s = settingsRepository.findLockedByTenantId(tenantId).orElseGet(() -> {
             ElectronicInvoicingSettings created = new ElectronicInvoicingSettings();
@@ -69,6 +84,7 @@ public class ElectronicInvoicingService {
 
     @Transactional
     public ElectronicDocumentResponse issue(Long tenantId, Long saleId, IssueElectronicDocumentRequest request) {
+        requireAccess(tenantId);
         ElectronicDocument existing = documentRepository.findByTenantIdAndSaleIdAndDocumentType(tenantId, saleId, request.documentType()).orElse(null);
         if (existing != null) return documentResponse(existing);
         ElectronicInvoicingSettings settings = settingsRepository.findLockedByTenantId(tenantId)
@@ -109,6 +125,7 @@ public class ElectronicInvoicingService {
 
     @Transactional
     public ElectronicDocumentResponse refresh(Long tenantId, Long documentId) {
+        requireAccess(tenantId);
         ElectronicDocument document = documentRepository.findById(documentId)
                 .filter(d -> d.getTenant().getId().equals(tenantId))
                 .orElseThrow(() -> new IllegalArgumentException("Comprobante no encontrado"));
@@ -124,6 +141,7 @@ public class ElectronicInvoicingService {
 
     @Transactional
     public ElectronicDocumentResponse retry(Long tenantId, Long documentId) {
+        requireAccess(tenantId);
         ElectronicDocument document = documentRepository.findById(documentId)
                 .filter(d -> d.getTenant().getId().equals(tenantId))
                 .orElseThrow(() -> new IllegalArgumentException("Comprobante no encontrado"));
@@ -151,6 +169,7 @@ public class ElectronicInvoicingService {
 
     @Transactional(readOnly = true)
     public ElectronicDocumentFilesResponse getFiles(Long tenantId, Long documentId) {
+        requireAccess(tenantId);
         ElectronicDocument document = documentRepository.findById(documentId)
                 .filter(d -> d.getTenant().getId().equals(tenantId))
                 .orElseThrow(() -> new IllegalArgumentException("Comprobante no encontrado"));
@@ -189,7 +208,19 @@ public class ElectronicInvoicingService {
 
     @Transactional(readOnly = true)
     public List<ElectronicDocumentResponse> listBySale(Long tenantId, Long saleId) {
+        requireAccess(tenantId);
         return documentRepository.findByTenantIdAndSaleIdOrderByCreatedAtDesc(tenantId, saleId).stream().map(this::documentResponse).toList();
+    }
+
+    private boolean hasAccess(Long tenantId) {
+        return properties.isEnabled() && tenantId != null
+                && properties.getEnabledTenantIds().contains(tenantId);
+    }
+
+    private void requireAccess(Long tenantId) {
+        if (!hasAccess(tenantId)) {
+            throw new IllegalStateException("Facturacion electronica no contratada para este negocio");
+        }
     }
 
     private void apply(ElectronicDocument d, ProviderDocumentResponse r) {

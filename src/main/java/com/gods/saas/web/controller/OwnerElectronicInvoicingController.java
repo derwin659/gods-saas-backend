@@ -5,6 +5,7 @@ import com.gods.saas.domain.dto.request.UpdateElectronicInvoicingSettingsRequest
 import com.gods.saas.domain.dto.response.ElectronicDocumentResponse;
 import com.gods.saas.domain.dto.response.ElectronicDocumentFilesResponse;
 import com.gods.saas.domain.dto.response.ElectronicInvoicingSettingsResponse;
+import com.gods.saas.domain.dto.response.ElectronicInvoicingAccessResponse;
 import com.gods.saas.service.impl.ElectronicInvoicingService;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.bind.annotation.*;
@@ -16,6 +17,8 @@ public class OwnerElectronicInvoicingController {
     private final ElectronicInvoicingService service;
     public OwnerElectronicInvoicingController(ElectronicInvoicingService service) { this.service = service; }
 
+    @GetMapping("/access")
+    public ElectronicInvoicingAccessResponse access(HttpServletRequest request) { return service.getAccess(tenantId(request)); }
     @GetMapping("/settings")
     public ElectronicInvoicingSettingsResponse getSettings(HttpServletRequest request) { return service.getSettings(tenantId(request)); }
     @PutMapping("/settings")

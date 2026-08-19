@@ -112,3 +112,5 @@ electronic-invoicing:
     base-url: ${MIFACT_BASE_URL:https://demo.mifact.net.pe/api/invoiceService.svc}
     connect-timeout-seconds: ${MIFACT_CONNECT_TIMEOUT_SECONDS:10}
     read-timeout-seconds: ${MIFACT_READ_TIMEOUT_SECONDS:30}
+    # Lista blanca contractual por tenant. Ejemplo Railway: 1,7,12
+    enabled-tenant-ids: ${MIFACT_ENABLED_TENANT_IDS:}

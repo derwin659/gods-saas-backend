@@ -3,6 +3,8 @@ package com.gods.saas.config;
 import lombok.Getter;
 import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import java.util.HashSet;
+import java.util.Set;
 
 @Getter
 @Setter
@@ -12,4 +14,5 @@ public class MifactProperties {
     private String baseUrl = "https://demo.mifact.net.pe/api/invoiceService.svc";
     private int connectTimeoutSeconds = 10;
     private int readTimeoutSeconds = 30;
+    private Set<Long> enabledTenantIds = new HashSet<>();
 }
