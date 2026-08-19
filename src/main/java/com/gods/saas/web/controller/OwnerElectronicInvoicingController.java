@@ -26,6 +26,8 @@ public class OwnerElectronicInvoicingController {
     public List<ElectronicDocumentResponse> list(HttpServletRequest request, @PathVariable Long saleId) { return service.listBySale(tenantId(request), saleId); }
     @PostMapping("/documents/{documentId}/refresh")
     public ElectronicDocumentResponse refresh(HttpServletRequest request, @PathVariable Long documentId) { return service.refresh(tenantId(request), documentId); }
+    @PostMapping("/documents/{documentId}/retry")
+    public ElectronicDocumentResponse retry(HttpServletRequest request, @PathVariable Long documentId) { return service.retry(tenantId(request), documentId); }
     @GetMapping("/documents/{documentId}/files")
     public ElectronicDocumentFilesResponse files(HttpServletRequest request, @PathVariable Long documentId) { return service.getFiles(tenantId(request), documentId); }
 

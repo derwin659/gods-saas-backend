@@ -126,6 +126,33 @@ public class ElectronicInvoicingService {
         return documentResponse(documentRepository.save(document));
     }
 
+    @Transactional
+    public ElectronicDocumentResponse retry(Long tenantId, Long documentId) {
+        ElectronicDocument document = documentRepository.findById(documentId)
+                .filter(d -> d.getTenant().getId().equals(tenantId))
+                .orElseThrow(() -> new IllegalArgumentException("Comprobante no encontrado"));
+        if (document.getStatus() != ElectronicDocumentStatus.ERROR) {
+            throw new IllegalStateException("Solo se reintentan comprobantes con error tecnico");
+        }
+        ElectronicInvoicingSettings settings = settingsRepository.findByTenantId(tenantId)
+                .orElseThrow(() -> new IllegalStateException("Configuracion fiscal no encontrada"));
+        if (!settings.isEnabled()) throw new IllegalStateException("La facturacion electronica esta deshabilitada");
+        ObjectNode payload = mapper.valueToTree(document.getRequestSnapshot());
+        payload.put("TOKEN", credentials.resolveToken(settings.getCredentialAlias()));
+        document.setAttemptCount(document.getAttemptCount() + 1);
+        document.setLastAttemptAt(LocalDateTime.now());
+        document.setStatus(ElectronicDocumentStatus.PROCESSING);
+        document.setErrorMessage(null);
+        try {
+            apply(document, provider.issue(payload));
+        } catch (RuntimeException ex) {
+            document.setStatus(ElectronicDocumentStatus.ERROR);
+            document.setErrorMessage(safeMessage(ex));
+        }
+        document.setUpdatedAt(LocalDateTime.now());
+        return documentResponse(documentRepository.save(document));
+    }
+
     @Transactional(readOnly = true)
     public ElectronicDocumentFilesResponse getFiles(Long tenantId, Long documentId) {
         ElectronicDocument document = documentRepository.findById(documentId)

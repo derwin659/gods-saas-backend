@@ -76,6 +76,8 @@ public class MifactClient implements ElectronicInvoiceProvider {
 
     private String text(JsonNode node, String field) {
         JsonNode value = node.get(field);
-        return value == null || value.isNull() ? null : value.asText();
+        if (value == null || value.isNull()) return null;
+        String text = value.asText();
+        return text == null || text.isBlank() ? null : text.trim();
     }
 }
