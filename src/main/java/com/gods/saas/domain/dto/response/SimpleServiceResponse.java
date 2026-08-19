@@ -15,6 +15,7 @@ public class SimpleServiceResponse {
     private Long id;
     private String nombre;
     private BigDecimal precio;
+    private Integer duracionMinutos;
     private Boolean precioVariable;
     private Boolean activo;
     private String imageUrl;
