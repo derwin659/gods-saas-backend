@@ -114,11 +114,7 @@ public class ElectronicInvoicingService {
                 .orElseThrow(() -> new IllegalArgumentException("Comprobante no encontrado"));
         ElectronicInvoicingSettings settings = settingsRepository.findByTenantId(tenantId)
                 .orElseThrow(() -> new IllegalStateException("Configuracion fiscal no encontrada"));
-        ObjectNode payload = mapper.createObjectNode();
-        payload.put("TOKEN", credentials.resolveToken(settings.getCredentialAlias()));
-        payload.put("NUM_NIF_EMIS", settings.getFiscalRuc());
-        payload.put("COD_TIP_CPE", document.getDocumentType().getSunatCode());
-        payload.put("NUM_SERIE_CPE", document.getSeries()); payload.put("NUM_CORRE_CPE", document.getSequence());
+        ObjectNode payload = documentLookupPayload(settings, document, false);
         document.setAttemptCount(document.getAttemptCount() + 1); document.setLastAttemptAt(LocalDateTime.now());
         try { apply(document, provider.getStatus(payload)); }
         catch (RuntimeException ex) { document.setErrorMessage(safeMessage(ex)); }
@@ -160,21 +156,34 @@ public class ElectronicInvoicingService {
                 .orElseThrow(() -> new IllegalArgumentException("Comprobante no encontrado"));
         ElectronicInvoicingSettings settings = settingsRepository.findByTenantId(tenantId)
                 .orElseThrow(() -> new IllegalStateException("Configuracion fiscal no encontrada"));
-        ObjectNode payload = documentLookupPayload(settings, document);
+        ObjectNode payload = documentLookupPayload(settings, document, true);
         ProviderDocumentResponse response = provider.getDocument(payload);
         return new ElectronicDocumentFilesResponse(
                 document.getId(), document.getSeries(), document.getSequence(),
                 response.pdfBase64(), response.xmlBase64(), response.cdrBase64(),
-                response.documentUrl());
+                response.documentUrl() == null ? document.getDocumentUrl() : response.documentUrl());
     }
 
-    private ObjectNode documentLookupPayload(ElectronicInvoicingSettings settings, ElectronicDocument document) {
+    private ObjectNode documentLookupPayload(ElectronicInvoicingSettings settings,
+                                             ElectronicDocument document,
+                                             boolean includeFiles) {
         ObjectNode payload = mapper.createObjectNode();
         payload.put("TOKEN", credentials.resolveToken(settings.getCredentialAlias()));
         payload.put("NUM_NIF_EMIS", settings.getFiscalRuc());
         payload.put("COD_TIP_CPE", document.getDocumentType().getSunatCode());
         payload.put("NUM_SERIE_CPE", document.getSeries());
         payload.put("NUM_CORRE_CPE", document.getSequence());
+        Object emissionDate = document.getRequestSnapshot().get("FEC_EMIS");
+        if (emissionDate == null || emissionDate.toString().isBlank()) {
+            throw new IllegalStateException("El comprobante no conserva su fecha de emision");
+        }
+        payload.put("FEC_EMIS", emissionDate.toString());
+        if (includeFiles) {
+            payload.put("RETORNA_XML_ENVIO", "true");
+            payload.put("RETORNA_XML_CDR", "true");
+            payload.put("RETORNA_PDF", "true");
+            payload.put("COD_FORM_IMPR", "004");
+        }
         return payload;
     }
 
