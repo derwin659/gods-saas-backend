@@ -295,6 +295,15 @@ public class CashSaleServiceImpl implements CashSaleService {
         AppUser validator = userRepository.findById(userId)
                 .orElseThrow(() -> new RuntimeException("Usuario validador no encontrado"));
 
+        restoreProductStockFromSale(
+                tenantId,
+                branchId,
+                userId,
+                sale,
+                true,
+                "Restitución automática por rechazo de venta #" + sale.getId()
+        );
+
         sale.setPaymentValidationStatus("REJECTED");
         sale.setValidatedByUser(validator);
         sale.setValidatedAt(tenantTimeService.now(tenantId));
@@ -1565,7 +1574,14 @@ public class CashSaleServiceImpl implements CashSaleService {
         }
 
         // 3) Si la venta tenía productos, devolvemos el stock.
-        restoreProductStockFromSale(tenantId, branchId, userId, sale);
+        restoreProductStockFromSale(
+                tenantId,
+                branchId,
+                userId,
+                sale,
+                false,
+                "Restitución automática por eliminación de venta #" + sale.getId()
+        );
 
         // 4) Revertimos puntos del cliente si corresponde.
         if (sale.getCustomer() != null) {
@@ -1689,7 +1705,19 @@ public class CashSaleServiceImpl implements CashSaleService {
         }
     }
 
-    private void restoreProductStockFromSale(Long tenantId, Long branchId, Long userId, Sale sale) {
+    private void restoreProductStockFromSale(
+            Long tenantId,
+            Long branchId,
+            Long userId,
+            Sale sale,
+            boolean keepSaleReference,
+            String observation
+    ) {
+        boolean stockAlreadyRestored = stockMovementRepository.findBySale_Id(sale.getId()).stream()
+                .anyMatch(movement -> "DEVOLUCION".equalsIgnoreCase(movement.getTipoMovimiento()));
+        if (stockAlreadyRestored) {
+            return;
+        }
         if (sale.getItems() == null || sale.getItems().isEmpty()) {
             return;
         }
@@ -1739,9 +1767,8 @@ public class CashSaleServiceImpl implements CashSaleService {
                     .tenant(sale.getTenant())
                     .branch(branch)
                     .product(product)
-                    // No enlazar esta devolución a la venta eliminada.
-                    // Si queda sale_id, PostgreSQL no permitirá borrar la venta.
-                    .sale(null)
+                    // En rechazo conservamos sale_id para auditoría e idempotencia; al eliminar debe quedar null.
+                    .sale(keepSaleReference ? sale : null)
                     .user(user)
                     .tipoMovimiento("DEVOLUCION")
                     .cantidad(cantidad)
@@ -1749,7 +1776,7 @@ public class CashSaleServiceImpl implements CashSaleService {
                     .stockNuevo(stockNuevo)
                     .costoUnitario(item.getCostoUnitario())
                     .precioUnitario(item.getPrecioUnitario())
-                    .observacion("Restitución automática por eliminación de venta #" + sale.getId())
+                    .observacion(observation)
                     .fechaCreacion(movementTime)
                     .build();
 
