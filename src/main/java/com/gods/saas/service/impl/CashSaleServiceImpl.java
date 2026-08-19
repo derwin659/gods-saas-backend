@@ -76,6 +76,7 @@ public class CashSaleServiceImpl implements CashSaleService {
     private final GeneralAuditService generalAuditService;
     private final BarberServiceCommissionService barberServiceCommissionService;
     private final AdminPermissionService adminPermissionService;
+    private final ElectronicDocumentRepository electronicDocumentRepository;
 
     @Override
     public SaleResponse createCashSale(Long tenantId, Long branchId, Long userId, CreateCashSaleRequest request) {
@@ -310,6 +311,15 @@ public class CashSaleServiceImpl implements CashSaleService {
     @Transactional
     public SaleResponse updateSale(Long tenantId, Long branchId, Long userId, Long saleId, UpdateSaleRequest request) {
         requireOwnerForSensitiveSaleAction(tenantId, userId);
+        boolean hasAcceptedElectronicDocument = electronicDocumentRepository
+                .findByTenantIdAndSaleIdOrderByCreatedAtDesc(tenantId, saleId)
+                .stream()
+                .anyMatch(document -> document.getStatus() == com.gods.saas.invoicing.ElectronicDocumentStatus.ACCEPTED
+                        || document.getStatus() == com.gods.saas.invoicing.ElectronicDocumentStatus.ACCEPTED_WITH_OBSERVATIONS);
+        if (hasAcceptedElectronicDocument) {
+            throw new IllegalStateException(
+                    "No se puede editar una venta con comprobante electronico aceptado. Emite una nota de credito o anulacion.");
+        }
         Sale sale = saleRepository.findByIdAndTenant_IdAndBranch_Id(saleId, tenantId, branchId)
                 .orElseThrow(() -> new RuntimeException("Venta no encontrada"));
 
@@ -1531,6 +1541,16 @@ public class CashSaleServiceImpl implements CashSaleService {
     @Transactional
     public void deleteSale(Long tenantId, Long branchId, Long userId, Long saleId, String auditReason) {
         requireOwnerForSensitiveSaleAction(tenantId, userId);
+
+        boolean hasAcceptedElectronicDocument = electronicDocumentRepository
+                .findByTenantIdAndSaleIdOrderByCreatedAtDesc(tenantId, saleId)
+                .stream()
+                .anyMatch(document -> document.getStatus() == com.gods.saas.invoicing.ElectronicDocumentStatus.ACCEPTED
+                        || document.getStatus() == com.gods.saas.invoicing.ElectronicDocumentStatus.ACCEPTED_WITH_OBSERVATIONS);
+        if (hasAcceptedElectronicDocument) {
+            throw new IllegalStateException(
+                    "No se puede eliminar una venta con comprobante electronico aceptado. Emite una nota de credito o anulacion.");
+        }
 
         // 1) Cargamos venta con items/productos/cliente/caja/cita.
         Sale sale = saleRepository.findForDeleteWithItems(saleId, tenantId, branchId)
