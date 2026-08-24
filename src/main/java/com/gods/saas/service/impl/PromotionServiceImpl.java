@@ -6,10 +6,10 @@ import com.gods.saas.domain.dto.response.PromotionResponse;
 import com.gods.saas.domain.enums.PromotionRedirectType;
 import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.*;
-import com.gods.saas.service.impl.impl.NotificationService;
 import com.gods.saas.service.impl.impl.PromotionService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
@@ -27,7 +27,7 @@ public class PromotionServiceImpl implements PromotionService {
     private final PromotionRepository promotionRepository;
     private final TenantRepository tenantRepository;
     private final BranchRepository branchRepository;
-    private final NotificationService notificationService;
+    private final ApplicationEventPublisher eventPublisher;
     private final CloudinaryStorageService cloudinaryStorageService;
 
     @Override
@@ -112,7 +112,7 @@ public class PromotionServiceImpl implements PromotionService {
         Promotion saved = promotionRepository.save(promotion);
 
         if (Boolean.TRUE.equals(request.getSendNotification())) {
-            notificationService.notifyPromotionCreated(saved, true);
+            eventPublisher.publishEvent(new PromotionNotificationRequestedEvent(saved.getId()));
         }
 
         return toOwnerResponse(saved);
@@ -161,7 +161,7 @@ public class PromotionServiceImpl implements PromotionService {
         Promotion promotion = promotionRepository.findByIdAndTenant_Id(promotionId, tenantId)
                 .orElseThrow(() -> new EntityNotFoundException("Promoción no encontrada"));
 
-        notificationService.notifyPromotionCreated(promotion, true);
+        eventPublisher.publishEvent(new PromotionNotificationRequestedEvent(promotion.getId()));
         return toOwnerResponse(promotion);
     }
     @Override
