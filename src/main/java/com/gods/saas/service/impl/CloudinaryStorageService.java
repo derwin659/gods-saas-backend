@@ -127,6 +127,20 @@ public class CloudinaryStorageService {
         }
     }
 
+    public UploadResult uploadFeaturedCustomerLogo(MultipartFile file) {
+        validateImage(file);
+        try {
+            Map<?, ?> result = cloudinary.uploader().upload(file.getBytes(), ObjectUtils.asMap(
+                    "folder", "super-gods/marketing/featured-customers",
+                    "resource_type", "image",
+                    "public_id", "customer_logo_" + System.currentTimeMillis(),
+                    "overwrite", false
+            ));
+            return new UploadResult(String.valueOf(result.get("secure_url")), String.valueOf(result.get("public_id")));
+        } catch (IOException e) {
+            throw new IllegalStateException("No se pudo subir el logo del cliente", e);
+        }
+    }
     public UploadResult uploadShowcaseImage(Long tenantId, Long professionalId, MultipartFile file) {
         validateImage(file);
         try (ShowcaseUploadRateLimitService.Lease ignored =
