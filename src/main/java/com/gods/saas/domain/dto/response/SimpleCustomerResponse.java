@@ -13,5 +13,7 @@ import lombok.NoArgsConstructor;
 public class SimpleCustomerResponse {
     private Long id;
     private String nombres;
+    private String apellidos;
+    private String nombreCompleto;
     private String telefono;
 }

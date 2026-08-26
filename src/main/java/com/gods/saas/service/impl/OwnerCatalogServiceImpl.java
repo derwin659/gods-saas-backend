@@ -18,10 +18,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 @Service
 @RequiredArgsConstructor
@@ -59,23 +56,12 @@ public class OwnerCatalogServiceImpl implements OwnerCatalogService {
 
         Pageable pageable = PageRequest.of(0, 10);
 
-        List<Customer> byName = customerRepository
-                .findByTenant_IdAndNombresContainingIgnoreCaseOrderByNombresAsc(tenantId, q, pageable);
-
-        List<Customer> byPhone = customerRepository
-                .findByTenant_IdAndTelefonoContainingOrderByNombresAsc(tenantId, q, pageable);
-
-        Map<Long, Customer> unique = new LinkedHashMap<>();
-        for (Customer c : byName) unique.put(c.getId(), c);
-        for (Customer c : byPhone) unique.put(c.getId(), c);
-
-        List<SimpleCustomerResponse> result = new ArrayList<>();
-        for (Customer c : unique.values()) {
-            result.add(mapCustomer(c));
-        }
-        return result;
+        return customerRepository
+                .searchByNameOrPhone(tenantId, q, pageable)
+                .stream()
+                .map(this::mapCustomer)
+                .toList();
     }
-
     private SimpleBarberResponse mapBarber(AppUser user) {
         return SimpleBarberResponse.builder()
                 .id(user.getId())
@@ -102,9 +88,14 @@ public class OwnerCatalogServiceImpl implements OwnerCatalogService {
     }
 
     private SimpleCustomerResponse mapCustomer(Customer customer) {
+        String nombres = customer.getNombres() == null ? "" : customer.getNombres().trim();
+        String apellidos = customer.getApellidos() == null ? "" : customer.getApellidos().trim();
+        String nombreCompleto = (nombres + " " + apellidos).trim();
         return SimpleCustomerResponse.builder()
                 .id(customer.getId())
-                .nombres(customer.getNombres())
+                .nombres(nombres)
+                .apellidos(apellidos)
+                .nombreCompleto(nombreCompleto.isBlank() ? "Cliente" : nombreCompleto)
                 .telefono(customer.getTelefono())
                 .build();
     }
