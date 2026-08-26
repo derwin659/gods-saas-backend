@@ -58,14 +58,19 @@ public class PushNotificationSenderFirebaseImpl implements PushNotificationSende
                     visual.setImage(imageUrl);
                     messageBuilder
                             .putData("imageUrl", imageUrl)
+                            .putData("image", imageUrl)
                             .setAndroidConfig(AndroidConfig.builder()
+                                    .setPriority(AndroidConfig.Priority.HIGH)
                                     .setNotification(AndroidNotification.builder()
+                                            .setChannelId("pushnotificationapp")
                                             .setImage(imageUrl)
                                             .build())
                                     .build())
                             .setApnsConfig(ApnsConfig.builder()
+                                    .putHeader("apns-priority", "10")
                                     .setAps(Aps.builder()
                                             .setMutableContent(true)
+                                            .setContentAvailable(true)
                                             .build())
                                     .setFcmOptions(ApnsFcmOptions.builder()
                                             .setImage(imageUrl)
@@ -81,10 +86,11 @@ public class PushNotificationSenderFirebaseImpl implements PushNotificationSende
                 successIds.add(firebaseMessageId);
 
                 log.info(
-                        "FIREBASE PUSH SENT => notificationId={}, deviceTokenId={}, firebaseMessageId={}",
+                        "FIREBASE PUSH SENT => notificationId={}, deviceTokenId={}, firebaseMessageId={}, imageUrl={}",
                         notification.getId(),
                         deviceToken.getId(),
-                        firebaseMessageId
+                        firebaseMessageId,
+                        imageUrl
                 );
             } catch (Exception e) {
                 log.error(
