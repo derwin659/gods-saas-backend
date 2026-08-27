@@ -93,6 +93,12 @@ public class ClientHomeResponse {
     @Builder
     public static class BenefitsResponse {
         private String nivel;
+        private String nivelColor;
+        private String nivelDescripcion;
+        private Integer nivelMinPoints;
+        private String siguienteNivel;
+        private Integer puntosParaSiguienteNivel;
+        private List<LoyaltyTierConfig> niveles;
         private Integer cantidadCanjes;
         private Integer puntosMes;
         private Integer racha;

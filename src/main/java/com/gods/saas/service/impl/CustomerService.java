@@ -28,6 +28,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.util.Collections;
+import java.util.Comparator;
 import java.util.List;
 import java.util.LinkedHashMap;
 import java.util.Objects;
@@ -773,16 +774,42 @@ public class CustomerService {
         int cantidadCanjes = (int) rewardRedemptionRepository
                 .countCompletedOrGeneratedRedemptions(tenantId, customerId);
 
-        LoyaltyTierConfig tier = ownerLoyaltySettingsService.resolveTier(tenantId, acumulados);
+        List<LoyaltyTierConfig> niveles = ownerLoyaltySettingsService.getSettings(tenantId)
+                .getTiers()
+                .stream()
+                .filter(tier -> !Boolean.FALSE.equals(tier.getActive()))
+                .sorted(Comparator.comparingInt(tier -> tier.getMinPoints() == null ? 0 : tier.getMinPoints()))
+                .toList();
+
+        LoyaltyTierConfig actual = null;
+        LoyaltyTierConfig siguiente = null;
+        for (LoyaltyTierConfig tier : niveles) {
+            int minimo = tier.getMinPoints() == null ? 0 : tier.getMinPoints();
+            if (acumulados >= minimo) {
+                actual = tier;
+            } else {
+                siguiente = tier;
+                break;
+            }
+        }
+
+        int puntosSiguiente = siguiente == null
+                ? 0
+                : Math.max((siguiente.getMinPoints() == null ? 0 : siguiente.getMinPoints()) - acumulados, 0);
 
         return ClientHomeResponse.BenefitsResponse.builder()
-                .nivel(tier != null ? tier.getName() : "Sin categoría")
+                .nivel(actual != null ? actual.getName() : "Sin categoría")
+                .nivelColor(actual != null ? actual.getColorHex() : "#64748B")
+                .nivelDescripcion(actual != null ? actual.getDescription() : null)
+                .nivelMinPoints(actual != null && actual.getMinPoints() != null ? actual.getMinPoints() : 0)
+                .siguienteNivel(siguiente != null ? siguiente.getName() : null)
+                .puntosParaSiguienteNivel(puntosSiguiente)
+                .niveles(niveles)
                 .cantidadCanjes(cantidadCanjes)
                 .puntosMes(acumulados)
                 .racha(0)
                 .build();
     }
-
     public Integer obtenerPuntosDisponiblesReales(Long tenantId, Long customerId) {
         return loyaltyAccountRepository
                 .findByTenant_IdAndCustomer_Id(tenantId, customerId)
