@@ -24,7 +24,12 @@ public class IaAnaliticaUxMapper {
                 .limit(3)
                 .map(c -> CorteUx.builder()
                         .nombre(c.getNombre())
+                        .nombreVisible(c.getNombreVisible())
                         .score(c.getScore())
+                        .razones(c.getRazones())
+                        .mantenimiento(c.getMantenimiento())
+                        .largoMinimo(c.getLargoMinimo())
+                        .vistaGenerativaDisponible(c.getVistaGenerativaDisponible())
                         .build())
                 .toList();
 
@@ -35,6 +40,7 @@ public class IaAnaliticaUxMapper {
 
         return UxAnalisisResponse.builder()
                 .formaRostro(forma)
+                .cabello(ia.getCabello())
                 .mensaje(mensaje)
                 .cortesRecomendados(cortes)
                 .onduladoApto(ia.getCabello().getOndulado().getApto())

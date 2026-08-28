@@ -13,6 +13,8 @@ public class UxAnalisisResponse {
 
     private FormaRostroUx formaRostro;
 
+    private CabelloDto cabello;
+
     private String mensaje;
 
     private List<CorteUx> cortesRecomendados;
