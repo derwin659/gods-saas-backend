@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 @Slf4j
@@ -26,6 +27,9 @@ public class PantallaIAService {
     private final SesionIAService sesionService;
     private final PantallaSocketService socketService;
 
+    public List<Pantalla> listarPantallas(Long tenantId, Long sucursalId) {
+        return pantallaRepo.findByTenantIdAndSucursalIdOrderByIdAsc(tenantId, sucursalId);
+    }
     // La TV pide la siguiente sesión
     public SesionIa obtenerSiguienteSesion(String pantallaId) {
 

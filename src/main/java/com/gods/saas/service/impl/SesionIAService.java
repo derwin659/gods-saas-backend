@@ -144,7 +144,11 @@ public class SesionIAService {
         try {
             response = iaAnaliticaClient.analizarImagen(request);
         } catch (Exception e) {
-            response = construirRespuestaMock();
+            log.error("La IA analitica no pudo procesar la sesion {}", sesionId, e);
+            throw new IllegalStateException(
+                    "No se pudo analizar la fotografia. Verifica la imagen e intenta nuevamente.",
+                    e
+            );
         }
 
         sesion.setResultadoAnalitico(mapper.writeValueAsString(response));
@@ -326,8 +330,12 @@ public class SesionIAService {
                     );
 
             CorteDTO corte = objectMapper.convertValue(seleccion.get("corte"), CorteDTO.class);
-            corte.setNombre("mid fade");
-            corte.setTipo("MID_FADE");
+            if (corte == null || corte.getNombre() == null || corte.getNombre().isBlank()) {
+                throw new IllegalStateException("La sesion no tiene un corte seleccionado.");
+            }
+            if (corte.getTipo() == null || corte.getTipo().isBlank()) {
+                corte.setTipo(corte.getNombre());
+            }
 
             TinteDTO tinte = objectMapper.convertValue(seleccion.get("tinte"), TinteDTO.class);
             OnduladoDTO ondulado = objectMapper.convertValue(seleccion.get("ondulado"), OnduladoDTO.class);
@@ -384,7 +392,7 @@ public class SesionIAService {
             );
 
         } catch (Exception e) {
-           e.getMessage();
+            log.error("Fallo la generacion de imagen para la sesion {}", sesionId, e);
         }
     }
 

@@ -6,11 +6,14 @@ import com.gods.saas.domain.dto.request.GenerarImagenRequest;
 import com.gods.saas.domain.dto.request.SeleccionClienteRequest;
 import com.gods.saas.domain.dto.response.SeleccionClienteResponse;
 import com.gods.saas.domain.dto.response.UxAnalisisResponse;
+import com.gods.saas.domain.model.Pantalla;
 import com.gods.saas.domain.model.SesionIa;
+import com.gods.saas.service.impl.PantallaIAService;
 import com.gods.saas.service.impl.SesionIAService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.Map;
 
 @RestController
@@ -19,7 +22,15 @@ import java.util.Map;
 public class IaSesionController {
 
     private final SesionIAService sesionService;
+    private final PantallaIAService pantallaService;
 
+    @GetMapping("/pantallas")
+    public List<Pantalla> listarPantallas(
+            @RequestAttribute("tenantId") Long tenantId,
+            @RequestAttribute("branchId") Long branchId
+    ) {
+        return pantallaService.listarPantallas(tenantId, branchId);
+    }
     // =====================================================
     // 1️⃣ CREAR SESIÓN (recepción / barbero)
     // =====================================================
