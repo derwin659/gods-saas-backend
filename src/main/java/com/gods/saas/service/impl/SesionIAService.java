@@ -19,6 +19,7 @@ import com.gods.saas.socket.EventoSocketPublisher;
 import com.gods.saas.utils.EstadoPantalla;
 import com.gods.saas.utils.EstadoSesion;
 import com.gods.saas.utils.TipoEventoSocket;
+import feign.FeignException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -145,10 +146,18 @@ public class SesionIAService {
             response = iaAnaliticaClient.analizarImagen(request);
         } catch (Exception e) {
             log.error("La IA analitica no pudo procesar la sesion {}", sesionId, e);
-            throw new IllegalStateException(
-                    "No se pudo analizar la fotografia. Verifica la imagen e intenta nuevamente.",
-                    e
-            );
+            String message = "No se pudo analizar la fotografia. Verifica la imagen e intenta nuevamente.";
+            if (e instanceof FeignException feignException && !feignException.contentUTF8().isBlank()) {
+                try {
+                    String detail = mapper.readTree(feignException.contentUTF8()).path("detail").asText();
+                    if (!detail.isBlank()) {
+                        message = detail;
+                    }
+                } catch (JsonProcessingException ignored) {
+                    log.debug("La IA analitica devolvio un error sin detalle JSON parseable");
+                }
+            }
+            throw new IllegalStateException(message, e);
         }
 
         sesion.setResultadoAnalitico(mapper.writeValueAsString(response));
