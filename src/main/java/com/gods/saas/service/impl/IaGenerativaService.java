@@ -94,7 +94,7 @@ public class IaGenerativaService {
                     colorTinte
             );
 
-            log.info("IA REQUEST FINAL -> {}", generarImagenRequest);
+            log.info("Solicitud IA ilustrativa preparada para {} vistas", generarImagenRequest.getVistas().size());
 
             aiPodOrchestratorService.ensurePodReady();
             aiPodOrchestratorService.onRequestStart();
@@ -102,7 +102,7 @@ public class IaGenerativaService {
             try {
                 GenerarImagenResponse response = iaIlustrativaClient.generarImagen(generarImagenRequest);
 
-                log.info("IA RESPONSE FINAL -> {}", response);
+                log.info("IA ilustrativa respondio para la sesion {}", response != null ? response.getSesionId() : "sin-id");
 
                 if (response == null || response.getImagenes() == null) {
                     return GenerarPreviewResponse.builder()

@@ -354,7 +354,7 @@ public class SesionIAService {
             // =========================
             GenerarImagenRequest request = new GenerarImagenRequest();
             request.setSesionId(sesionId);
-            log.info("frontal {} ", generarImagenRequest.getImagenes().getFrontal().toString());
+            log.info("Generando imagen IA para la sesion {}", sesionId);
             request.setImagenes(generarImagenRequest.getImagenes());
             request.setCorte(corte);
             request.setTinte(tinte);
@@ -365,10 +365,10 @@ public class SesionIAService {
             // =========================
             // 3️⃣ 🔥 LLAMADA REAL A PYTHON
             // =========================
-            log.info("request para generar imagen{}",request.toString());
+            log.info("Solicitud ilustrativa enviada para {} vistas", request.getVistas().size());
             GenerarImagenResponse response =
                     iaIlustrativaClient.generarImagen(request);
-            log.info("respuesta de python imagen{}",response.toString());
+            log.info("Respuesta ilustrativa recibida para la sesion {}", sesionId);
             // =========================
             // 4️⃣ Guardar resultado
             // =========================
