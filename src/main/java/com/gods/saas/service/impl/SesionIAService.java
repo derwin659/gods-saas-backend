@@ -2,6 +2,9 @@ package com.gods.saas.service.impl;
 
 import com.gods.saas.domain.dto.response.*;
 import com.gods.saas.domain.model.AiRecommendation;
+import com.gods.saas.domain.model.AiGenerationJob;
+import com.gods.saas.domain.repository.AiGenerationJobRepository;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Propagation;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -23,7 +26,6 @@ import feign.FeignException;
 import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 
@@ -43,6 +45,9 @@ public class SesionIAService {
     private final PantallaSocketService pantallaSocketService;
     private final IaAnaliticaClient iaAnaliticaClient;
     private final IaIlustrativaClient iaIlustrativaClient;
+    private final AiPodOrchestratorService aiPodOrchestratorService;
+    private final AiGenerationJobRepository aiGenerationJobRepository;
+    private final ApplicationEventPublisher applicationEventPublisher;
     private final ObjectMapper objectMapper;
 
     private final ObjectMapper mapper = new ObjectMapper();
@@ -284,7 +289,7 @@ public class SesionIAService {
     // SELECCIONADA -> GENERANDO_IMAGEN -> MOSTRANDO_EN_TV
     // (vuelve a MOSTRANDO_EN_TV porque ahora está mostrando el resultado)
     // =========================================================
-    public void generarPreview(String sesionId, GenerarImagenRequest generarImagenRequest) throws JsonProcessingException {
+    public String generarPreview(String sesionId, GenerarImagenRequest generarImagenRequest) throws JsonProcessingException {
 
         SesionIa sesion = obtenerSesion(sesionId);
         validarEstado(sesion, EstadoSesion.SELECCIONADA);
@@ -318,12 +323,39 @@ public class SesionIAService {
 
         sesionRepo.saveAndFlush(sesion);
 
-        ejecutarGeneracionImagenAsync(sesionId, generarImagenRequest);
+        AiGenerationJob job = new AiGenerationJob();
+        job.setSessionId(sesionId);
+        job.setTenantId(sesion.getTenantId());
+        job.setBranchId(sesion.getSucursalId());
+        job.setStatus("QUEUED");
+        job = aiGenerationJobRepository.save(job);
+
+        applicationEventPublisher.publishEvent(
+                new AiGenerationRequestedEvent(job.getId(), sesionId, generarImagenRequest)
+        );
+        return job.getId();
     }
 
-    @Async
-    public void ejecutarGeneracionImagenAsync(String sesionId, GenerarImagenRequest generarImagenRequest) {
-        log.info("Ejecutando generacion de imagen {}", generarImagenRequest.getImagenes().toString());
+    public AiGenerationJob obtenerTrabajoGeneracion(String sesionId, String jobId) {
+        AiGenerationJob job = aiGenerationJobRepository.findById(jobId)
+                .orElseThrow(() -> new IllegalArgumentException("No existe el trabajo de IA " + jobId));
+        if (!job.getSessionId().equals(sesionId)) {
+            throw new IllegalArgumentException("El trabajo no pertenece a la sesion indicada");
+        }
+        return job;
+    }
+    public void ejecutarGeneracionImagen(
+            String jobId,
+            String sesionId,
+            GenerarImagenRequest generarImagenRequest
+    ) {
+        AiGenerationJob job = aiGenerationJobRepository.findById(jobId)
+                .orElseThrow(() -> new IllegalStateException("No existe el trabajo de IA " + jobId));
+        job.markRunning();
+        aiGenerationJobRepository.saveAndFlush(job);
+
+        boolean requestStarted = false;
+        log.info("Ejecutando trabajo de IA ilustrativa {} para la sesion {}", jobId, sesionId);
 
         try {
             SesionIa sesion = obtenerSesion(sesionId);
@@ -366,6 +398,9 @@ public class SesionIAService {
             // 3️⃣ 🔥 LLAMADA REAL A PYTHON
             // =========================
             log.info("Solicitud ilustrativa enviada para {} vistas", request.getVistas().size());
+            aiPodOrchestratorService.ensurePodReady();
+            aiPodOrchestratorService.onRequestStart();
+            requestStarted = true;
             GenerarImagenResponse response =
                     iaIlustrativaClient.generarImagen(request);
             log.info("Respuesta ilustrativa recibida para la sesion {}", sesionId);
@@ -400,8 +435,16 @@ public class SesionIAService {
                     )
             );
 
+            job.markCompleted();
+            aiGenerationJobRepository.saveAndFlush(job);
         } catch (Exception e) {
-            log.error("Fallo la generacion de imagen para la sesion {}", sesionId, e);
+            job.markFailed(e.getMessage());
+            aiGenerationJobRepository.saveAndFlush(job);
+            log.error("Fallo el trabajo de IA ilustrativa {} para la sesion {}", jobId, sesionId, e);
+        } finally {
+            if (requestStarted) {
+                aiPodOrchestratorService.onRequestEnd();
+            }
         }
     }
 

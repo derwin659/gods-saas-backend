@@ -7,10 +7,12 @@ import com.gods.saas.domain.dto.request.SeleccionClienteRequest;
 import com.gods.saas.domain.dto.response.SeleccionClienteResponse;
 import com.gods.saas.domain.dto.response.UxAnalisisResponse;
 import com.gods.saas.domain.model.Pantalla;
+import com.gods.saas.domain.model.AiGenerationJob;
 import com.gods.saas.domain.model.SesionIa;
 import com.gods.saas.service.impl.PantallaIAService;
 import com.gods.saas.service.impl.SesionIAService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -99,10 +101,32 @@ public class IaSesionController {
     // SELECCIONADA → GENERANDO_IMAGEN → MOSTRANDO_EN_TV
     // =====================================================
     @PostMapping("/{sesionId}/preview")
-    public void generarPreview(@PathVariable String sesionId,@RequestBody GenerarImagenRequest generarImagenRequest) throws JsonProcessingException {
-        sesionService.generarPreview(sesionId, generarImagenRequest);
+    public ResponseEntity<Map<String, Object>> generarPreview(@PathVariable String sesionId,@RequestBody GenerarImagenRequest generarImagenRequest) throws JsonProcessingException {
+        String jobId = sesionService.generarPreview(sesionId, generarImagenRequest);
+        return ResponseEntity.accepted().body(Map.of(
+                "jobId", jobId,
+                "sessionId", sesionId,
+                "status", "QUEUED"
+        ));
     }
 
+    @GetMapping("/{sesionId}/preview-jobs/{jobId}")
+    public Map<String, Object> obtenerEstadoPreview(
+            @PathVariable String sesionId,
+            @PathVariable String jobId
+    ) {
+        AiGenerationJob job = sesionService.obtenerTrabajoGeneracion(sesionId, jobId);
+        Map<String, Object> response = new java.util.LinkedHashMap<>();
+        response.put("jobId", job.getId());
+        response.put("sessionId", job.getSessionId());
+        response.put("status", job.getStatus());
+        response.put("attempts", job.getAttempts());
+        response.put("createdAt", job.getCreatedAt());
+        response.put("startedAt", job.getStartedAt());
+        response.put("completedAt", job.getCompletedAt());
+        response.put("error", job.getErrorMessage());
+        return response;
+    }
     // =====================================================
     // 7️⃣ FINALIZAR SESIÓN
     // MOSTRANDO_EN_TV → FINALIZADA
