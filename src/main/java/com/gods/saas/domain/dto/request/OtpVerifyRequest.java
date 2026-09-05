@@ -6,4 +6,5 @@ import lombok.Data;
 public class OtpVerifyRequest {
     private Long otpId;
     private String code;
+    private String newPassword;
 }

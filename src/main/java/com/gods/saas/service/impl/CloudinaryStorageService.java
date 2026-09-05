@@ -12,6 +12,7 @@ import java.io.InputStream;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 @Service
 public class CloudinaryStorageService {
@@ -223,6 +224,78 @@ public class CloudinaryStorageService {
         }
     }
 
+    public UploadResult uploadAiInputImage(
+            Long tenantId,
+            String sessionId,
+            String view,
+            byte[] imageBytes
+    ) {
+        validateAiImageBytes(imageBytes);
+        String safeSession = sanitizePathSegment(sessionId, "session");
+        String safeView = sanitizePathSegment(view, "view");
+        String folder = "super-gods/tenants/" + tenantId + "/ai/inputs/" + safeSession;
+
+        try {
+            Map<?, ?> result = cloudinary.uploader().upload(
+                    imageBytes,
+                    ObjectUtils.asMap(
+                            "folder", folder,
+                            "resource_type", "image",
+                            "type", "authenticated",
+                            "public_id", safeView + "_" + UUID.randomUUID(),
+                            "overwrite", false
+                    )
+            );
+            String publicId = String.valueOf(result.get("public_id"));
+            String format = result.get("format") == null ? null : String.valueOf(result.get("format"));
+            String signedUrl = cloudinary.url()
+                    .resourceType("image")
+                    .type("authenticated")
+                    .signed(true)
+                    .secure(true)
+                    .format(format)
+                    .generate(publicId);
+            return new UploadResult(signedUrl, publicId);
+        } catch (IOException e) {
+            throw new IllegalStateException("No se pudo preparar la imagen temporal para la IA", e);
+        }
+    }
+
+    public void deleteAiInputImage(String publicId) {
+        if (publicId == null || publicId.isBlank()) return;
+        try {
+            cloudinary.uploader().destroy(
+                    publicId,
+                    ObjectUtils.asMap(
+                            "resource_type", "image",
+                            "type", "authenticated",
+                            "invalidate", true
+                    )
+            );
+        } catch (IOException e) {
+            throw new IllegalStateException("No se pudo eliminar la imagen temporal de IA", e);
+        }
+    }
+
+    private void validateAiImageBytes(byte[] bytes) {
+        if (bytes == null || bytes.length == 0) {
+            throw new IllegalArgumentException("La imagen para la IA es obligatoria");
+        }
+        if (bytes.length > MAX_FILE_SIZE_BYTES) {
+            throw new IllegalArgumentException("Cada imagen para la IA no debe pesar más de 5 MB");
+        }
+        boolean jpeg = startsWith(bytes, 0xFF, 0xD8, 0xFF);
+        boolean png = startsWith(bytes, 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A);
+        boolean webp = hasAscii(bytes, 0, "RIFF") && hasAscii(bytes, 8, "WEBP");
+        if (!jpeg && !png && !webp) {
+            throw new IllegalArgumentException("La imagen para la IA debe ser JPG, PNG o WEBP válido");
+        }
+    }
+
+    private String sanitizePathSegment(String value, String fallback) {
+        String normalized = value == null ? "" : value.replaceAll("[^a-zA-Z0-9_-]", "_");
+        return normalized.isBlank() ? fallback : normalized.substring(0, Math.min(normalized.length(), 80));
+    }
     private void validateVideo(MultipartFile file) {
         validateBasicFile(file, MAX_VIDEO_SIZE_BYTES, "El video es obligatorio", "El video no debe pesar más de 35 MB");
         String contentType = normalizedContentType(file);

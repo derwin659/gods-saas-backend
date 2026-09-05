@@ -3,11 +3,9 @@ package com.gods.saas.domain.dto.request;
 import lombok.Data;
 
 @Data
-public class ClientRegisterRequest {
+public class ClientLoginRequest {
     private Long tenantId;
     private String phone;
     private String password;
-    private String nombres;
-    private String apellidos;
     private String locale;
 }

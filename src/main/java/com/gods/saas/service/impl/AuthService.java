@@ -21,6 +21,7 @@ public class AuthService {
     private final CustomerRepository customerRepository;
     private final OtpCodeRepository otpCodeRepository;
     private final JwtService jwtService;
+    private final OtpRateLimitService otpRateLimitService;
 
     /**
      * 1) Enviar OTP (generar y guardar)
@@ -28,6 +29,9 @@ public class AuthService {
 
     @Transactional
     public void sendOtp(SendOtpRequest req) {
+
+        LocalDateTime now = LocalDateTime.now();
+        otpRateLimitService.assertCanSend(req.getTenantId(), req.getPhone(), now);
 
         // 1. Generar código OTP
         String code = String.format("%06d", new Random().nextInt(999999));
@@ -38,8 +42,8 @@ public class AuthService {
                 .tenantId(req.getTenantId())
                 .code(code)
                 .used(false)
-                .createdAt(LocalDateTime.now())
-                .expiresAt(LocalDateTime.now().plusMinutes(20))
+                .createdAt(now)
+                .expiresAt(now.plusMinutes(20))
                 .build();
 
         otpCodeRepository.save(otp);
@@ -130,6 +134,9 @@ public class AuthService {
 
         customerRepository.save(user);
 
+        LocalDateTime now = LocalDateTime.now();
+        otpRateLimitService.assertCanSend(user.getTenant().getId(), nuevoTelefono, now);
+
         // Generar OTP para el nuevo número
         String code = String.format("%06d", new Random().nextInt(999999));
         OtpCode otp = OtpCode.builder()
@@ -137,8 +144,8 @@ public class AuthService {
                 .tenantId(user.getTenant().getId())
                 .code(code)
                 .used(false)
-                .createdAt(LocalDateTime.now())
-                .expiresAt(LocalDateTime.now().plusMinutes(20))
+                .createdAt(now)
+                .expiresAt(now.plusMinutes(20))
                 .build();
 
         otpCodeRepository.save(otp);

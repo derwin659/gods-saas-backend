@@ -19,6 +19,7 @@ import jakarta.transaction.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
@@ -56,6 +57,8 @@ public class CustomerService {
     private final CloudinaryStorageService cloudinaryStorageService;
     private final TenantSettingsRepository tenantSettingsRepository;
     private final OwnerLoyaltySettingsService ownerLoyaltySettingsService;
+    private final PasswordEncoder passwordEncoder;
+    private final OtpRateLimitService otpRateLimitService;
 
     @Transactional
     public Customer registrarCliente(VentaRapidaRequest req) {
@@ -323,14 +326,15 @@ public class CustomerService {
 
     @Transactional
     public void solicitarCambioTelefono(String nuevoTelefono) {
+        LocalDateTime now = LocalDateTime.now();
         String code = String.format("%06d", new Random().nextInt(999999));
 
         OtpCode otp = OtpCode.builder()
                 .phone(nuevoTelefono)
                 .code(code)
                 .used(false)
-                .createdAt(LocalDateTime.now())
-                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .createdAt(now)
+                .expiresAt(now.plusMinutes(5))
                 .build();
 
         otpCodeRepository.save(otp);
@@ -381,14 +385,19 @@ public class CustomerService {
         customer.setFechaActualizacion(LocalDateTime.now());
         customerRepository.save(customer);
 
+        Long tenantId = customer.getTenant().getId();
+        LocalDateTime now = LocalDateTime.now();
+        otpRateLimitService.assertCanSend(tenantId, req.getNewPhone(), now);
+
         String code = String.format("%06d", new Random().nextInt(999999));
 
         OtpCode otp = OtpCode.builder()
                 .phone(req.getNewPhone())
+                .tenantId(tenantId)
                 .code(code)
                 .used(false)
-                .createdAt(LocalDateTime.now())
-                .expiresAt(LocalDateTime.now().plusMinutes(5))
+                .createdAt(now)
+                .expiresAt(now.plusMinutes(5))
                 .build();
 
         otpCodeRepository.save(otp);
@@ -399,7 +408,7 @@ public class CustomerService {
     }
 
     @Transactional
-    public ClientLoginResponse verifyLoginOtp(Long otpId, String code) {
+    public ClientLoginResponse verifyLoginOtp(Long otpId, String code, String newPassword) {
         if (code == null || !code.trim().matches("\\d{4,10}")) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Ingresa el codigo recibido.");
         }
@@ -425,7 +434,8 @@ public class CustomerService {
         }
 
         Customer customer = customerRepository.findByTenantIdAndTelefonoWithTenant(tenantId, otp.getPhone())
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cliente no encontrado"));
+                .orElseGet(() -> customerRepository.findByPhonePendienteAndTenantId(otp.getPhone(), tenantId)
+                        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Cliente no encontrado")));
 
         if (!twilioVerifyOtpService.checkCode(customer.getTenant(), otp.getPhone(), code.trim())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Codigo incorrecto o vencido.");
@@ -488,12 +498,46 @@ public class CustomerService {
     }
 
     @Transactional
+    public ClientLoginResponse loginWithPassword(Long tenantId, String phone, String password, String locale) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tenant no encontrado"));
+        InternationalPhoneService.NormalizedPhone normalized = internationalPhoneService.normalize(tenant, phone);
+        Customer customer = findActiveCustomerByPhone(tenant, normalized);
+        String rawPassword = requirePassword(password);
+
+        if (!Boolean.TRUE.equals(customer.getAppActivated()) || !customer.isPhoneVerified()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Activa tu cuenta con el codigo enviado antes de ingresar con contraseña."
+            );
+        }
+        if (customer.getPasswordHash() == null || customer.getPasswordHash().isBlank()) {
+            throw new ResponseStatusException(
+                    HttpStatus.FORBIDDEN,
+                    "Configura tu contraseña usando recuperacion de cuenta."
+            );
+        }
+        if (!passwordEncoder.matches(rawPassword, customer.getPasswordHash())) {
+            throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Telefono o contraseña incorrectos.");
+        }
+
+        String effectiveLocale = RegionalDefaults.normalizeLocale(locale, tenant.getPais());
+        if (!effectiveLocale.equals(customer.getPreferredLocale())) {
+            customer.setPreferredLocale(effectiveLocale);
+            customer.setFechaActualizacion(LocalDateTime.now());
+            customer = customerRepository.save(customer);
+        }
+
+        return buildClientLoginResponse(customer);
+    }
+    @Transactional
     public Customer registerFromApp(
-            Long tenantId, String phone, String nombres, String apellidos, String locale
+            Long tenantId, String phone, String password, String nombres, String apellidos, String locale
     ) {
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tenant no encontrado"));
         InternationalPhoneService.NormalizedPhone normalized = internationalPhoneService.normalize(tenant, phone);
+        String rawPassword = requirePassword(password);
 
         if (!findPhoneCandidates(tenant, normalized, false).isEmpty()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "El telefono ya esta registrado");
@@ -502,6 +546,7 @@ public class CustomerService {
         Customer customer = Customer.builder()
                 .tenant(tenant)
                 .telefono(normalized.e164())
+                .passwordHash(passwordEncoder.encode(rawPassword))
                 .preferredLocale(RegionalDefaults.normalizeLocale(locale, tenant.getPais()))
                 .nombres(nombres)
                 .apellidos(apellidos)
@@ -521,12 +566,16 @@ public class CustomerService {
         return customerRepository.save(customer);
     }
     @Transactional
-    public OtpDispatch requestLoginOtp(Long tenantId, String phone, String locale) {
+    public OtpDispatch requestLoginOtp(Long tenantId, String phone, String locale, String purpose) {
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tenant no encontrado"));
         InternationalPhoneService.NormalizedPhone normalized = internationalPhoneService.normalize(tenant, phone);
         Customer customer = findActiveCustomerByPhone(tenant, normalized);
         String e164 = normalized.e164();
+        String normalizedPurpose = normalizeOtpPurpose(purpose);
+        if ("ACTIVATION".equals(normalizedPurpose) && Boolean.TRUE.equals(customer.getAppActivated())) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Esta cuenta ya esta activada. Ingresa con telefono y contraseña.");
+        }
         String effectiveLocale = RegionalDefaults.normalizeLocale(locale, tenant.getPais());
         if (!effectiveLocale.equals(customer.getPreferredLocale())) {
             customer.setPreferredLocale(effectiveLocale);
@@ -535,6 +584,7 @@ public class CustomerService {
         }
 
         LocalDateTime now = LocalDateTime.now();
+        otpRateLimitService.assertCanSend(tenantId, e164, now);
         OtpCode previous = otpCodeRepository
                 .findTopByTenantIdAndPhoneAndUsedIsFalseOrderByCreatedAtDesc(tenantId, e164)
                 .orElse(null);
@@ -572,6 +622,51 @@ public class CustomerService {
         );
     }
 
+    private ClientLoginResponse buildClientLoginResponse(Customer customer) {
+        Tenant tenant = customer.getTenant();
+        var settings = tenantSettingsRepository.findByTenantId(tenant.getId()).orElse(null);
+        String tenantLocale = RegionalDefaults.normalizeLocale(
+                settings == null ? null : settings.getLanguage(),
+                tenant.getPais()
+        );
+        String effectiveLocale = RegionalDefaults.normalizeLocale(customer.getPreferredLocale(), tenant.getPais());
+        String timezone = RegionalDefaults.validTimezoneOrDefault(
+                settings == null ? null : settings.getTimezone(),
+                tenant.getPais()
+        );
+        String currency = normalizeCurrency(settings == null ? null : settings.getCurrency());
+
+        return ClientLoginResponse.builder()
+                .customerId(customer.getId())
+                .tenantId(tenant.getId())
+                .tenantNombre(tenant.getNombre())
+                .tenantLogoUrl(tenant.getLogoUrl())
+                .phoneVerified(Boolean.TRUE.equals(customer.isPhoneVerified()))
+                .appActivated(Boolean.TRUE.equals(customer.getAppActivated()))
+                .locale(effectiveLocale)
+                .tenantLocale(tenantLocale)
+                .timezone(timezone)
+                .currency(currency)
+                .country(tenant.getPais())
+                .build();
+    }
+
+    private String requirePassword(String password) {
+        String value = password == null ? "" : password.trim();
+        if (value.length() < 6) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "La contraseña debe tener al menos 6 caracteres.");
+        }
+        return value;
+    }
+
+    private String normalizeOtpPurpose(String purpose) {
+        if (purpose == null || purpose.isBlank()) return "ACTIVATION";
+        String value = purpose.trim().toUpperCase();
+        return switch (value) {
+            case "ACTIVATION", "RECOVERY", "PHONE_CHANGE" -> value;
+            default -> throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Uso de OTP no soportado.");
+        };
+    }
     private Customer findActiveCustomerByPhone(
             Tenant tenant,
             InternationalPhoneService.NormalizedPhone normalized

@@ -51,6 +51,9 @@ public class Customer {
     @Column(length = 150)
     private String email;
 
+    @Column(name = "password_hash", length = 255)
+    private String passwordHash;
+
     @Column(name = "fecha_nacimiento")
     private LocalDate fechaNacimiento;
 

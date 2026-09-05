@@ -3,6 +3,7 @@ package com.gods.saas.domain.repository;
 import com.gods.saas.domain.model.OtpCode;
 import org.springframework.data.jpa.repository.JpaRepository;
 
+import java.time.LocalDateTime;
 import java.util.Optional;
 
 public interface OtpCodeRepository extends JpaRepository<OtpCode, Long> {
@@ -13,6 +14,12 @@ public interface OtpCodeRepository extends JpaRepository<OtpCode, Long> {
     );
 
     Optional<OtpCode> findTopByTenantIdAndPhoneAndUsedIsFalseOrderByCreatedAtDesc(Long tenantId, String phone);
+
+    long countByTenantIdAndPhoneAndCreatedAtGreaterThanEqual(
+            Long tenantId,
+            String phone,
+            LocalDateTime createdAt
+    );
 
 
 }

@@ -7,4 +7,5 @@ public class OtpRequest {
     private Long tenantId;
     private String phone;
     private String locale;
+    private String purpose;
 }

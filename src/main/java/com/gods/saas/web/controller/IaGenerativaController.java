@@ -18,19 +18,17 @@ public class IaGenerativaController {
 
     @PostMapping("/generar-preview")
     public ResponseEntity<GenerarPreviewResponse> generarPreview(
+            @RequestAttribute("tenantId") Long tenantId,
             @RequestBody GenerarPreviewRequest request
     ) {
-        return ResponseEntity.ok(
-                iaGenerativaService.generarPreview(request)
-        );
+        return ResponseEntity.ok(iaGenerativaService.generarPreview(tenantId, request));
     }
 
     @PostMapping("/generar")
     public ResponseEntity<GenerarImagenResponse> generar(
+            @RequestAttribute("tenantId") Long tenantId,
             @RequestBody GenerarImagenRequest request
     ) {
-        return ResponseEntity.ok(
-                iaGenerativaService.generarImagenReal(request)
-        );
+        return ResponseEntity.ok(iaGenerativaService.generarImagenReal(tenantId, request));
     }
 }

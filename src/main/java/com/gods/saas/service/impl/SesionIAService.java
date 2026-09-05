@@ -10,7 +10,6 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.gods.saas.client.IaAnaliticaClient;
-import com.gods.saas.client.IaIlustrativaClient;
 import com.gods.saas.domain.dto.request.*;
 import com.gods.saas.domain.model.Pantalla;
 import com.gods.saas.domain.model.SesionIa;
@@ -44,8 +43,7 @@ public class SesionIAService {
     private final EventoSocketPublisher eventoPublisher;
     private final PantallaSocketService pantallaSocketService;
     private final IaAnaliticaClient iaAnaliticaClient;
-    private final IaIlustrativaClient iaIlustrativaClient;
-    private final AiPodOrchestratorService aiPodOrchestratorService;
+    private final IllustrativeGenerationService illustrativeGenerationService;
     private final AiGenerationJobRepository aiGenerationJobRepository;
     private final ApplicationEventPublisher applicationEventPublisher;
     private final ObjectMapper objectMapper;
@@ -398,11 +396,10 @@ public class SesionIAService {
             // 3️⃣ 🔥 LLAMADA REAL A PYTHON
             // =========================
             log.info("Solicitud ilustrativa enviada para {} vistas", request.getVistas().size());
-            aiPodOrchestratorService.ensurePodReady();
-            aiPodOrchestratorService.onRequestStart();
-            requestStarted = true;
-            GenerarImagenResponse response =
-                    iaIlustrativaClient.generarImagen(request);
+            IllustrativeGenerationService.Result generation =
+                    illustrativeGenerationService.generate(request, job.getTenantId());
+            GenerarImagenResponse response = generation.response();
+            job.setProviderJobId(generation.providerJobId());
             log.info("Respuesta ilustrativa recibida para la sesion {}", sesionId);
             // =========================
             // 4️⃣ Guardar resultado
@@ -441,10 +438,6 @@ public class SesionIAService {
             job.markFailed(e.getMessage());
             aiGenerationJobRepository.saveAndFlush(job);
             log.error("Fallo el trabajo de IA ilustrativa {} para la sesion {}", jobId, sesionId, e);
-        } finally {
-            if (requestStarted) {
-                aiPodOrchestratorService.onRequestEnd();
-            }
         }
     }
 

@@ -1,6 +1,5 @@
 package com.gods.saas.service.impl;
 
-import com.gods.saas.client.IaIlustrativaClient;
 import com.gods.saas.domain.dto.request.*;
 import com.gods.saas.domain.dto.response.GenerarImagenResponse;
 import com.gods.saas.domain.dto.response.GenerarPreviewResponse;
@@ -17,10 +16,9 @@ import java.util.UUID;
 @Slf4j
 public class IaGenerativaService {
 
-    private final IaIlustrativaClient iaIlustrativaClient;
-    private final AiPodOrchestratorService aiPodOrchestratorService;
+    private final IllustrativeGenerationService illustrativeGenerationService;
 
-    public GenerarPreviewResponse generarPreview(GenerarPreviewRequest request) {
+    public GenerarPreviewResponse generarPreview(Long tenantId, GenerarPreviewRequest request) {
 
         if (request == null) {
             return GenerarPreviewResponse.builder()
@@ -96,11 +94,7 @@ public class IaGenerativaService {
 
             log.info("Solicitud IA ilustrativa preparada para {} vistas", generarImagenRequest.getVistas().size());
 
-            aiPodOrchestratorService.ensurePodReady();
-            aiPodOrchestratorService.onRequestStart();
-
-            try {
-                GenerarImagenResponse response = iaIlustrativaClient.generarImagen(generarImagenRequest);
+            GenerarImagenResponse response = illustrativeGenerationService.generate(generarImagenRequest, tenantId).response();
 
                 log.info("IA ilustrativa respondio para la sesion {}", response != null ? response.getSesionId() : "sin-id");
 
@@ -122,9 +116,6 @@ public class IaGenerativaService {
                                         .build()
                         )
                         .build();
-            } finally {
-                aiPodOrchestratorService.onRequestEnd();
-            }
 
         } catch (Exception e) {
             log.error("Error generando preview ilustrativa", e);
@@ -135,17 +126,10 @@ public class IaGenerativaService {
         }
     }
 
-    public GenerarImagenResponse generarImagenReal(GenerarImagenRequest request) {
+    public GenerarImagenResponse generarImagenReal(Long tenantId, GenerarImagenRequest request) {
         validarGenerarImagenRequest(request);
 
-        aiPodOrchestratorService.ensurePodReady();
-        aiPodOrchestratorService.onRequestStart();
-
-        try {
-            return iaIlustrativaClient.generarImagen(request);
-        } finally {
-            aiPodOrchestratorService.onRequestEnd();
-        }
+        return illustrativeGenerationService.generate(request, tenantId).response();
     }
 
     private GenerarImagenRequest mapToGenerarImagenRequest(

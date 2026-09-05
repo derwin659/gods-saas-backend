@@ -1,5 +1,6 @@
 package com.gods.saas.web.controller;
 
+import com.gods.saas.domain.dto.request.ClientLoginRequest;
 import com.gods.saas.domain.dto.request.ClientRegisterRequest;
 import com.gods.saas.domain.dto.request.OtpRequest;
 import com.gods.saas.domain.dto.request.OtpVerifyRequest;
@@ -23,13 +24,14 @@ import java.util.Map;
 public class CustomerAuthController {
 
     private final CustomerService customerService;
-    private final JwtService jwtService; // o tu servicio que genera tokens
+    private final JwtService jwtService;
 
     @PostMapping("/register")
     public ResponseEntity<?> register(@RequestBody ClientRegisterRequest req) {
         Customer c = customerService.registerFromApp(
                 req.getTenantId(),
                 req.getPhone(),
+                req.getPassword(),
                 req.getNombres(),
                 req.getApellidos(),
                 req.getLocale()
@@ -40,7 +42,7 @@ public class CustomerAuthController {
     @PostMapping("/otp/request")
     public ResponseEntity<?> requestOtp(@RequestBody OtpRequest req) {
         CustomerService.OtpDispatch dispatch = customerService.requestLoginOtp(
-                req.getTenantId(), req.getPhone(), req.getLocale()
+                req.getTenantId(), req.getPhone(), req.getLocale(), req.getPurpose()
         );
         return ResponseEntity.ok(Map.of(
                 "otpId", dispatch.otpId(),
@@ -51,11 +53,28 @@ public class CustomerAuthController {
 
     @PostMapping("/otp/verify")
     public ResponseEntity<?> verifyOtp(@RequestBody OtpVerifyRequest req) {
-        ClientLoginResponse login = customerService.verifyLoginOtp(req.getOtpId(), req.getCode());
+        ClientLoginResponse login = customerService.verifyLoginOtp(
+                req.getOtpId(),
+                req.getCode(),
+                req.getNewPassword()
+        );
+        return ResponseEntity.ok(buildLoginResponse(login));
+    }
 
+    @PostMapping("/login")
+    public ResponseEntity<?> login(@RequestBody ClientLoginRequest req) {
+        ClientLoginResponse login = customerService.loginWithPassword(
+                req.getTenantId(),
+                req.getPhone(),
+                req.getPassword(),
+                req.getLocale()
+        );
+        return ResponseEntity.ok(buildLoginResponse(login));
+    }
+
+    private Map<String, Object> buildLoginResponse(ClientLoginResponse login) {
         Long tenantId = login.getTenantId();
         Long customerId = login.getCustomerId();
-
         String token = jwtService.generateCustomerToken(customerId, tenantId);
 
         Map<String, Object> response = new LinkedHashMap<>();
@@ -72,6 +91,6 @@ public class CustomerAuthController {
         response.put("timezone", login.getTimezone());
         response.put("currency", login.getCurrency());
         response.put("country", login.getCountry());
-        return ResponseEntity.ok(response);
+        return response;
     }
 }

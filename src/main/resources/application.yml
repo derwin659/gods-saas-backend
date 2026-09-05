@@ -56,12 +56,18 @@ jwt:
 
 runpod:
   enabled: ${RUNPOD_ENABLED:true}
+  mode: ${RUNPOD_MODE:POD}
   api-key: ${RUNPOD_API_KEY:}
   pod-id: ${RUNPOD_POD_ID:}
   api-base-url: ${RUNPOD_API_BASE_URL:https://rest.runpod.io/v1}
   inactivity-minutes: ${RUNPOD_INACTIVITY_MINUTES:15}
   health-poll-interval-millis: ${RUNPOD_HEALTH_POLL_INTERVAL_MILLIS:5000}
   health-timeout-seconds: ${RUNPOD_HEALTH_TIMEOUT_SECONDS:600}
+  endpoint-id: ${RUNPOD_ENDPOINT_ID:}
+  serverless-api-base-url: ${RUNPOD_SERVERLESS_API_BASE_URL:https://api.runpod.ai/v2}
+  serverless-wait-millis: ${RUNPOD_SERVERLESS_WAIT_MILLIS:600000}
+  serverless-execution-timeout-millis: ${RUNPOD_SERVERLESS_EXECUTION_TIMEOUT_MILLIS:600000}
+  serverless-ttl-millis: ${RUNPOD_SERVERLESS_TTL_MILLIS:900000}
 
 # application.yml
 whatsapp:
