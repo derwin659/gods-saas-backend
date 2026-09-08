@@ -39,7 +39,7 @@ public class PasswordResetService {
         System.out.println("PASSWORD RESET => email normalizado=" + email);
 
         System.out.println("PASSWORD RESET => buscando usuario por email");
-        Optional<AppUser> userOpt = appUserRepository.findByEmail(email);
+        Optional<AppUser> userOpt = appUserRepository.findFirstByEmailIgnoreCaseAndActivoTrueOrderByIdDesc(email);
         System.out.println("PASSWORD RESET => búsqueda usuario terminada. existe=" + userOpt.isPresent());
 
         // Importante: no revelar si el correo existe o no.
@@ -118,7 +118,7 @@ public class PasswordResetService {
             );
         }
 
-        AppUser user = appUserRepository.findByEmail(email)
+        AppUser user = appUserRepository.findFirstByEmailIgnoreCaseAndActivoTrueOrderByIdDesc(email)
                 .orElseThrow(() -> new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
                         "Código inválido o expirado."

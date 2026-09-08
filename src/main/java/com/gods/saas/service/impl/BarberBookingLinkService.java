@@ -101,7 +101,7 @@ public class BarberBookingLinkService {
             // Si no es ID, se busca por email.
         }
 
-        return appUserRepository.findByEmailIgnoreCase(value)
+        return appUserRepository.findFirstByEmailIgnoreCaseAndActivoTrueOrderByIdDesc(value)
                 .orElseThrow(() -> new RuntimeException("Usuario autenticado no encontrado."));
     }
 }

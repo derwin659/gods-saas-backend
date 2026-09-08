@@ -46,7 +46,7 @@ public class GoogleAccountLinkController {
                     .orElseThrow(() -> new ResponseStatusException(UNAUTHORIZED, "Usuario no autenticado"));
         }
 
-        return appUserRepository.findByEmailIgnoreCase(String.valueOf(principal))
+        return appUserRepository.findFirstByEmailIgnoreCaseAndActivoTrueOrderByIdDesc(String.valueOf(principal))
                 .orElseThrow(() -> new ResponseStatusException(UNAUTHORIZED, "Usuario no autenticado"));
     }
 }

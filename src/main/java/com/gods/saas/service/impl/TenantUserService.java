@@ -45,7 +45,7 @@ public class TenantUserService {
         RoleType role = parseRole(req.getRole());
 
         // si ya existe usuario por email, reusamos (multi-tenant real)
-        AppUser user = userRepo.findByEmail(req.getEmail())
+        AppUser user = userRepo.findFirstByEmailIgnoreCaseAndActivoTrueOrderByIdDesc(req.getEmail())
                 .orElseGet(() -> {
                     AppUser u = new AppUser();
                     u.setNombre(req.getNombre());

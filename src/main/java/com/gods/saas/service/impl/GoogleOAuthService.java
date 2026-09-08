@@ -154,8 +154,8 @@ public class GoogleOAuthService {
     }
 
     private LoginFinalResponse loginWithGoogle(GoogleProfile profile) {
-        AppUser user = appUserRepository.findByGoogleSubject(profile.subject())
-                .or(() -> appUserRepository.findByEmailIgnoreCase(profile.email()))
+        AppUser user = appUserRepository.findFirstByGoogleSubjectAndActivoTrueOrderByIdDesc(profile.subject())
+                .or(() -> appUserRepository.findFirstByEmailIgnoreCaseAndActivoTrueOrderByIdDesc(profile.email()))
                 .orElseThrow(() -> new ResponseStatusException(
                         UNAUTHORIZED,
                         "No existe una cuenta interna vinculada a este Gmail"
@@ -196,7 +196,7 @@ public class GoogleOAuthService {
     }
 
     private void linkGoogleAccount(Long userId, GoogleProfile profile) {
-        AppUser existing = appUserRepository.findByGoogleSubject(profile.subject()).orElse(null);
+        AppUser existing = appUserRepository.findFirstByGoogleSubjectAndActivoTrueOrderByIdDesc(profile.subject()).orElse(null);
         if (existing != null && !existing.getId().equals(userId)) {
             throw new ResponseStatusException(CONFLICT, "Este Gmail ya esta vinculado a otro usuario");
         }

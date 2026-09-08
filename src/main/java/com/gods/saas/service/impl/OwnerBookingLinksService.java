@@ -102,7 +102,7 @@ public class OwnerBookingLinksService {
             // Si no es número, se intenta como email.
         }
 
-        return appUserRepository.findByEmailIgnoreCase(value)
+        return appUserRepository.findFirstByEmailIgnoreCaseAndActivoTrueOrderByIdDesc(value)
                 .orElseThrow(() -> new RuntimeException("Usuario autenticado no encontrado."));
     }
 }

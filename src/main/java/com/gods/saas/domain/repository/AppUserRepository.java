@@ -33,6 +33,10 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
 
     Optional<AppUser> findByGoogleEmailIgnoreCase(String googleEmail);
 
+    Optional<AppUser> findFirstByEmailIgnoreCaseAndActivoTrueOrderByIdDesc(String email);
+
+    Optional<AppUser> findFirstByGoogleSubjectAndActivoTrueOrderByIdDesc(String googleSubject);
+
     List<AppUser> findByTenantId(Long tenantId);
 
     Optional<AppUser> findByIdAndTenantId(Long id, Long tenantId);

@@ -97,7 +97,7 @@ public class DemoRequestServiceImpl implements DemoRequestService {
             throw new IllegalArgumentException("Ya existe una cuenta con este correo. Inicia sesion o vincula Gmail desde seguridad.");
         }
 
-        if (googleProfile != null && appUserRepository.findByGoogleSubject(googleProfile.subject()).isPresent()) {
+        if (googleProfile != null && appUserRepository.findFirstByGoogleSubjectAndActivoTrueOrderByIdDesc(googleProfile.subject()).isPresent()) {
             throw new IllegalArgumentException("Este Gmail ya esta vinculado a otra cuenta.");
         }
 
