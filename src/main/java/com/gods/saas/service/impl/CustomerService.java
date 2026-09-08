@@ -443,6 +443,9 @@ public class CustomerService {
 
         customer.setPhoneVerified(true);
         customer.setFechaActualizacion(LocalDateTime.now());
+        if (newPassword != null && !newPassword.isBlank()) {
+            customer.setPasswordHash(passwordEncoder.encode(requirePassword(newPassword)));
+        }
 
         if (!Boolean.TRUE.equals(customer.getAppActivated())) {
             customer.setAppActivated(true);
@@ -572,7 +575,8 @@ public class CustomerService {
         InternationalPhoneService.NormalizedPhone normalized = internationalPhoneService.normalize(tenant, phone);
         Customer customer = findActiveCustomerByPhone(tenant, normalized);
         String e164 = normalized.e164();
-        String normalizedPurpose = normalizeOtpPurpose(purpose);
+        boolean legacyOtpRequest = purpose == null || purpose.isBlank();
+        String normalizedPurpose = legacyOtpRequest ? "LEGACY_LOGIN" : normalizeOtpPurpose(purpose);
         if ("ACTIVATION".equals(normalizedPurpose) && Boolean.TRUE.equals(customer.getAppActivated())) {
             throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Esta cuenta ya esta activada. Ingresa con telefono y contraseña.");
         }

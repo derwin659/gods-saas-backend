@@ -163,6 +163,18 @@ public class TwilioVerifyOtpService {
                         "Twilio bloqueo temporalmente nuevos codigos para este numero. Espera unos minutos e intenta otra vez."
                 );
             }
+            if (failure.code() == 21608) {
+                throw new ResponseStatusException(
+                        HttpStatus.SERVICE_UNAVAILABLE,
+                        "La cuenta Twilio sigue en modo prueba. Verifica este numero en Twilio o actualiza la cuenta para enviar OTP a clientes reales."
+                );
+            }
+            if (failure.code() == 60605 || failure.code() == 21408) {
+                throw new ResponseStatusException(
+                        HttpStatus.SERVICE_UNAVAILABLE,
+                        "Los envios OTP a Peru estan deshabilitados en Twilio Verify Geo Permissions."
+                );
+            }
             if (checkingCode && (response.statusCode() == 400 || response.statusCode() == 404)) {
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
@@ -187,7 +199,7 @@ public class TwilioVerifyOtpService {
                 }
                 throw new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
-                        "Twilio no pudo enviar el codigo a este numero. Revisa el numero o intenta nuevamente en unos minutos."
+                        "Twilio rechazo el envio del codigo (error " + failure.code() + "). Revisa Verify Logs en Twilio."
                 );
             }
 
