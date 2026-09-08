@@ -17,4 +17,9 @@ public class LoyaltySettingsResponse {
     private Boolean activationBonusEnabled;
     private Integer activationBonusPoints;
     private List<LoyaltyTierConfig> tiers;
+    private Integer segmentNewMaxVisits;
+    private Integer segmentFrequentMinVisits;
+    private Integer segmentVipMinVisits;
+    private Integer segmentVipMinPoints;
+    private Integer segmentInactiveDays;
 }

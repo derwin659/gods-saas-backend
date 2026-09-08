@@ -31,6 +31,11 @@ public class OwnerLoyaltySettingsService {
     public static final String ACTIVATION_BONUS_ENABLED_KEY = "loyaltyActivationBonusEnabled";
     public static final String ACTIVATION_BONUS_POINTS_KEY = "loyaltyActivationBonusPoints";
     public static final String TIERS_KEY = "loyaltyTiers";
+    public static final String SEGMENT_NEW_MAX_VISITS_KEY = "segmentNewMaxVisits";
+    public static final String SEGMENT_FREQUENT_MIN_VISITS_KEY = "segmentFrequentMinVisits";
+    public static final String SEGMENT_VIP_MIN_VISITS_KEY = "segmentVipMinVisits";
+    public static final String SEGMENT_VIP_MIN_POINTS_KEY = "segmentVipMinPoints";
+    public static final String SEGMENT_INACTIVE_DAYS_KEY = "segmentInactiveDays";
 
     private static final int DEFAULT_WELCOME_BONUS = 100;
     private static final int DEFAULT_ACTIVATION_BONUS = 50;
@@ -53,6 +58,11 @@ public class OwnerLoyaltySettingsService {
                 .activationBonusEnabled(readBoolean(settings, ACTIVATION_BONUS_ENABLED_KEY, true))
                 .activationBonusPoints(readInt(settings, ACTIVATION_BONUS_POINTS_KEY, DEFAULT_ACTIVATION_BONUS))
                 .tiers(resolveTiers(settings))
+                .segmentNewMaxVisits(readInt(settings, SEGMENT_NEW_MAX_VISITS_KEY, 2))
+                .segmentFrequentMinVisits(readInt(settings, SEGMENT_FREQUENT_MIN_VISITS_KEY, 3))
+                .segmentVipMinVisits(readInt(settings, SEGMENT_VIP_MIN_VISITS_KEY, 10))
+                .segmentVipMinPoints(readInt(settings, SEGMENT_VIP_MIN_POINTS_KEY, 500))
+                .segmentInactiveDays(readInt(settings, SEGMENT_INACTIVE_DAYS_KEY, 60))
                 .build();
     }
 
@@ -91,10 +101,24 @@ public class OwnerLoyaltySettingsService {
         if (request.getActivationBonusPoints() != null) {
             config.put(ACTIVATION_BONUS_POINTS_KEY, validateBonus(request.getActivationBonusPoints(), "activación"));
         }
+        if (request.getSegmentNewMaxVisits() != null) config.put(SEGMENT_NEW_MAX_VISITS_KEY, validateRange(request.getSegmentNewMaxVisits(), 0, 1000, "visitas máximas de cliente nuevo"));
+        if (request.getSegmentFrequentMinVisits() != null) config.put(SEGMENT_FREQUENT_MIN_VISITS_KEY, validateRange(request.getSegmentFrequentMinVisits(), 1, 1000, "visitas mínimas de cliente frecuente"));
+        if (request.getSegmentVipMinVisits() != null) config.put(SEGMENT_VIP_MIN_VISITS_KEY, validateRange(request.getSegmentVipMinVisits(), 1, 10000, "visitas mínimas VIP"));
+        if (request.getSegmentVipMinPoints() != null) config.put(SEGMENT_VIP_MIN_POINTS_KEY, validateRange(request.getSegmentVipMinPoints(), 0, 100000000, "puntos mínimos VIP"));
+        if (request.getSegmentInactiveDays() != null) config.put(SEGMENT_INACTIVE_DAYS_KEY, validateRange(request.getSegmentInactiveDays(), 7, 3650, "días de inactividad"));
         if (request.getTiers() != null) {
             config.put(TIERS_KEY, serializeTiers(validateTiers(request.getTiers())));
         }
 
+        int newMax = intValue(config.get(SEGMENT_NEW_MAX_VISITS_KEY), 2);
+        int frequentMin = intValue(config.get(SEGMENT_FREQUENT_MIN_VISITS_KEY), 3);
+        int vipVisits = intValue(config.get(SEGMENT_VIP_MIN_VISITS_KEY), 10);
+        if (frequentMin <= newMax) {
+            throw new RuntimeException("El segmento frecuente debe comenzar después del máximo de visitas de cliente nuevo.");
+        }
+        if (vipVisits < frequentMin) {
+            throw new RuntimeException("El mínimo de visitas VIP no puede ser menor que el mínimo frecuente.");
+        }
         settings.setScheduleConfig(config);
         settings.setUpdatedAt(LocalDateTime.now());
         tenantSettingsRepository.save(settings);
@@ -113,6 +137,10 @@ public class OwnerLoyaltySettingsService {
         return current;
     }
 
+    private int validateRange(int value, int min, int max, String label) {
+        if (value < min || value > max) throw new RuntimeException("El valor de " + label + " debe estar entre " + min + " y " + max + ".");
+        return value;
+    }
     private int validateBonus(int value, String label) {
         if (value < 0 || value > MAX_BONUS_POINTS) {
             throw new RuntimeException("El bono de " + label + " debe estar entre 0 y " + MAX_BONUS_POINTS + " puntos.");

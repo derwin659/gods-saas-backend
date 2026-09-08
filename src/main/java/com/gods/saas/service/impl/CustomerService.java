@@ -936,7 +936,7 @@ public class CustomerService {
         long completedVisits = appointmentRepository.countCompletedCustomerVisits(tenantId, customerId);
         long noShows = appointmentRepository.countCustomerNoShows(tenantId, customerId);
         LocalDate lastVisit = appointmentRepository.findLastCompletedCustomerVisit(tenantId, customerId);
-        String customerStatus = resolveCustomerStatus(completedVisits, acumulados, lastVisit, tenantTimeService.today(tenantId));
+        String customerStatus = resolveCustomerStatus(completedVisits, acumulados, lastVisit, tenantTimeService.today(tenantId), ownerLoyaltySettingsService.getSettings(tenantId));
         LoyaltyTierConfig tier = ownerLoyaltySettingsService.resolveTier(tenantId, acumulados);
 
         return new OwnerCustomerLoyaltyResponse(
@@ -1069,6 +1069,7 @@ public class CustomerService {
             int limit
     ) {
         LocalDate today = tenantTimeService.today(tenantId);
+        LoyaltySettingsResponse segmentation = ownerLoyaltySettingsService.getSettings(tenantId);
         LocalDate safeTo = to != null ? to : today;
         LocalDate safeFrom = from != null ? from : safeTo.minusDays(30);
         if (safeFrom.isAfter(safeTo)) {
@@ -1100,12 +1101,12 @@ public class CustomerService {
                 lastFromAt,
                 lastToAt,
                 normalizedStatus,
-                today.minusDays(60).atStartOfDay(),
+                today.minusDays(segmentation.getSegmentInactiveDays()).atStartOfDay(),
                 safeLimit
         );
 
         List<OwnerCustomerReportResponse.Item> items = rows.stream()
-                .map(row -> toCustomerReportItem(row, today, tenantId))
+                .map(row -> toCustomerReportItem(row, today, tenantId, segmentation))
                 .filter(item -> normalizedStatus == null || normalizedStatus.equals(item.status()))
                 .toList();
 
@@ -1164,11 +1165,11 @@ public class CustomerService {
         );
     }
 
-    private OwnerCustomerReportResponse.Item toCustomerReportItem(CustomerReportProjection row, LocalDate today, Long tenantId) {
+    private OwnerCustomerReportResponse.Item toCustomerReportItem(CustomerReportProjection row, LocalDate today, Long tenantId, LoyaltySettingsResponse segmentation) {
         Long visits = row.getVisits() != null ? row.getVisits() : 0L;
         Integer points = row.getPuntos() != null ? row.getPuntos() : 0;
         LocalDate lastVisit = row.getUltimaVisita() != null ? row.getUltimaVisita().toLocalDate() : null;
-        String status = resolveCustomerStatus(visits, points, lastVisit, today);
+        String status = resolveCustomerStatus(visits, points, lastVisit, today, segmentation);
         LoyaltyTierConfig tier = ownerLoyaltySettingsService.resolveTier(tenantId, points);
         String fullName = ((row.getNombres() != null ? row.getNombres().trim() : "") + " "
                 + (row.getApellidos() != null ? row.getApellidos().trim() : "")).trim();
@@ -1214,11 +1215,12 @@ public class CustomerService {
             long completedVisits,
             int accumulatedPoints,
             LocalDate lastVisit,
-            LocalDate today
+            LocalDate today,
+            LoyaltySettingsResponse segmentation
     ) {
-        if (lastVisit != null && lastVisit.isBefore(today.minusDays(60))) return "INACTIVE";
-        if (completedVisits >= 10 || accumulatedPoints >= 500) return "VIP";
-        if (completedVisits >= 3) return "FREQUENT";
+        if (lastVisit != null && lastVisit.isBefore(today.minusDays(segmentation.getSegmentInactiveDays()))) return "INACTIVE";
+        if (completedVisits >= segmentation.getSegmentVipMinVisits() || accumulatedPoints >= segmentation.getSegmentVipMinPoints()) return "VIP";
+        if (completedVisits >= segmentation.getSegmentFrequentMinVisits()) return "FREQUENT";
         return "NEW";
     }
     private int safeInt(Integer value) {
