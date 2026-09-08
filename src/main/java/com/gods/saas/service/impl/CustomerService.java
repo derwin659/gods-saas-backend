@@ -540,7 +540,9 @@ public class CustomerService {
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Tenant no encontrado"));
         InternationalPhoneService.NormalizedPhone normalized = internationalPhoneService.normalize(tenant, phone);
-        String rawPassword = requirePassword(password);
+        String rawPassword = password == null || password.isBlank()
+                ? null
+                : requirePassword(password);
 
         if (!findPhoneCandidates(tenant, normalized, false).isEmpty()) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "El telefono ya esta registrado");
@@ -549,7 +551,7 @@ public class CustomerService {
         Customer customer = Customer.builder()
                 .tenant(tenant)
                 .telefono(normalized.e164())
-                .passwordHash(passwordEncoder.encode(rawPassword))
+                .passwordHash(rawPassword == null ? null : passwordEncoder.encode(rawPassword))
                 .preferredLocale(RegionalDefaults.normalizeLocale(locale, tenant.getPais()))
                 .nombres(nombres)
                 .apellidos(apellidos)
