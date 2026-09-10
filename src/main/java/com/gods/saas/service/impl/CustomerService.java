@@ -1064,6 +1064,8 @@ public class CustomerService {
             LocalDate from,
             LocalDate to,
             Long branchId,
+            LocalDate visitFrom,
+            LocalDate visitTo,
             String status,
             LocalDate lastVisitFrom,
             LocalDate lastVisitTo,
@@ -1085,10 +1087,19 @@ public class CustomerService {
         LocalDate previousTo = safeFrom.minusDays(1);
         LocalDate previousFrom = previousTo.minusDays(days - 1);
 
-        LocalDateTime registeredFrom = safeFrom.atStartOfDay();
-        LocalDateTime registeredTo = exclusiveTo.atStartOfDay();
+        LocalDateTime registeredFrom = from != null ? from.atStartOfDay() : null;
+        LocalDateTime registeredTo = to != null ? to.plusDays(1).atStartOfDay() : null;
         LocalDateTime previousFromAt = previousFrom.atStartOfDay();
         LocalDateTime previousToAt = previousTo.plusDays(1).atStartOfDay();
+        LocalDate safeVisitFrom = visitFrom;
+        LocalDate safeVisitTo = visitTo;
+        if (safeVisitFrom != null && safeVisitTo != null && safeVisitFrom.isAfter(safeVisitTo)) {
+            LocalDate tmp = safeVisitFrom;
+            safeVisitFrom = safeVisitTo;
+            safeVisitTo = tmp;
+        }
+        LocalDateTime visitFromAt = safeVisitFrom != null ? safeVisitFrom.atStartOfDay() : null;
+        LocalDateTime visitToAt = safeVisitTo != null ? safeVisitTo.plusDays(1).atStartOfDay() : null;
         LocalDateTime lastFromAt = lastVisitFrom != null ? lastVisitFrom.atStartOfDay() : null;
         LocalDateTime lastToAt = lastVisitTo != null ? lastVisitTo.plusDays(1).atStartOfDay() : null;
         int safeLimit = Math.min(Math.max(limit, 1), 500);
@@ -1100,10 +1111,10 @@ public class CustomerService {
                 registeredFrom,
                 registeredTo,
                 branchId,
+                visitFromAt,
+                visitToAt,
                 lastFromAt,
                 lastToAt,
-                normalizedStatus,
-                today.minusDays(segmentation.getSegmentInactiveDays()).atStartOfDay(),
                 safeLimit
         );
 

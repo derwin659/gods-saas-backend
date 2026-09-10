@@ -70,6 +70,8 @@ public class OwnerCustomerController {
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
             @RequestParam(required = false) Long branchId,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate visitFrom,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate visitTo,
             @RequestParam(required = false) String status,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate lastVisitFrom,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate lastVisitTo,
@@ -82,7 +84,7 @@ public class OwnerCustomerController {
         boolean canViewPhone = adminPermissionService.hasCurrentUserPermission("CUSTOMERS_VIEW_PHONE");
 
         OwnerCustomerReportResponse response = customerService.obtenerReporteClientesOwner(
-                tenantId, from, to, branchId, status, lastVisitFrom, lastVisitTo, q, limit
+                tenantId, from, to, branchId, visitFrom, visitTo, status, lastVisitFrom, lastVisitTo, q, limit
         );
 
         return ResponseEntity.ok(protectPhone(response, canViewPhone));

@@ -163,6 +163,9 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
              where s.tenant_id = :tenantId
                and s.customer_id is not null
                and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
+               and (cast(:visitFrom as timestamp) is null or coalesce(s.sale_date, s.fecha_creacion) >= :visitFrom)
+               and (cast(:visitTo as timestamp) is null or coalesce(s.sale_date, s.fecha_creacion) < :visitTo)
+               and (:branchId is null or s.branch_id = :branchId)
              group by s.customer_id
         ), last_branch as (
             select distinct on (s.customer_id)
@@ -174,6 +177,9 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
              where s.tenant_id = :tenantId
                and s.customer_id is not null
                and coalesce(s.payment_validation_status, 'APPROVED') = 'APPROVED'
+               and (cast(:visitFrom as timestamp) is null or coalesce(s.sale_date, s.fecha_creacion) >= :visitFrom)
+               and (cast(:visitTo as timestamp) is null or coalesce(s.sale_date, s.fecha_creacion) < :visitTo)
+               and (:branchId is null or s.branch_id = :branchId)
              order by s.customer_id, coalesce(s.sale_date, s.fecha_creacion) desc
         )
         select c.customer_id as customerId,
@@ -201,18 +207,9 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
            and (cast(:registeredFrom as timestamp) is null or c.fecha_registro >= :registeredFrom)
            and (cast(:registeredTo as timestamp) is null or c.fecha_registro < :registeredTo)
            and (:branchId is null or lb.branch_id = :branchId)
+           and ((cast(:visitFrom as timestamp) is null and cast(:visitTo as timestamp) is null and :branchId is null) or sa.customer_id is not null)
            and (cast(:lastVisitFrom as timestamp) is null or sa.ultima_visita >= :lastVisitFrom)
            and (cast(:lastVisitTo as timestamp) is null or sa.ultima_visita < :lastVisitTo)
-           and (
-               :status is null
-               or :status = ''
-               or case
-                    when sa.ultima_visita is not null and sa.ultima_visita < :inactiveCutoff then 'INACTIVE'
-                    when coalesce(sa.visits, 0) >= 10 or coalesce(la.puntos_acumulados, la.puntos_disponibles, c.puntos_disponibles, 0) >= 500 then 'VIP'
-                    when coalesce(sa.visits, 0) >= 3 then 'FREQUENT'
-                    else 'NEW'
-                  end = :status
-           )
          order by c.fecha_registro desc nulls last, c.nombres asc
          limit :limit
         """, nativeQuery = true)
@@ -222,10 +219,10 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
             @Param("registeredFrom") LocalDateTime registeredFrom,
             @Param("registeredTo") LocalDateTime registeredTo,
             @Param("branchId") Long branchId,
+            @Param("visitFrom") LocalDateTime visitFrom,
+            @Param("visitTo") LocalDateTime visitTo,
             @Param("lastVisitFrom") LocalDateTime lastVisitFrom,
             @Param("lastVisitTo") LocalDateTime lastVisitTo,
-            @Param("status") String status,
-            @Param("inactiveCutoff") LocalDateTime inactiveCutoff,
             @Param("limit") int limit
     );
 
