@@ -14,6 +14,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestTemplate;
 
 import java.util.List;
+import java.util.Set;
+import org.springframework.web.client.RestClientException;
 import java.util.Map;
 
 @Component
@@ -32,10 +34,9 @@ public class RunpodServerlessClient {
             throw new IllegalStateException("El tenant es obligatorio en modo SERVERLESS");
         }
 
-        String url = String.format("%s/%s/runsync?wait=%d",
+        String url = String.format("%s/%s/run",
                 properties.getServerlessApiBaseUrl(),
-                properties.getEndpointId(),
-                properties.getServerlessWaitMillis());
+                properties.getEndpointId());
 
         HttpHeaders headers = new HttpHeaders();
         headers.setBearerAuth(properties.getApiKey());
@@ -55,15 +56,48 @@ public class RunpodServerlessClient {
                 headers
         );
 
-        ResponseEntity<Map> response = restTemplate.exchange(url, HttpMethod.POST, entity, Map.class);
-        Map<String, Object> body = response.getBody();
-        if (body == null) throw new IllegalStateException("RunPod Serverless devolvió una respuesta vacía");
-
-        String status = String.valueOf(body.getOrDefault("status", ""));
-        String jobId = body.get("id") == null ? null : String.valueOf(body.get("id"));
-        if (!"COMPLETED".equalsIgnoreCase(status)) {
-            throw new IllegalStateException("RunPod Serverless no completó el trabajo " + jobId
-                    + " (estado=" + status + ", error=" + body.get("error") + ")");
+        long deadline = System.nanoTime()
+                + Math.max(1, properties.getServerlessWaitMillis()) * 1_000_000L;
+        Map<String, Object> body;
+        try {
+            body = restTemplate.exchange(url, HttpMethod.POST, entity, Map.class).getBody();
+        } catch (RestClientException error) {
+            // A timeout may occur AFTER RunPod accepts the job. Never resubmit here.
+            throw new UnconfirmedJobException(null, error);
+        }
+        String jobId = body == null || body.get("id") == null
+                ? null : String.valueOf(body.get("id"));
+        if (body == null || jobId == null || jobId.isBlank()) {
+            throw new UnconfirmedJobException(jobId, null);
+        }
+        while (true) {
+            String status = String.valueOf(body.getOrDefault("status", ""));
+            if ("COMPLETED".equalsIgnoreCase(status)) break;
+            if (Set.of("FAILED", "CANCELLED", "TIMED_OUT").contains(status.toUpperCase())) {
+                throw new IllegalStateException("RunPod terminó el trabajo " + jobId
+                        + " con estado " + status);
+            }
+            if (!Set.of("IN_QUEUE", "IN_PROGRESS").contains(status.toUpperCase())
+                    || System.nanoTime() >= deadline) {
+                throw new UnconfirmedJobException(jobId, null);
+            }
+            try {
+                long remaining = Math.max(1, (deadline - System.nanoTime()) / 1_000_000L);
+                Thread.sleep(Math.min(Math.max(1, properties.getHealthPollIntervalMillis()), remaining));
+                body = restTemplate.exchange(
+                        properties.getServerlessApiBaseUrl() + "/" + properties.getEndpointId()
+                                + "/status/" + jobId,
+                        HttpMethod.GET, new HttpEntity<>(headers), Map.class).getBody();
+                if (body == null) throw new UnconfirmedJobException(jobId, null);
+            } catch (InterruptedException error) {
+                Thread.currentThread().interrupt();
+                throw new UnconfirmedJobException(jobId, error);
+            } catch (RestClientException error) {
+                // Status requests are safe to retry; POST /run is not.
+                if (System.nanoTime() >= deadline) {
+                    throw new UnconfirmedJobException(jobId, error);
+                }
+            }
         }
 
         Object output = body.get("output");
@@ -83,6 +117,18 @@ public class RunpodServerlessClient {
     private Object unwrapOutput(Object output) {
         if (output instanceof Map<?, ?> map && map.containsKey("output")) return map.get("output");
         return output;
+    }
+
+    public static class UnconfirmedJobException extends RuntimeException {
+        private final String jobId;
+
+        public UnconfirmedJobException(String jobId, Throwable cause) {
+            super("No se pudo confirmar el resultado de RunPod. No reintentar la generación; verificar trabajo "
+                    + (jobId == null ? "sin identificador confirmado" : jobId), cause);
+            this.jobId = jobId;
+        }
+
+        public String getJobId() { return jobId; }
     }
 
     public record Result(String providerJobId, GenerarImagenResponse response) {

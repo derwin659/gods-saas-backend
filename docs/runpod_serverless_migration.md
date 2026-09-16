@@ -3,7 +3,7 @@
 El backend mantiene dos modos compatibles:
 
 - POD (predeterminado): usa FastAPI /generar y el encendido/apagado existente.
-- SERVERLESS: usa POST https://api.runpod.ai/v2/{endpointId}/runsync.
+- SERVERLESS: usa POST https://api.runpod.ai/v2/{endpointId}/run y consulta GET /status/{jobId}.
 
 ## Variables
 
@@ -35,10 +35,37 @@ El modelo debe cargarse fuera del handler para reutilizarlo entre solicitudes.
 6. Confirmar jobs COMPLETED, tiempos y costo.
 7. Mantener POD disponible para rollback.
 
-## Limitación temporal
+## Manejo de trabajos y limpieza (14 de septiembre de 2026)
 
-Las fotos de entrada se suben como recursos `authenticated` separados por tenant y sesión. El payload conserva `imagenes.frontal`, `imagenes.lateral` e `imagenes.trasera`, pero en modo SERVERLESS esos valores son URLs firmadas en lugar de Base64. Los recursos se eliminan al terminar o fallar la llamada; POD continúa recibiendo Base64.
+El backend consulta los estados IN_QUEUE e IN_PROGRESS hasta obtener COMPLETED,
+FAILED, CANCELLED o TIMED_OUT, o hasta agotar SERVERLESS_WAIT_MILLIS.
+Este límite incluye la espera en cola, no sólo la ejecución de GPU.
 
-El `wait` predeterminado coincide con `executionTimeout` (10 minutos) para no limpiar entradas mientras el worker siga activo. No reducir `RUNPOD_SERVERLESS_WAIT_MILLIS` por debajo del tiempo máximo de ejecución sin implementar persistencia y limpieza diferida.
+Las entradas se eliminan cuando se confirma un estado terminal. Si el envío o la
+consulta pierde conexión y el estado no puede confirmarse, se conservan las
+entradas. En el flujo de sesiones se registra REQUIRES_REVIEW junto al providerJobId
+cuando está disponible. Los logs registran los identificadores de recursos
+pendientes. No reenviar automáticamente una generación cuyo resultado se desconoce.
 
-Sigue pendiente sacar las imágenes generadas del `output`: el worker final debe almacenarlas y devolver URLs para evitar que la respuesta alcance el límite de 20 MB.
+Antes de reintentar, revisar el trabajo en RunPod y recuperar el resultado o
+confirmar que terminó. Después limpiar las entradas registradas. Sigue pendiente
+automatizar esta reconciliación y limpieza de forma persistente tras reinicios.
+El endpoint móvil síncrono aún puede agotar su tiempo de espera antes del backend;
+falta conectar la app al seguimiento de trabajos para recuperación automática.
+
+El worker ya sube resultados a Cloudinary y devuelve URLs autenticadas; no devuelve
+las imágenes de salida en Base64. Si una vista falla, la generación se informa como
+fallida y el handler elimina sus resultados parciales.
+
+## Pendientes antes de producción
+
+- Probar DockerfileHandler con CUDA, librerías del sistema y versiones reproducibles.
+- Confirmar modelos y LoRA dentro del contenedor o volumen, sin rutas del Pod antiguo.
+- Probar una generación real de tres vistas, cold start y memoria GPU.
+- Aplicar y comprobar la migración SQL en un entorno de pruebas.
+- Configurar endpoint y credenciales en RunPod/Railway, sin exponerlas al móvil.
+- Automatizar reconciliación de REQUIRES_REVIEW y limpieza tras reinicios.
+- Conectar seguimiento de trabajos desde móvil antes de activar para clientes.
+
+No se ha activado SERVERLESS en producción ni se ha creado un endpoint durante
+estas correcciones locales.

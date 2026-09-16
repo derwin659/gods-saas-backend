@@ -184,9 +184,11 @@ public class OwnerCustomerController {
         adminPermissionService.checkPermission("CUSTOMERS_ACCESS");
 
         Long tenantId = extractTenantId(authHeader);
+        boolean canViewPhone = adminPermissionService.hasCurrentUserPermission("CUSTOMERS_VIEW_PHONE");
+        // Restricted administrators may edit the profile, never its phone.
+        if (!canViewPhone) request.setTelefono(null);
         Customer customer = customerService.actualizarCliente(tenantId, customerId, request);
 
-        boolean canViewPhone = adminPermissionService.hasCurrentUserPermission("CUSTOMERS_VIEW_PHONE");
         return ResponseEntity.ok(protectPhone(ClienteResponse.fromEntity(customer), canViewPhone));
     }
 
@@ -261,6 +263,7 @@ public class OwnerCustomerController {
             return response;
         }
 
+        response.setPhoneHidden(true);
         response.setPhone(maskPhone(response.getPhone()));
         return response;
     }
@@ -320,12 +323,7 @@ public class OwnerCustomerController {
             return "";
         }
 
-        String digits = phone.replaceAll("[^0-9]", "");
-        if (digits.length() <= 4) {
-            return "****";
-        }
-
-        return "****" + digits.substring(digits.length() - 4);
+        return "Teléfono oculto";
     }
 
 

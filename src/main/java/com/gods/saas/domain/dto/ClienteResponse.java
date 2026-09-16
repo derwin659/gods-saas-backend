@@ -10,6 +10,7 @@ public class ClienteResponse {
     private String nombre;
     private String apellido;
     private String phone;
+    private boolean phoneHidden;
     private String email;
     private Long tenantId;
     private String origenCliente;

@@ -435,7 +435,13 @@ public class SesionIAService {
             job.markCompleted();
             aiGenerationJobRepository.saveAndFlush(job);
         } catch (Exception e) {
-            job.markFailed(e.getMessage());
+            if (e instanceof com.gods.saas.client.RunpodServerlessClient.UnconfirmedJobException pending) {
+                job.setStatus("REQUIRES_REVIEW");
+                job.setProviderJobId(pending.getJobId());
+                job.setErrorMessage("Resultado no confirmado. Revisar RunPod antes de reintentar.");
+            } else {
+                job.markFailed(e.getMessage());
+            }
             aiGenerationJobRepository.saveAndFlush(job);
             log.error("Fallo el trabajo de IA ilustrativa {} para la sesion {}", jobId, sesionId, e);
         }
