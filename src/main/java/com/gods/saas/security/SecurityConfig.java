@@ -58,6 +58,9 @@ public class SecurityConfig {
 
                         // Necesario para CORS preflight desde React/Vercel/local
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+                        .requestMatchers("/api/super-admin/academy", "/api/super-admin/academy/**").hasRole("SUPER_ADMIN")
+                        .requestMatchers("/api/academy").hasAnyRole("OWNER", "ADMIN", "CLIENT", "BARBER", "CASHIER")
+
 
                         .requestMatchers(
                                 "/api/auth/login-basic",

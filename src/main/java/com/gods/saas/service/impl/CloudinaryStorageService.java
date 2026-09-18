@@ -191,6 +191,28 @@ public class CloudinaryStorageService {
             }
         }
     }
+    public UploadResult uploadAcademyVideo(String lessonId, MultipartFile file) {
+        validateVideo(file);
+        if (!"video/mp4".equals(normalizedContentType(file))) {
+            throw new IllegalArgumentException("Academy requiere MP4 (máximo 35 MB)");
+        }
+        try {
+            Map<?, ?> result = cloudinary.uploader().uploadLarge(file.getBytes(), ObjectUtils.asMap(
+                    "folder", "super-gods/academy/videos",
+                    "resource_type", "video",
+                    "public_id", "lesson_" + lessonId + "_" + UUID.randomUUID(),
+                    "overwrite", false));
+            String url = String.valueOf(result.get("secure_url"));
+            String publicId = String.valueOf(result.get("public_id"));
+            if (!url.startsWith("https://") || "null".equals(publicId)) {
+                throw new IllegalStateException("Cloudinary no confirmó el video");
+            }
+            return new UploadResult(url, publicId);
+        } catch (IOException e) {
+            throw new IllegalStateException("No se pudo subir el video a Cloudinary", e);
+        }
+    }
+
     public String videoThumbnailUrl(String secureVideoUrl) {
         if (secureVideoUrl == null || secureVideoUrl.isBlank()) return null;
         String transformed = secureVideoUrl.replace("/upload/", "/upload/so_0,c_fill,w_900,h_900,q_auto:good,f_jpg/");
