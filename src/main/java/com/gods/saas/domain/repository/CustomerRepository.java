@@ -145,11 +145,13 @@ public interface CustomerRepository extends JpaRepository<Customer, Long> {
                  where s.tenant_id=:tenantId and s.customer_id=c.customer_id
                    and coalesce(s.payment_validation_status,'APPROVED')='APPROVED'
                  order by coalesce(s.sale_date,s.fecha_creacion) desc limit 1) as sede,
-               coalesce(c.puntos_disponibles,0) as puntos,
+               coalesce(la.puntos_disponibles,0) as puntos,
                (select count(*) from sale s where s.tenant_id=:tenantId and s.customer_id=c.customer_id
                    and coalesce(s.payment_validation_status,'APPROVED')='APPROVED') as compras,
                coalesce(c.activo,true) as activo
-          from customer c where c.tenant_id=:tenantId
+          from customer c
+          left join loyalty_account la on la.customer_id=c.customer_id and la.tenant_id=c.tenant_id
+         where c.tenant_id=:tenantId
          order by c.fecha_registro desc nulls last, c.nombres asc
         """, nativeQuery = true)
     List<CustomerExportProjection> exportCustomers(@Param("tenantId") Long tenantId);
