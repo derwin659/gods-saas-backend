@@ -25,6 +25,7 @@ public class PromotionServiceImpl implements PromotionService {
     private final CustomerRepository customerRepository;
     private final LoyaltyAccountRepository loyaltyAccountRepository;
     private final PromotionRepository promotionRepository;
+    private final ServiceRepository serviceRepository;
     private final TenantRepository tenantRepository;
     private final BranchRepository branchRepository;
     private final ApplicationEventPublisher eventPublisher;
@@ -204,6 +205,21 @@ public class PromotionServiceImpl implements PromotionService {
     }
 
     private void validatePromotion(Promotion p) {
+        if (p.getRedirectType() == PromotionRedirectType.SERVICE) {
+            long serviceId;
+            try {
+                serviceId = Long.parseLong(p.getRedirectValue() == null ? "" : p.getRedirectValue().trim());
+            } catch (NumberFormatException ex) {
+                throw new IllegalArgumentException("Selecciona un servicio válido para la oferta");
+            }
+            ServiceEntity service = serviceRepository.findByIdAndTenant_IdAndDeletedAtIsNull(serviceId, p.getTenant().getId())
+                    .orElseThrow(() -> new IllegalArgumentException("El servicio no pertenece a este negocio o ya no está disponible"));
+            if (!Boolean.TRUE.equals(service.getActivo())) {
+                throw new IllegalArgumentException("Selecciona un servicio activo para la oferta");
+            }
+            p.setRedirectValue(Long.toString(serviceId));
+        }
+
         if (p.getTitulo() == null || p.getTitulo().isBlank()) {
             throw new IllegalArgumentException("El título es obligatorio");
         }
