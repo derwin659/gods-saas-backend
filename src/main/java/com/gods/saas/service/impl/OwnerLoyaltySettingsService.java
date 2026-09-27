@@ -42,6 +42,10 @@ public class OwnerLoyaltySettingsService {
     private static final int MAX_BONUS_POINTS = 100_000;
     private static final int MAX_TIERS = 20;
 
+    public static final String EXPIRATION_ENABLED_KEY = "loyaltyPointsExpirationEnabled";
+    public static final String EXPIRATION_DAYS_KEY = "loyaltyPointsExpirationDays";
+    private final com.gods.saas.domain.repository.LoyaltyPointLotRepository loyaltyPointLotRepository;
+
     private final TenantSettingsRepository tenantSettingsRepository;
 
     @Transactional(readOnly = true)
@@ -52,6 +56,8 @@ public class OwnerLoyaltySettingsService {
         return LoyaltySettingsResponse.builder()
                 .pointsPerCurrencyUnit(resolvePointsPerCurrencyUnit(settings))
                 .currency(currency)
+                .pointsExpirationEnabled(readBoolean(settings, EXPIRATION_ENABLED_KEY, false))
+                .pointsExpirationDays(readInt(settings, EXPIRATION_DAYS_KEY, 180))
                 .currencySymbol(resolveCurrencySymbol(currency))
                 .welcomeBonusEnabled(readBoolean(settings, WELCOME_BONUS_ENABLED_KEY, true))
                 .welcomeBonusPoints(readInt(settings, WELCOME_BONUS_POINTS_KEY, DEFAULT_WELCOME_BONUS))
@@ -118,6 +124,21 @@ public class OwnerLoyaltySettingsService {
         }
         if (vipVisits < frequentMin) {
             throw new RuntimeException("El mínimo de visitas VIP no puede ser menor que el mínimo frecuente.");
+        }
+        boolean wasEnabled = readBoolean(settings, EXPIRATION_ENABLED_KEY, false);
+        int previousDays = readInt(settings, EXPIRATION_DAYS_KEY, 180);
+        boolean enabled = request.getPointsExpirationEnabled() == null ? wasEnabled : request.getPointsExpirationEnabled();
+        int days = request.getPointsExpirationDays() == null ? previousDays
+                : validateRange(request.getPointsExpirationDays(), 1, 3650, "días de vencimiento");
+        config.put(EXPIRATION_ENABLED_KEY, enabled);
+        config.put(EXPIRATION_DAYS_KEY, days);
+        // Changing other settings must never extend the expiration period.
+        if (enabled && (!wasEnabled || days != previousDays)) {
+            LocalDateTime deadline = LocalDateTime.now().plusDays(days);
+            for (var lot : loyaltyPointLotRepository.findByTenantIdAndStatus(tenantId, "ACTIVE")) {
+                lot.setExpiresAt(deadline);
+                loyaltyPointLotRepository.save(lot);
+            }
         }
         settings.setScheduleConfig(config);
         settings.setUpdatedAt(LocalDateTime.now());

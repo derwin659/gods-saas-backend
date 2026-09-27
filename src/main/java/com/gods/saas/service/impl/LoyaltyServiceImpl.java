@@ -26,7 +26,7 @@ public class LoyaltyServiceImpl implements LoyaltyService {
 
     private static final int DEFAULT_POINTS_PER_CURRENCY_UNIT = 5;
     private static final String POINTS_PER_CURRENCY_UNIT_KEY = "loyaltyPointsPerCurrencyUnit";
-    private static final int POINTS_EXPIRATION_DAYS = 180;
+
 
     private final LoyaltyAccountRepository loyaltyAccountRepository;
     private final LoyaltyMovementRepository loyaltyMovementRepository;
@@ -79,7 +79,7 @@ public class LoyaltyServiceImpl implements LoyaltyService {
                 .pointsEarned(puntosGanados)
                 .pointsAvailable(puntosGanados)
                 .earnedAt(LocalDateTime.now())
-                .expiresAt(LocalDateTime.now().plusDays(POINTS_EXPIRATION_DAYS))
+                .expiresAt(LocalDateTime.now().plusDays(resolveConfiguredInt(tenant, OwnerLoyaltySettingsService.EXPIRATION_DAYS_KEY, 180)))
                 .status("ACTIVE")
                 .build();
 
@@ -195,6 +195,11 @@ public class LoyaltyServiceImpl implements LoyaltyService {
         int processed = 0;
 
         for (LoyaltyPointLot lot : expiredLots) {
+            boolean enabled = tenantSettingsRepository.findByTenant_Id(lot.getTenantId())
+                    .map(settings -> settings.getScheduleConfig() != null
+                            && Boolean.TRUE.equals(settings.getScheduleConfig().get(OwnerLoyaltySettingsService.EXPIRATION_ENABLED_KEY)))
+                    .orElse(false);
+            if (!enabled) continue;
             int pointsToExpire = safeInt(lot.getPointsAvailable());
             if (pointsToExpire <= 0) {
                 lot.setStatus("EXPIRED");
@@ -213,7 +218,8 @@ public class LoyaltyServiceImpl implements LoyaltyService {
             }
 
             LoyaltyAccount loyalty = loyaltyOpt.get();
-            int nuevoDisponible = Math.max(0, safeInt(loyalty.getPuntosDisponibles()) - pointsToExpire);
+            pointsToExpire = Math.min(pointsToExpire, Math.max(0, safeInt(loyalty.getPuntosDisponibles())));
+            int nuevoDisponible = safeInt(loyalty.getPuntosDisponibles()) - pointsToExpire;
 
             loyalty.setPuntosDisponibles(nuevoDisponible);
             loyalty.setFechaUltimoMovimiento(LocalDateTime.now());

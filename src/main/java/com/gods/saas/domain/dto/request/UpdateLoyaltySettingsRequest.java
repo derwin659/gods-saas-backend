@@ -10,6 +10,8 @@ import java.util.List;
 public class UpdateLoyaltySettingsRequest {
     private BigDecimal pointsPerCurrencyUnit;
     private String currency;
+    private Boolean pointsExpirationEnabled;
+    private Integer pointsExpirationDays;
     private Boolean welcomeBonusEnabled;
     private Integer welcomeBonusPoints;
     private Boolean activationBonusEnabled;

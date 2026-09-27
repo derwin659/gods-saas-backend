@@ -26,6 +26,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class OwnerLoyaltyServiceImpl implements OwnerLoyaltyService {
 
+    private final LoyaltyLotConsumptionService lotConsumptionService;
     private final CustomerRepository customerRepository;
     private final LoyaltyAccountRepository loyaltyAccountRepository;
     private final LoyaltyMovementRepository loyaltyMovementRepository;
@@ -122,6 +123,7 @@ public class OwnerLoyaltyServiceImpl implements OwnerLoyaltyService {
             throw new IllegalArgumentException("El ajuste dejaría el saldo en negativo.");
         }
 
+        if (request.pointsDelta() < 0) lotConsumptionService.consume(tenantId, customer.getId(), -request.pointsDelta());
         loyaltyAccount.setPuntosDisponibles(newPoints);
 
         int puntosAcumulados = safeInt(loyaltyAccount.getPuntosAcumulados());

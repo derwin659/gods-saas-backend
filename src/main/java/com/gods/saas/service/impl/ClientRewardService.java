@@ -23,6 +23,7 @@ public class ClientRewardService {
     private final RewardItemRepository rewardItemRepository;
     private final RewardRedemptionRepository rewardRedemptionRepository;
     private final LoyaltyMovementRepository loyaltyMovementRepository;
+    private final LoyaltyLotConsumptionService lotConsumptionService;
     private final NotificationService notificationService;
 
     public List<ClientRewardRedemptionResponse> listRedemptions(Authentication authentication) {
@@ -64,6 +65,7 @@ public class ClientRewardService {
 
         int nuevoSaldo = puntosDisponibles - puntosRequeridos;
 
+        lotConsumptionService.consume(tenantId, customer.getId(), puntosRequeridos);
         loyalty.setPuntosDisponibles(nuevoSaldo);
         loyalty.setFechaUltimoMovimiento(LocalDateTime.now());
         loyaltyAccountRepository.save(loyalty);

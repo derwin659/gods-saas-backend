@@ -11,6 +11,8 @@ import java.util.List;
 public class LoyaltySettingsResponse {
     private BigDecimal pointsPerCurrencyUnit;
     private String currency;
+    private Boolean pointsExpirationEnabled;
+    private Integer pointsExpirationDays;
     private String currencySymbol;
     private Boolean welcomeBonusEnabled;
     private Integer welcomeBonusPoints;
