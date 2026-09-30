@@ -73,4 +73,42 @@ class AcademyServiceTest {
    assertThrows(ResponseStatusException.class, () -> service.create(draft("Prueba",0,List.of("SUPER_ADMIN"),null)));
    assertThrows(ResponseStatusException.class, () -> service.create(draft("Prueba",0,List.of("ADMIN"),"MADE_UP_PERMISSION")));
  }
+
+ @Test void platformVideosAreIndependentAndDraftMetadataPreservesThem() {
+   var lesson=service.create(new AcademyService.Draft("Ambas","Caja",List.of("OWNER"),null,3,"Resumen",List.of("Paso"),22,0,4,"both",true));
+   var file=new MockMultipartFile("video","demo.mp4","video/mp4",new byte[]{1});
+   when(storage.uploadAcademyVideo(anyString(),any())).thenReturn(new CloudinaryStorageService.UploadResult("https://example.com/web.mp4","web"));
+   var web=service.upload(lesson.id(),lesson.version(),file,"web");
+   when(storage.uploadAcademyVideo(anyString(),any())).thenReturn(new CloudinaryStorageService.UploadResult("https://example.com/mobile.mp4","mobile"));
+   var mobile=service.upload(web.id(),web.version(),file,"mobile");
+   var live=service.publish(mobile.id(),mobile.version());
+   assertEquals("https://example.com/web.mp4",service.catalog("OWNER","web").lessons().getFirst().videoUrl());
+   assertEquals("https://example.com/mobile.mp4",service.catalog("OWNER","mobile").lessons().getFirst().videoUrl());
+   var edited=service.update(live.id(),new AcademyService.Draft("Editada","Caja",List.of("OWNER"),null,3,"Resumen",List.of("Paso"),23,live.version(),4,"mobile",true));
+   assertEquals(2,edited.draft().videos().size());
+   assertEquals(1,service.catalog("OWNER","web").lessons().size());
+   service.publish(edited.id(),edited.version());
+   assertTrue(service.catalog("OWNER","web").lessons().isEmpty());
+   assertTrue(service.catalog("OWNER","mobile").lessons().getFirst().initialRoute());
+ }
+ @Test void missingPlatformVideoDoesNotUseOtherPlatformAndInvalidUploadDoesNotStore() {
+   var lesson=service.create(new AcademyService.Draft("Solo video móvil","Inicio",List.of("OWNER"),null,3,"Resumen",List.of("Paso"),1,0,1,"both",false));
+   when(storage.uploadAcademyVideo(anyString(),any())).thenReturn(new CloudinaryStorageService.UploadResult("https://example.com/mobile.mp4","mobile"));
+   var uploaded=service.upload(lesson.id(),lesson.version(),new MockMultipartFile("video",new byte[]{1}),"mobile");
+   service.publish(uploaded.id(),uploaded.version());
+   assertNull(service.catalog("OWNER","web").lessons().getFirst().videoUrl());
+   clearInvocations(storage);
+   assertThrows(ResponseStatusException.class,() -> service.upload(lesson.id(),0,null,"desktop"));
+   verifyNoInteractions(storage);
+ }
+ @Test void legacyJsonStillLoadsAndModulesSortBeforeLessonOrder() {
+   var row=new AcademyLesson();row.setId("legacy");row.setVersion(0L);
+   row.setDraftJson("{\"id\":\"legacy\",\"title\":\"Vieja\",\"category\":\"Caja\",\"roles\":[\"OWNER\"],\"minutes\":3,\"summary\":\"Resumen\",\"steps\":[\"Paso\"],\"videoUrl\":\"https://example.com/legacy.mp4\",\"sortOrder\":0}");
+   row.setPublishedJson(row.getDraftJson());rows.put(row.getId(),row);
+   var first=service.create(new AcademyService.Draft("Primera","Inicio",List.of("OWNER"),null,3,"Resumen",List.of("Paso"),99,0,1,"both",true));
+   service.publish(first.id(),first.version());
+   var catalog=service.catalog("OWNER","mobile").lessons();
+   assertEquals(first.id(),catalog.getFirst().id());assertEquals(4,catalog.getLast().moduleId());
+   assertEquals("https://example.com/legacy.mp4",catalog.getLast().videoUrl());
+ }
 }

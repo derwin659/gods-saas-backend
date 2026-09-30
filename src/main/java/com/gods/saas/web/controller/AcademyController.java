@@ -25,7 +25,8 @@ public class AcademyController {
  @PutMapping("/api/super-admin/academy/{id}") @PreAuthorize("hasRole('SUPER_ADMIN')")
  public AcademyService.AdminLesson update(@PathVariable String id,@RequestBody AcademyService.Draft input) { requireSuperAdmin(); return service.update(id,input); }
  @PostMapping(value="/api/super-admin/academy/{id}/video",consumes="multipart/form-data") @PreAuthorize("hasRole('SUPER_ADMIN')")
- public AcademyService.AdminLesson upload(@PathVariable String id,@RequestParam long version,@RequestPart("video") MultipartFile video) { requireSuperAdmin(); return service.upload(id,version,video); }
+ public AcademyService.AdminLesson upload(@PathVariable String id,@RequestParam long version,@RequestPart("video") MultipartFile video,@RequestParam(defaultValue="both") String platform) { requireSuperAdmin(); return service.upload(id,version,video,platform); }
+ public AcademyService.AdminLesson upload(String id,long version,MultipartFile video) { requireSuperAdmin(); return service.upload(id,version,video); }
  @PostMapping("/api/super-admin/academy/{id}/publish") @PreAuthorize("hasRole('SUPER_ADMIN')")
  public AcademyService.AdminLesson publish(@PathVariable String id,@RequestBody AcademyService.Revision input) { requireSuperAdmin(); return service.publish(id,input.version()); }
  @PostMapping("/api/super-admin/academy/{id}/unpublish") @PreAuthorize("hasRole('SUPER_ADMIN')")

@@ -25,9 +25,23 @@ public class AcademyService {
  private final CloudinaryStorageService storage;
  private final AdminPermissionService permissions;
  public record Content(String id,String title,String category,List<String> roles,String permission,
-     int minutes,String summary,List<String> steps,String videoUrl,String videoPublicId,String captionUrl,int sortOrder) {}
+     int minutes,String summary,List<String> steps,String videoUrl,String videoPublicId,String captionUrl,int sortOrder,int moduleId,String platform,boolean initialRoute,Map<String,Video> videos) {
+   public Content {
+     if(moduleId==0) {
+       moduleId=legacyModule(category);
+       initialRoute=Set.of("welcome","setup","sale","close","agenda").contains(id);
+     }
+     if(platform==null) platform="both";
+     if(videos==null) videos=Map.of();
+   }
+ }
+ public record Video(String url,String publicId) {}
  public record Draft(String title,String category,List<String> roles,String permission,int minutes,
-     String summary,List<String> steps,int sortOrder,long version) {}
+     String summary,List<String> steps,int sortOrder,long version,Integer moduleId,String platform,Boolean initialRoute) {
+   public Draft(String title,String category,List<String> roles,String permission,int minutes,String summary,List<String> steps,int sortOrder,long version) {
+     this(title,category,roles,permission,minutes,summary,steps,sortOrder,version,null,null,null);
+   }
+ }
  public record AdminLesson(String id,Content draft,boolean published,boolean hasChanges,long version) {}
  public record Revision(long version) {}
  public record Catalog(int version,Map<String,String> roles,List<Content> lessons) {}
@@ -42,23 +56,27 @@ public class AcademyService {
      throw new ResponseStatusException(HttpStatus.FORBIDDEN,"Academy no está disponible para este rol en la web");
    List<Content> lessons = repository.findAll().stream().filter(row -> row.getPublishedJson()!=null)
      .map(row -> decode(row.getPublishedJson()))
+     .filter(item -> item.platform().equals("both") || item.platform().equals(platform))
      .filter(item -> item.roles().contains(role))
      .filter(item -> !role.equals("ADMIN") || item.permission()==null || permissions.hasCurrentUserPermission(item.permission()))
-     .sorted(Comparator.comparingInt(Content::sortOrder).thenComparing(Content::id)).toList();
-   return new Catalog(1,Map.of("OWNER","Dueño","ADMIN","Administrador","CLIENT","Cliente","BARBER","Profesional","CASHIER","Trabajador de caja"),lessons);
+     .map(item -> forPlatform(item,platform))
+     .sorted(Comparator.comparingInt(Content::moduleId).thenComparingInt(Content::sortOrder).thenComparing(Content::id)).toList();
+   return new Catalog(2,Map.of("OWNER","Dueño","ADMIN","Administrador","CLIENT","Cliente","BARBER","Profesional","CASHIER","Trabajador de caja"),lessons);
  }
  @Transactional public AdminLesson create(Draft input) {
    validate(input);
    var row = new AcademyLesson();row.setId("lesson-"+UUID.randomUUID());
-   row.setDraftJson(encode(content(row.getId(),input,null,null)));
+   row.setDraftJson(encode(content(row.getId(),input,null)));
    return save(row);
  }
  @Transactional public AdminLesson update(String id,Draft input) {
    validate(input); var row = require(id,input.version()); var previous=decode(row.getDraftJson());
-   row.setDraftJson(encode(content(id,input,previous.videoUrl(),previous.videoPublicId())));
+   row.setDraftJson(encode(content(id,input,previous)));
    return save(row);
  }
- @Transactional public AdminLesson upload(String id,long version,MultipartFile file) {
+ @Transactional public AdminLesson upload(String id,long version,MultipartFile file) { return upload(id,version,file,"both"); }
+ @Transactional public AdminLesson upload(String id,long version,MultipartFile file,String platform) {
+   if(!Set.of("web","mobile","both").contains(platform)) throw bad("Plataforma de video no válida");
    var row=require(id,version); var previous=decode(row.getDraftJson());
    CloudinaryStorageService.UploadResult upload;
    try { upload=storage.uploadAcademyVideo(id,file); }
@@ -73,7 +91,9 @@ public class AcademyService {
        }
      });
    }
-   row.setDraftJson(encode(new Content(id,previous.title(),previous.category(),previous.roles(),previous.permission(),previous.minutes(),previous.summary(),previous.steps(),upload.getSecureUrl(),upload.getPublicId(),null,previous.sortOrder())));
+   var videos=new HashMap<>(previous.videos());
+   if(!platform.equals("both")) videos.put(platform,new Video(upload.getSecureUrl(),upload.getPublicId()));
+   row.setDraftJson(encode(new Content(id,previous.title(),previous.category(),previous.roles(),previous.permission(),previous.minutes(),previous.summary(),previous.steps(),platform.equals("both")?upload.getSecureUrl():previous.videoUrl(),platform.equals("both")?upload.getPublicId():previous.videoPublicId(),previous.captionUrl(),previous.sortOrder(),previous.moduleId(),previous.platform(),previous.initialRoute(),videos)));
    // Keep prior published assets so draft uploads cannot break the live lesson.
    return save(row);
  }
@@ -83,13 +103,32 @@ public class AcademyService {
  @Transactional public AdminLesson unpublish(String id,long version) {
    var row=require(id,version);row.setPublishedJson(null);return save(row);
  }
- private Content content(String id,Draft input,String url,String publicId) {
+ private static int legacyModule(String category) {
+   if(category==null) return 1;
+   return switch(category) {
+     case "Configuración" -> 2; case "Clientes","Agenda" -> 3; case "Caja" -> 4;
+     case "Reportes" -> 8; case "Mi cuenta","Reservas","Beneficios","Mi trabajo","Atención" -> 10;
+     default -> 1;
+   };
+ }
+ private Content forPlatform(Content item,String platform) {
+   var video=item.videos().get(platform);
+   return new Content(item.id(),item.title(),item.category(),item.roles(),item.permission(),item.minutes(),item.summary(),item.steps(),video==null?item.videoUrl():video.url(),null,video==null?item.captionUrl():null,item.sortOrder(),item.moduleId(),item.platform(),item.initialRoute(),Map.of());
+ }
+ private Content content(String id,Draft input,Content previous) {
    return new Content(id,input.title().trim(),input.category().trim(),List.copyOf(new LinkedHashSet<>(input.roles())),
      input.permission()==null || input.permission().isBlank()?null:input.permission(),input.minutes(),input.summary().trim(),
-     input.steps().stream().map(String::trim).toList(),url,publicId,null,input.sortOrder());
+     input.steps().stream().map(String::trim).toList(),previous==null?null:previous.videoUrl(),previous==null?null:previous.videoPublicId(),previous==null?null:previous.captionUrl(),input.sortOrder(),
+     input.moduleId()==null?(previous==null?legacyModule(input.category()):previous.moduleId()):input.moduleId(),
+     input.platform()==null?(previous==null?"both":previous.platform()):input.platform(),
+     input.initialRoute()==null?previous!=null && previous.initialRoute():input.initialRoute(),previous==null?Map.of():previous.videos());
  }
  private void validate(Draft input) {
    if(input==null) throw bad("Completa la lección");
+   if(input.moduleId()!=null && (input.moduleId()<1 || input.moduleId()>11)) throw bad("Selecciona un módulo válido");
+   if(input.platform()!=null && !Set.of("web","mobile","both").contains(input.platform())) throw bad("Plataforma no válida");
+   if(input.sortOrder()<0) throw bad("El orden no puede ser negativo");
+   if("web".equals(input.platform()) && input.roles()!=null && input.roles().stream().noneMatch(role -> Set.of("OWNER","ADMIN").contains(role))) throw bad("Las lecciones web necesitan audiencia dueño o administrador");
    text(input.title(),160,"título");text(input.category(),80,"funcionalidad");text(input.summary(),600,"resumen");
    if(input.roles()==null || input.roles().isEmpty() || input.roles().stream().anyMatch(role -> role==null || !ROLES.contains(role))) throw bad("Selecciona roles válidos");
    if(input.minutes()<1 || input.minutes()>120) throw bad("Duración: entre 1 y 120 minutos");
