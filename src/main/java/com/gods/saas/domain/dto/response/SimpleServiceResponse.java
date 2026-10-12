@@ -19,4 +19,5 @@ public class SimpleServiceResponse {
     private Boolean precioVariable;
     private Boolean activo;
     private String imageUrl;
+    private java.util.List<Long> packageServiceIds;
 }

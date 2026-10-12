@@ -84,6 +84,7 @@ public class OwnerCatalogServiceImpl implements OwnerCatalogService {
                 .precioVariable(Boolean.TRUE.equals(service.getPrecioVariable()))
                 .activo(service.getActivo())
                 .imageUrl(service.getImageUrl())
+                        .packageServiceIds(service.getPackageServiceIds())
                 .build();
     }
 

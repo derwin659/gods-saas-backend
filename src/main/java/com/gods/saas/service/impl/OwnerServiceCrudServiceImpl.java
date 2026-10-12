@@ -35,6 +35,7 @@ public class OwnerServiceCrudServiceImpl implements OwnerServiceCrudService {
     private final BarberBranchServiceRepository barberBranchServiceRepository;
     private final BarberServiceCommissionRepository barberServiceCommissionRepository;
     private final GeneralAuditService generalAuditService;
+    private final ServicePackageService servicePackageService;
 
     @Override
     @Transactional(readOnly = true)
@@ -77,6 +78,7 @@ public class OwnerServiceCrudServiceImpl implements OwnerServiceCrudService {
 
         ServiceEntity service = new ServiceEntity();
         service.setTenant(tenant);
+        servicePackageService.configure(tenantId, service, request.packageServiceIds(), request.precioVariable());
         service.setNombre(nombreLimpio);
         service.setDescripcion(trimToNull(request.descripcion()));
         service.setDuracionMinutos(request.duracionMinutos());
@@ -108,12 +110,14 @@ public class OwnerServiceCrudServiceImpl implements OwnerServiceCrudService {
             throw new IllegalArgumentException("Ya existe otro servicio con ese nombre");
         }
 
+        servicePackageService.configure(tenantId, service, request.packageServiceIds(), request.precioVariable());
         service.setNombre(nombreLimpio);
         service.setDescripcion(trimToNull(request.descripcion()));
         service.setDuracionMinutos(request.duracionMinutos());
         service.setPrecio(request.precio().doubleValue());
         service.setPrecioVariable(Boolean.TRUE.equals(request.precioVariable()));
         service.setCategoria(trimToNull(request.categoria()));
+        if (Boolean.FALSE.equals(request.activo())) servicePackageService.requireNotIncluded(tenantId, serviceId);
         service.setActivo(request.activo() != null ? request.activo() : service.getActivo());
 
         return toResponse(serviceRepository.save(service));
@@ -122,6 +126,8 @@ public class OwnerServiceCrudServiceImpl implements OwnerServiceCrudService {
     @Override
     public ServiceResponse toggleStatus(Long tenantId, Long serviceId) {
         ServiceEntity service = getServiceOrThrow(tenantId, serviceId);
+        if (Boolean.TRUE.equals(service.getActivo())) servicePackageService.requireNotIncluded(tenantId, serviceId);
+        else servicePackageService.validateForSale(tenantId, service);
         service.setActivo(!Boolean.TRUE.equals(service.getActivo()));
         return toResponse(serviceRepository.save(service));
     }
@@ -156,6 +162,7 @@ public class OwnerServiceCrudServiceImpl implements OwnerServiceCrudService {
     @Override
     public ServiceDeletionResponse delete(Long tenantId, Long serviceId, DeleteServiceRequest request) {
         ServiceEntity service = getServiceOrThrow(tenantId, serviceId);
+        servicePackageService.requireNotIncluded(tenantId, serviceId);
         ServiceDeletionPreviewResponse preview = deletionPreview(tenantId, serviceId);
         Actor actor = currentActor();
         Map<String, Object> before = Map.of(
@@ -271,7 +278,8 @@ public class OwnerServiceCrudServiceImpl implements OwnerServiceCrudService {
                 Boolean.TRUE.equals(service.getPrecioVariable()),
                 service.getCategoria(),
                 service.getActivo(),
-                service.getImageUrl()
+                service.getImageUrl(),
+                service.getPackageServiceIds()
         );
     }
 

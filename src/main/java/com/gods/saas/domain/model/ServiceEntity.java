@@ -23,6 +23,14 @@ public class ServiceEntity {
     @JoinColumn(name = "tenant_id", nullable = false)
     private Tenant tenant;
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+    @Column(name = "package_service_ids", columnDefinition = "jsonb")
+    private java.util.List<Long> packageServiceIds;
+
+    public boolean isServicePackage() {
+        return packageServiceIds != null && !packageServiceIds.isEmpty();
+    }
+
     @Column(nullable = false, length = 150)
     private String nombre;
 

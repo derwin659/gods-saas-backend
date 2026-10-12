@@ -10,6 +10,8 @@ import java.util.List;
 @Setter
 public class CreateSaleFromAppointmentRequest {
     private Long appointmentId;
+    /** Optional package replacing the original appointment service at checkout. */
+    private Long packageServiceId;
     private String metodoPago;
     private Double cashReceived;
     private String notes;

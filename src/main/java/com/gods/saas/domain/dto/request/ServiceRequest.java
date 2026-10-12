@@ -25,6 +25,8 @@ public record ServiceRequest(
 
         String categoria,
 
-        Boolean activo
+        Boolean activo,
+
+        java.util.List<Long> packageServiceIds
 ) {
 }

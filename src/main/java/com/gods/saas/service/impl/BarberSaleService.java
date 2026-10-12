@@ -55,6 +55,7 @@ public class BarberSaleService {
                         .precioVariable(Boolean.TRUE.equals(service.getPrecioVariable()))
                         .activo(service.getActivo())
                         .imageUrl(service.getImageUrl())
+                        .packageServiceIds(service.getPackageServiceIds())
                         .build())
                 .toList();
     }
@@ -156,6 +157,14 @@ public class BarberSaleService {
         }
 
         ServiceEntity service = appointment.getService();
+        if (request.getPackageServiceId() != null) {
+            service = serviceRepository.findByIdAndTenant_IdAndDeletedAtIsNull(request.getPackageServiceId(), tenantId)
+                    .filter(s -> Boolean.TRUE.equals(s.getActivo()) && s.isServicePackage())
+                    .orElseThrow(() -> new IllegalArgumentException("Paquete no disponible"));
+            if (!barberServiceAssignmentService.canPerform(tenantId, branchId, userId, service.getId())) {
+                throw new IllegalArgumentException("No tienes habilitado este paquete en la sede");
+            }
+        }
 
         if (service == null) {
             throw new RuntimeException("La cita no tiene servicio asociado");

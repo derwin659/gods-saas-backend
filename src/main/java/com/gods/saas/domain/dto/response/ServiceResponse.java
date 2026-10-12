@@ -10,6 +10,7 @@ public record ServiceResponse(
         Boolean precioVariable,
         String categoria,
         Boolean activo,
-        String imageUrl
+        String imageUrl,
+        java.util.List<Long> packageServiceIds
 ) {
 }

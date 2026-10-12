@@ -33,6 +33,7 @@ public class SaleServiceImpl implements SaleService {
     private final LoyaltyService loyaltyService;
     private final SaleRepository saleRepository;
     private final ServiceRepository serviceRepository;
+    private final ServicePackageService servicePackageService;
     private final ProductRepository productRepository;
     private final ProductBranchStockRepository productBranchStockRepository;
     private final TenantRepository tenantRepository;
@@ -177,6 +178,9 @@ public class SaleServiceImpl implements SaleService {
                     throw new RuntimeException("El servicio no pertenece al tenant");
                 }
 
+                if (service.isServicePackage()) {
+                    precioUnitario = servicePackageService.salePrice(tenant.getId(), service, itemRequest.getPrecioUnitario());
+                }
                 item.setService(service);
                 item.setTipoItem("SERVICE");
                 item.setNombreItem(clean(service.getNombre()) != null ? clean(service.getNombre()) : "Servicio");
