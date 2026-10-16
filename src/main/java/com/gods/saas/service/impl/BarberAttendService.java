@@ -77,6 +77,7 @@ public class BarberAttendService {
                         .precioVariable(Boolean.TRUE.equals(service.getPrecioVariable()))
                         .categoria(service.getCategoria())
                         .imageUrl(service.getImageUrl())
+                        .packageServiceIds(service.getPackageServiceIds())
                         .activo(Boolean.TRUE.equals(service.getActivo()))
                         .build())
                 .toList();

@@ -20,4 +20,5 @@ public class BarberServiceResponse {
     private String categoria;
     private String imageUrl;
     private Boolean activo;
+    private java.util.List<Long> packageServiceIds;
 }

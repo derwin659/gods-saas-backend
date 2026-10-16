@@ -17,6 +17,7 @@ public class ServiceMiniResponse {
     private Double precio;
     private Boolean precioVariable;
     private String imageUrl;
+    private java.util.List<Long> packageServiceIds;
 
     public static ServiceMiniResponse fromEntity(ServiceEntity s) {
         return ServiceMiniResponse.builder()
@@ -26,6 +27,7 @@ public class ServiceMiniResponse {
                 .precio(s.getPrecio())
                 .precioVariable(Boolean.TRUE.equals(s.getPrecioVariable()))
                 .imageUrl(s.getImageUrl())
+                .packageServiceIds(s.getPackageServiceIds())
                 .build();
     }
 }

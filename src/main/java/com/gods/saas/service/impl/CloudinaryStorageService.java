@@ -142,6 +142,51 @@ public class CloudinaryStorageService {
             throw new IllegalStateException("No se pudo subir el logo del cliente", e);
         }
     }
+    public record CutUpload(String publicId, String mediaType, String format) {}
+
+    public CutUpload uploadCutReference(Long tenantId, Long userId, MultipartFile file) {
+        boolean video = normalizedContentType(file).startsWith("video/");
+        if (video) validateVideo(file); else validateImage(file);
+        String resource = video ? "video" : "image";
+        String publicId = "super-gods/tenants/" + tenantId + "/cut-references/" + UUID.randomUUID();
+        try (ShowcaseUploadRateLimitService.Lease ignored = showcaseUploadRateLimit.acquire(tenantId, userId, video ? "VIDEO" : "IMAGE")) {
+            Map options = ObjectUtils.asMap("resource_type", resource, "type", "authenticated", "public_id", publicId, "overwrite", false);
+            Map result = video ? cloudinary.uploader().uploadLarge(file.getBytes(), options)
+                    : cloudinary.uploader().upload(file.getBytes(), options);
+            if (video) {
+                Object rawDuration = result.get("duration");
+                double duration = rawDuration instanceof Number n ? n.doubleValue() : -1;
+                if (!Double.isFinite(duration) || duration < 1 || duration > 90) {
+                    deleteCutReference(publicId, "VIDEO");
+                    throw new IllegalArgumentException("El video debe durar entre 1 y 90 segundos");
+                }
+            }
+            String format = String.valueOf(result.get("format"));
+            if (format.isBlank() || "null".equals(format)) {
+                deleteCutReference(publicId, video ? "VIDEO" : "IMAGE");
+                throw new IllegalArgumentException("No se pudo verificar el formato del archivo");
+            }
+            return new CutUpload(publicId, video ? "VIDEO" : "IMAGE", format);
+        } catch (IOException e) { throw new IllegalStateException("No se pudo subir la referencia", e); }
+    }
+
+    public String cutReferenceUrl(String publicId, String mediaType, String format) {
+        try {
+            return cloudinary.privateDownload(publicId, format, ObjectUtils.asMap(
+                    "resource_type", "VIDEO".equals(mediaType) ? "video" : "image",
+                    "type", "authenticated", "attachment", false,
+                    "expires_at", java.time.Instant.now().getEpochSecond() + 600));
+        } catch (Exception e) { throw new IllegalStateException("No se pudo abrir la referencia", e); }
+    }
+
+    public void deleteCutReference(String publicId, String mediaType) {
+        try {
+            cloudinary.uploader().destroy(publicId, ObjectUtils.asMap(
+                    "resource_type", "VIDEO".equals(mediaType) ? "video" : "image",
+                    "type", "authenticated", "invalidate", true));
+        } catch (IOException e) { throw new IllegalStateException("No se pudo eliminar la referencia", e); }
+    }
+
     public UploadResult uploadShowcaseImage(Long tenantId, Long professionalId, MultipartFile file) {
         validateImage(file);
         try (ShowcaseUploadRateLimitService.Lease ignored =
