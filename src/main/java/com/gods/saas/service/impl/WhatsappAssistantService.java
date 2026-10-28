@@ -39,6 +39,7 @@ public class WhatsappAssistantService {
     private final WhatsappAssistantInterpreter interpreter;
     private final WhatsappAssistantUsageService usage;
     private final WhatsappDepositService deposits;
+    private final WhatsappCustomerOnboarding onboarding;
     @Value("${whatsapp.assistant.enabled:false}") private boolean enabled;
     @Value("${whatsapp.assistant.tenant-ids:}") private String tenantIds;
     @Value("${whatsapp.twilio.from-number:}") private String fromNumber;
@@ -79,25 +80,13 @@ public class WhatsappAssistantService {
             return "Conversacion cerrada. Para volver escribe HOLA.";
         }
         if (text.toUpperCase(Locale.ROOT).startsWith("GODS ")) {
-            String code = text.substring(5).trim();
-            jdbc.update("update whatsapp_assistant_session set tenant_id=null,draft=null,confirmation_code=null,quote=null,expires_at=null where phone=?",phone);
-            var tenant = tenants.findByCodigoIgnoreCaseAndActiveTrue(code);
-            if (tenant.isEmpty() || !allowed(tenant.get().getId())) return unavailable();
-            Customer customer = customer(tenant.get().getId(), phone);
-            if (customer == null) return unavailable();
-            subscriptions.validateSubscriptionActive(tenant.get().getId());
-            if (policy.monthlyTurns(subscriptions.getCurrentSubscriptionOrThrow(tenant.get().getId()).getPlan()) == 0)
-                return unavailable();
-            Long selectedId = tenant.get().getId();
-            int selectedLimit = policy.monthlyTurns(subscriptions.getCurrentSubscriptionOrThrow(selectedId).getPlan());
-            if (!usage.reserve(selectedId, YearMonth.from(time.today(selectedId)).toString(), selectedLimit)) return skipped("monthly_quota_exhausted");
-            jdbc.update("update whatsapp_assistant_session set tenant_id=?,draft=null,confirmation_code=null,quote=null,expires_at=? where phone=?",
-                    tenant.get().getId(), Timestamp.from(now.plusSeconds(1800)), phone);
-            return menu(phone, tenant.get().getNombre());
+            return onboarding.reply(phone,text.substring(5).trim(),mapper.createObjectNode(),now);
         }
-        if (Set.of("cambiar negocio", "otro negocio").contains(normalize(text))) {
+        if (normalize(text).matches("^(quiero reservar en|quiero una cita en|reservar en) .+"))
+            return onboarding.reply(phone,text,mapper.createObjectNode(),now);
+        if (Set.of("cambiar negocio", "otro negocio", "cambiar barberia", "otra barberia").contains(normalize(text))) {
             jdbc.update("update whatsapp_assistant_session set tenant_id=null,draft=null,confirmation_code=null,quote=null,expires_at=null where phone=?",phone);
-            return onboarding(phone,"hola",mapper.createObjectNode(),now);
+            return onboarding.reply(phone,"",mapper.createObjectNode(),now);
         }
         if (session.get("tenant_id") == null || session.get("expires_at") == null || instant(session.get("expires_at")).isBefore(now))
             return onboarding(phone,text,oldRoot,now);
@@ -216,8 +205,14 @@ public class WhatsappAssistantService {
         catch (RuntimeException ignored) { /* Return inactive status, never unlock an expired subscription. */ }
         boolean ready = enabled && allowed(tenantId) && limit > 0 && active;
         int used = ready ? usage.used(tenantId, month) : 0;
-        return Map.of("enabled", ready, "plan", sub.getPlan(), "monthlyTurns", limit,
-                "usedTurns", used, "remainingTurns", Math.max(0, limit - used), "month", month, "aiConfigured", interpreter.configured());
+        var result = new java.util.LinkedHashMap<String,Object>(Map.of("enabled", ready, "plan", sub.getPlan(), "monthlyTurns", limit,
+                "usedTurns", used, "remainingTurns", Math.max(0, limit - used), "month", month, "aiConfigured", interpreter.configured()));
+        String code=tenants.findById(tenantId).map(Tenant::getCodigo).orElse("");
+        String sender=Objects.toString(fromNumber, "").replaceFirst("^whatsapp:", "");
+        result.put("businessCode",code);
+        result.put("bookingWhatsappUrl",ready && sender.matches("\\+[1-9][0-9]{7,14}") && !code.isBlank()
+                ? "https://wa.me/"+sender.substring(1)+"?text="+java.net.URLEncoder.encode("GODS "+code,java.nio.charset.StandardCharsets.UTF_8) : "");
+        return result;
     }
     /** Recognize only unambiguous read requests; mixed requests still go through the model. */
     private String directQuery(String text) {
@@ -298,8 +293,12 @@ public class WhatsappAssistantService {
                 }).toList();
     }
     private String onboarding(String phone, String text, ObjectNode oldDraft, Instant now) throws Exception {
+        String stage=metadata(oldDraft).path("stage").asText();
+        if (stage.startsWith("REGISTER_") || stage.equals("DISCOVER")) return onboarding.reply(phone,text,oldDraft,now);
+        if (!stage.equals("BUSINESS") && !Set.of("hola","buenas","buenos dias","buenas tardes","menu","ayuda","puntos","reservar","quiero reservar").contains(normalize(text)))
+            return onboarding.reply(phone,text,oldDraft,now);
         List<Customer> candidates=businesses(phone);
-        if (candidates.isEmpty()) return "Para usar el asistente, registra y verifica tu WhatsApp como cliente de un negocio habilitado en Super Gods. Si tienes un codigo puedes escribir GODS seguido del codigo.";
+        if (candidates.isEmpty()) return "¡Hola! ¿En que barberia quieres reservar? Escribe su nombre o codigo, o envia el mensaje preparado del enlace o QR del negocio.";
         ObjectNode oldMeta=metadata(oldDraft);
         Customer selected=null;
         if ("BUSINESS".equals(oldMeta.path("stage").asText())) {
@@ -311,6 +310,10 @@ public class WhatsappAssistantService {
                     || normalize(text).equals(normalize(c.getTenant().getCodigo()))).toList();
             if (matches.size()==1) selected=matches.get(0);
         }
+        if (selected==null && "BUSINESS".equals(oldMeta.path("stage").asText())
+                && !normalize(text).matches("[0-9]{1,2}")
+                && !Set.of("hola","menu","ayuda").contains(normalize(text)))
+            return onboarding.reply(phone,text,mapper.createObjectNode(),now);
         if (selected==null && candidates.size()==1) selected=candidates.get(0);
         if (selected!=null) {
             Long id=selected.getTenant().getId();

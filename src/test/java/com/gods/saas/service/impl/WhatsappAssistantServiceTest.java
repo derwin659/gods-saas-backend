@@ -31,7 +31,8 @@ class WhatsappAssistantServiceTest {
     private final WhatsappAssistantInterpreter interpreter = mock(WhatsappAssistantInterpreter.class);
     private final WhatsappAssistantUsageService usage = mock(WhatsappAssistantUsageService.class);
     private final WhatsappDepositService deposits = mock(WhatsappDepositService.class);
-    private final WhatsappAssistantService service = new WhatsappAssistantService(jdbc, mapper, customers, tenants, loyalty, promotions, subscriptions, bookings, time, policy, interpreter, usage, deposits);
+    private final WhatsappCustomerOnboarding onboarding=mock(WhatsappCustomerOnboarding.class);
+    private final WhatsappAssistantService service = new WhatsappAssistantService(jdbc, mapper, customers, tenants, loyalty, promotions, subscriptions, bookings, time, policy, interpreter, usage, deposits, onboarding);
     private final Map<String,Object> session = new HashMap<>();
     private final String sid = "SM" + "a".repeat(32);
     private final String phone = "whatsapp:+51999999999";
@@ -323,5 +324,22 @@ class WhatsappAssistantServiceTest {
         assertTrue(reply("si").contains("Envia captura"));
         verify(deposits).begin(eq(1L),eq(7L),eq("+51999999999"),any(),eq(new BigDecimal("25.00")),eq(catalog));
         verify(bookings,never()).createAppointment(any(),any(),any());
+    }
+
+    @Test void explicitBusinessSelectionRoutesToOnboardingEvenWithExistingSession() throws Exception {
+        when(onboarding.reply(anyString(),anyString(),any(),any())).thenReturn("Seleccion de barberia");
+        assertEquals("Seleccion de barberia",reply("Quiero reservar en INDYSTRY"));
+        assertEquals("Seleccion de barberia",reply("GODS INDYSTRY"));
+        verify(onboarding).reply(eq("+51999999999"),eq("INDYSTRY"),any(),any());
+        verifyNoInteractions(loyalty,bookings);
+    }
+    @Test void ownerBookingLinkUsesAuthenticatedBusinessAndConfiguredCentralNumber() {
+        customer.getTenant().setCodigo("INDYSTRY");
+        when(tenants.findById(1L)).thenReturn(Optional.of(customer.getTenant()));
+        var status=service.status(1L);
+        assertEquals("INDYSTRY",status.get("businessCode"));
+        assertEquals("https://wa.me/15005550006?text=GODS+INDYSTRY",status.get("bookingWhatsappUrl"));
+        ReflectionTestUtils.setField(service,"tenantIds","2");
+        assertEquals("",service.status(1L).get("bookingWhatsappUrl"));
     }
 }

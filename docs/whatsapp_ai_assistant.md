@@ -6,7 +6,8 @@ Estado: implementado y probado localmente. El despliegue y las pruebas con Twili
 
 - `Hola` descubre los negocios donde el telefono entrante esta registrado y verificado como cliente, tiene consentimiento transaccional y el tenant esta autorizado para el piloto.
 - Si hay un negocio habilitado, abre su menu. Si hay varios, pregunta cual elegir mediante nombre o numero. No selecciona un negocio distinto por inferencia del modelo.
-- `GODS CODIGO` conserva el acceso directo. `CAMBIAR NEGOCIO` descarta el contexto anterior y ofrece los negocios elegibles. `SALIR` cierra la sesion.
+- Los numeros nuevos pueden elegir barberia por nombre o codigo y crear su ficha tras indicar nombre y responder ACEPTO. Las fichas existentes sin verificar no se reclaman por chat. Ver [registro y QR](whatsapp_onboarding.md).
+- `GODS CODIGO` conserva el acceso directo. `CAMBIAR NEGOCIO` descarta el contexto anterior y permite buscar otra barberia habilitada por nombre o codigo. `SALIR` cierra la sesion.
 - Menu: 1 Reservar, 2 Puntos, 3 Promociones, 4 Horarios, 5 Barberos disponibles, 6 Servicios y precios.
 - El cliente puede escribir libremente o responder con el numero/nombre de una opcion. Se reconocen respuestas cortas como `mañana`, `cualquiera`, `el segundo` y `17:00` segun la pregunta previa.
 - El backend conserva servicio, sede, profesional, fecha, hora y promocion. Cada paso pregunta solo por datos faltantes o invalidos. Los cambios de servicio o sede eliminan selecciones dependientes que deben revisarse.
