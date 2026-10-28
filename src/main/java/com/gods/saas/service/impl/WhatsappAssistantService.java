@@ -503,7 +503,13 @@ public class WhatsappAssistantService {
         return slots.stream().filter(s -> !LocalTime.parse(s).isBefore(LocalTime.parse(after))).toList();
     }
     private List<ObjectNode> serviceChoices(BookingBootstrapResponse catalog) {
-        return catalog.getServices().stream().limit(20).map(s -> choice(s.getId(),s.getNombre()+" — "+(Boolean.TRUE.equals(s.getPrecioVariable())?"precio a consultar":Objects.toString(s.getPrecio(),"a consultar")))).toList();
+        return catalog.getServices().stream().limit(20).map(s -> {
+            String price = s.getPrecio() == null ? "precio no configurado"
+                    : (Boolean.TRUE.equals(s.getPrecioVariable()) ? "Precio desde " : "")
+                    + Objects.toString(catalog.getCurrency(), "PEN") + " "
+                    + BigDecimal.valueOf(s.getPrecio()).setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
+            return choice(s.getId(), s.getNombre() + " — " + price);
+        }).toList();
     }
     private List<ObjectNode> barberChoices(List<BarberMiniResponse> professionals) {
         List<ObjectNode> choices=new ArrayList<>(professionals.stream().limit(19).map(b -> choice(b.getId(),(b.getNombre()+" "+Objects.toString(b.getApellido(),"")).trim())).toList());
