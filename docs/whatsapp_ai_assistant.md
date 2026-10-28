@@ -80,7 +80,7 @@ Los valores de cupos y timeout son opcionales si se conservan los predeterminado
 1. Si ya se aplico 20261028_whatsapp_assistant.sql, no ejecutar otra migracion por esta ampliacion.
 2. Subir y desplegar el codigo actualizado del backend; aplicar variables en Railway no sube archivos locales.
 3. Esperar a que el nuevo despliegue quede activo. Los logs de una revision anterior no verifican la version nueva.
-4. Escribir `HOLA` desde un cliente verificado. Debe aparecer el menu numerado de seis opciones; esa es una diferencia visible respecto al saludo anterior.
+4. Escribir `HOLA` desde un cliente verificado. Debe aparecer el menu numerado de nueve opciones; esa es una diferencia visible respecto al saludo anterior.
 5. Probar puntos, promociones, seleccion de profesional, horarios sin disponibilidad y una reserva completa. Confirmar el resultado en la agenda.
 6. Probar cambio de precio y confirmacion repetida con datos controlados. Revisar consumo y gastos del proveedor antes de abrir el piloto a mas tenants.
 
@@ -105,3 +105,5 @@ Documentacion oficial de la API utilizada: https://developers.openai.com/api/doc
 ## Diagnostico de mensajes sin respuesta
 
 El saludo, menu y consultas directas no requieren credenciales de IA; aiConfigured se informa aparte en el endpoint de estado. El acceso sigue sujeto al flag, destinatario, identidad y cuota. El log entrante incluye dialogueVersion=2. `WhatsApp assistant skipped` explica las omisiones con codigos seguros: disabled, destination_mismatch, invalid_sender, invalid_message, duplicate_message, rate_limited o monthly_quota_exhausted. `WhatsApp assistant result: replyPresent=true` indica que el backend genero texto; no confirma entrega de Twilio. Si no aparece un log entrante nuevo, revisar recepcion/webhook antes de cambiar la IA.
+
+Ver [menu de nueve opciones, respuestas largas y canjes de premios](whatsapp_rewards.md).

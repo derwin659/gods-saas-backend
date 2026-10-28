@@ -89,7 +89,7 @@ class WhatsappAssistantUsageDatabaseTest {
         var time=mock(TenantTimeService.class);
         var policy=mock(WhatsappAssistantPolicy.class);
         var interpreter=mock(WhatsappAssistantInterpreter.class);
-        var service=new WhatsappAssistantService(jdbc,new ObjectMapper(),customers,tenants,loyalty,promotions,subscriptions,bookings,time,policy,interpreter,usage,mock(WhatsappDepositService.class),mock(WhatsappCustomerOnboarding.class));
+        var service=new WhatsappAssistantService(jdbc,new ObjectMapper(),customers,tenants,loyalty,promotions,subscriptions,bookings,time,policy,interpreter,usage,mock(WhatsappDepositService.class),mock(WhatsappCustomerOnboarding.class),mock(WhatsappCustomerActions.class));
         ReflectionTestUtils.setField(service,"enabled",true);
         ReflectionTestUtils.setField(service,"tenantIds","1");
         ReflectionTestUtils.setField(service,"fromNumber","+15005550006");

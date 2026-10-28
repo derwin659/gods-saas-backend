@@ -63,7 +63,7 @@ public class WhatsappCustomerOnboarding {
         if (reserve && !usage.reserve(tenant.getId(),YearMonth.from(time.today(tenant.getId())).toString(),
                 policy.monthlyTurns(subscriptions.getCurrentSubscriptionOrThrow(tenant.getId()).getPlan())))
             return "Este negocio alcanzo su limite mensual del asistente. Contacta al negocio para reservar.";
-        String menu="¿Que deseas hacer?\n1. Reservar una cita\n2. Consultar mis puntos\n3. Ver promociones\n4. Ver horarios disponibles\n5. Ver barberos disponibles\n6. Servicios y precios\nResponde con el numero o escribe con tus palabras. Para elegir otra barberia escribe CAMBIAR BARBERIA.";
+        String menu=WhatsappAssistantMenu.TEXT;
         ObjectNode root=mapper.createObjectNode(); root.set("_assistant",mapper.createObjectNode().put("stage","MENU").put("mode","BOOKING").put("lastPrompt",menu));
         jdbc.update("update whatsapp_assistant_session set tenant_id=?,draft=?,confirmation_code=null,quote=null,expires_at=? where phone=?",
                 tenant.getId(),mapper.writeValueAsString(root),Timestamp.from(now.plusSeconds(1800)),phone);

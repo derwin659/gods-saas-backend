@@ -40,6 +40,7 @@ public class WhatsappAssistantService {
     private final WhatsappAssistantUsageService usage;
     private final WhatsappDepositService deposits;
     private final WhatsappCustomerOnboarding onboarding;
+    private final WhatsappCustomerActions actions;
     @Value("${whatsapp.assistant.enabled:false}") private boolean enabled;
     @Value("${whatsapp.assistant.tenant-ids:}") private String tenantIds;
     @Value("${whatsapp.twilio.from-number:}") private String fromNumber;
@@ -67,7 +68,10 @@ public class WhatsappAssistantService {
         Map<String, Object> session = jdbc.queryForMap("select * from whatsapp_assistant_session where phone=? for update", phone);
         Instant now = Instant.now();
         Object last = session.get("last_turn_at");
-        if (last != null && instant(last).plusSeconds(2).isAfter(now)) return skipped("rate_limited");
+        if (last != null && instant(last).plusSeconds(2).isAfter(now)) {
+            skipped("rate_limited");
+            return "Espera unos segundos y vuelve a enviar tu mensaje para continuar.";
+        }
         jdbc.update("update whatsapp_assistant_session set last_turn_at=? where phone=?", Timestamp.from(now), phone);
         String text = body.trim();
         Set<Long> permitted=Arrays.stream(tenantIds.split(",")).map(String::trim).filter(s -> s.matches("[0-9]{1,18}")).map(Long::valueOf).collect(java.util.stream.Collectors.toSet());
@@ -98,8 +102,14 @@ public class WhatsappAssistantService {
         int limit = policy.monthlyTurns(subscription.getPlan());
         if (limit == 0) return unavailable();
         String month = YearMonth.from(time.today(tenantId)).toString();
-        if (!usage.reserve(tenantId, month, limit))
-            return skipped("monthly_quota_exhausted"); // No repeated paid fallback messages.
+        if (!usage.reserve(tenantId, month, limit)) {
+            skipped("monthly_quota_exhausted");
+            ObjectNode meta=metadata(oldRoot);
+            if (month.equals(meta.path("quotaNoticeMonth").asText())) return null;
+            meta.put("quotaNoticeMonth",month);
+            jdbc.update("update whatsapp_assistant_session set draft=? where phone=?",mapper.writeValueAsString(oldRoot),phone);
+            return "Este negocio alcanzo su limite mensual del asistente. Puedes continuar desde la app o contactar al negocio. El cupo se renueva el proximo mes.";
+        }
         jdbc.update("update whatsapp_assistant_session set expires_at=? where phone=?", Timestamp.from(now.plusSeconds(1800)), phone);
         String clean = normalize(text);
         if ("menu".equals(clean)) {
@@ -125,9 +135,15 @@ public class WhatsappAssistantService {
         }        if ("CONFIRM".equals(metadata(oldRoot).path("stage").asText())
                 && Set.of("si","si confirmo","confirmo","confirmar","dale","de acuerdo").contains(clean)
                 && session.get("confirmation_code")!=null) text="CONFIRMAR "+session.get("confirmation_code");
+        String customerAction=actions.reply(phone,tenantId,customer.getId(),text,oldRoot);
+        if (customerAction!=null) return customerAction;
         int points = loyalty.findByTenant_IdAndCustomer_Id(tenantId, customer.getId())
                 .map(LoyaltyAccount::getPuntosDisponibles).orElse(0);
         String direct = directQuery(text);
+        if ("MENU".equals(metadata(oldRoot).path("stage").asText())) {
+            if ("2".equals(normalize(text))) direct="POINTS";
+            if ("3".equals(normalize(text))) direct="PROMOTIONS";
+        }
         if ("POINTS".equals(direct))
             return "Tienes " + points + " puntos disponibles en " + customer.getTenant().getNombre() + ".";
         List<Promotion> eligible = promotions.findActiveClientPromotions(tenantId, points);
@@ -162,6 +178,11 @@ public class WhatsappAssistantService {
             return "Reserva registrada #" + result.getAppointmentId() + ". Estado: " + result.getEstado()
                     + ". Fecha " + request.getDate() + " a las " + request.getHoraInicio() + ". Importe: " + catalog.getCurrency() + " " + current + ".";
         }
+        // Local options must not wait on the model or depend on its context size.
+        if (local!=null) {
+            if ("HELP".equals(local.path("intent").asText())) return metadata(oldRoot).path("lastPrompt").asText(MENU);
+            return prepare(phone,tenantId,local,catalog,eligible,oldRoot);
+        }
         ObjectNode context = mapper.createObjectNode();
         context.put("today", time.today(tenantId).toString());
         var branches = context.putArray("branches");
@@ -187,6 +208,9 @@ public class WhatsappAssistantService {
         return switch (intent.path("intent").asText()) {
             case "POINTS" -> "Tienes " + points + " puntos disponibles en " + catalog.getTenantName() + ".";
             case "PROMOTIONS" -> promotionMenu(phone,oldRoot,eligible);
+            case "REWARDS" -> actions.reply(phone,tenantId,customer.getId(),"premios",oldRoot);
+            case "MY_REDEMPTIONS" -> actions.reply(phone,tenantId,customer.getId(),"mis canjes",oldRoot);
+            case "MY_APPOINTMENTS" -> actions.reply(phone,tenantId,customer.getId(),"mis reservas",oldRoot);
             case "BOOKING", "AVAILABILITY", "BARBERS", "SERVICES", "TEAM", "CONTINUE" -> prepare(phone, tenantId, intent, catalog, eligible, oldRoot);
             case "HANDOFF" -> "Para cancelar o reprogramar una cita existente, abre tus reservas en la app de Super Gods. Si necesitas otra ayuda, contacta al negocio.";
             default -> "Puedo ayudarte con puntos, promociones, precios y reservas de este negocio. "
@@ -228,7 +252,7 @@ public class WhatsappAssistantService {
         return null;
     }
     private String skipped(String reason) {
-        log.info("WhatsApp assistant skipped: reason={}, dialogueVersion=2", reason);
+        log.info("WhatsApp assistant skipped: reason={}, dialogueVersion=3", reason);
         return null;
     }
     private boolean correctDestination(String to) {
@@ -245,7 +269,7 @@ public class WhatsappAssistantService {
                 .orElse(null);
     }
 
-    private static final String MENU = "¿Que deseas hacer?\n1. Reservar una cita\n2. Consultar mis puntos\n3. Ver promociones\n4. Ver horarios disponibles\n5. Ver barberos disponibles\n6. Servicios y precios\nPuedes responder con el numero o escribir con tus palabras. Escribe CAMBIAR NEGOCIO para elegir otro.";
+    private static final String MENU = WhatsappAssistantMenu.TEXT;
 
     private ObjectNode draft(Map<String, Object> session) throws Exception {
         Object value = session.get("draft");
@@ -352,7 +376,7 @@ public class WhatsappAssistantService {
         if (Set.of("reservar","quiero reservar","reservar una cita","quiero una cita").contains(clean)) return result.put("intent","BOOKING");
         if (Set.of("servicios","servicios y precios","que servicios tienen","precios").contains(clean)) return result.put("intent","SERVICES");
         if (Set.of("barberos","ver barberos","quienes son los barberos","que barberos hay").contains(clean)) return result.put("intent","TEAM");
-        if (Set.of("barberos disponibles","ver barberos disponibles").contains(clean)) return result.put("intent","BARBERS");
+        if (Set.of("barberos disponibles","ver barberos disponibles","que barberos estan disponibles","que barberos hay disponibles","profesionales disponibles","ver profesionales disponibles").contains(clean)) return result.put("intent","BARBERS");
         if (Set.of("horarios","horarios disponibles","ver horarios disponibles").contains(clean)) return result.put("intent","AVAILABILITY");
         JsonNode option=selectedOption(text,meta.path("options"));
         if (option!=null && Set.of("SERVICE","BRANCH","BARBER","TIME","PROMOTION").contains(stage)) {
@@ -421,18 +445,23 @@ public class WhatsappAssistantService {
             }
         }
         r.setDepositRequired(false);
+        if (catalog.getServices().isEmpty() && !"TEAM".equals(mode))
+            return ask(phone,r,meta,"MENU","El negocio no tiene servicios activos configurados. Contacta al negocio o escribe MENU para otra consulta.",List.of());
         if ("SERVICES".equals(mode)) {
             meta.put("mode","BOOKING");
             return ask(phone,r,meta,"SERVICE","Servicios y precios de "+catalog.getTenantName()+" ("+catalog.getCurrency()+"). Elige uno si deseas reservar:",serviceChoices(catalog));
         }
         if ("TEAM".equals(mode)) {
-            return ask(phone,r,meta,"MENU","Profesionales del negocio:\n"+String.join("\n",catalog.getBarbers().stream().map(b -> b.getNombre()+" "+Objects.toString(b.getApellido(),"")).toList())
+            return ask(phone,r,meta,"MENU",(catalog.getBarbers().isEmpty()?"No hay profesionales activos configurados.":"Profesionales del negocio:\n")+String.join("\n",catalog.getBarbers().stream().map(b -> b.getNombre()+" "+Objects.toString(b.getApellido(),"")).toList())
                     +"\nPara conocer disponibilidad necesito servicio, sede y dia. Puedes escribir 'barberos disponibles' o 'reservar'.",List.of());
         }
         if (r.getServiceId()==null || catalog.getServices().stream().noneMatch(s -> s.getId().equals(r.getServiceId()))) {
             r.setServiceId(null);
-            return ask(phone,r,meta,"SERVICE","¿Para que servicio buscas?",serviceChoices(catalog));
+            return ask(phone,r,meta,"SERVICE","BARBERS".equals(mode)
+                    ? "Para consultar barberos disponibles necesito el servicio y el dia. Primero elige un servicio:"
+                    : "AVAILABILITY".equals(mode) ? "Para consultar horarios disponibles, primero elige un servicio:" : "¿Para que servicio buscas?",serviceChoices(catalog));
         }
+        if (catalog.getBranches().isEmpty()) return ask(phone,r,meta,"MENU","El negocio no tiene sedes activas configuradas para reservar. Contacta al negocio.",List.of());
         if (r.getBranchId()==null && catalog.getBranches().size()==1) r.setBranchId(catalog.getBranches().get(0).getId());
         if (r.getBranchId()==null || catalog.getBranches().stream().noneMatch(b -> b.getId().equals(r.getBranchId()))) {
             r.setBranchId(null);
@@ -494,9 +523,12 @@ public class WhatsappAssistantService {
         return summary;
     }
     private String promotionMenu(String phone,ObjectNode root,List<Promotion> eligible) throws Exception {
-        if (eligible.isEmpty()) return promotionReply(eligible);
-        return ask(phone,request(root),metadata(root).deepCopy(),"PROMOTION",promotionReply(eligible)+"\nElige una promocion para consultar su reserva:",
-                eligible.stream().limit(8).map(p -> choice(p.getId(),p.getTitulo())).toList());
+        if (eligible.isEmpty()) return ask(phone,request(root),metadata(root).deepCopy(),"PROMOTION",
+                "No encontre promociones vigentes disponibles para tu cuenta. Escribe RESERVAR o MENU para otras opciones.",List.of());
+        return ask(phone,request(root),metadata(root).deepCopy(),"PROMOTION","Promociones vigentes de este negocio. Elige una para consultar sus condiciones y reservar:",
+                eligible.stream().limit(8).map(p -> choice(p.getId(),p.getTitulo()
+                        +(p.getPriceText()==null?"":" — "+p.getPriceText())
+                        +(p.getDescripcion()==null?"":". "+p.getDescripcion().substring(0,Math.min(100,p.getDescripcion().length()))))).toList());
     }    private List<String> filteredSlots(List<String> slots, ObjectNode meta) {
         String after=meta.path("afterTime").asText("");
         if (!after.matches("([01][0-9]|2[0-3]):[0-5][0-9]")) return slots;
@@ -540,11 +572,4 @@ public class WhatsappAssistantService {
     private Instant instant(Object value) { return value instanceof Timestamp t ? t.toInstant() : ((OffsetDateTime) value).toInstant(); }
     private String unavailable() { return "No puedo activar el asistente para ese negocio y numero. Revisa tu cuenta verificada en la app o consulta al negocio."; }
     private String depositMessage() { return "Este negocio usa adelantos. Completa la reserva y el comprobante desde la app de Super Gods."; }
-    private String promotionReply(List<Promotion> eligible) {
-        if (eligible.isEmpty()) return "No encontre promociones vigentes disponibles para tu cuenta.";
-        return "Promociones disponibles:\n" + String.join("\n", eligible.stream().limit(8)
-                .map(p -> p.getTitulo() + (p.getPriceText() == null ? "" : " - " + p.getPriceText())
-                        + (p.getDescripcion() == null ? "" : ": " + p.getDescripcion().substring(0, Math.min(120, p.getDescripcion().length())))).toList())
-                + "\nDime cual te interesa, servicio, sede y fecha. Validare las condiciones antes de reservar.";
-    }
 }

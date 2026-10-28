@@ -50,7 +50,7 @@ public class TwilioWhatsappWebhookController {
                 verificationService.verifyInbound(from, body);
 
         log.info(
-                "TWILIO WHATSAPP INBOUND => messageSid={}, verified={}, dialogueVersion=2",
+                "TWILIO WHATSAPP INBOUND => messageSid={}, verified={}, dialogueVersion=3",
                 messageSid,
                 result.verified()
         );
@@ -67,12 +67,12 @@ public class TwilioWhatsappWebhookController {
             String reply = form.containsKey("MediaUrl0")
                     ? assistantService.replyWithMedia(from,to,body,messageSid,form)
                     : assistantService.reply(from,to,body,messageSid);
-            log.info("WhatsApp assistant result: replyPresent={}, dialogueVersion=2", reply != null && !reply.isBlank());
+            log.info("WhatsApp assistant result: replyPresent={}, replyLength={}, dialogueVersion=3", reply != null && !reply.isBlank(), reply == null ? 0 : reply.length());
             return reply;
         } catch (Exception exception) {
             // Do not log customer text, phone, provider bodies, tokens or credentials.
             log.warn("WhatsApp assistant failed: {}", WhatsappAssistantFailureDiagnostics.summarize(exception));
-            return "No pude completar tu solicitud. Revisa tus reservas en la app antes de intentar otra vez.";
+            return "No pude completar tu solicitud. Escribe MENU para continuar. Si estabas confirmando una reserva o canje, consulta MIS RESERVAS o MIS CANJES antes de repetirlo.";
         }
     }
 
@@ -85,7 +85,15 @@ public class TwilioWhatsappWebhookController {
         message.codePoints().filter(cp -> cp == 9 || cp == 10 || cp == 13
                 || cp >= 0x20 && cp <= 0xD7FF || cp >= 0xE000 && cp <= 0xFFFD
                 || cp >= 0x10000 && cp <= 0x10FFFF).forEach(valid::appendCodePoint);
-        String safe = valid.toString().replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
-        return "<Response><Message>" + safe + "</Message></Response>";
+        String text=valid.toString();
+        StringBuilder response=new StringBuilder("<Response>");
+        for (int start=0;start<text.length();) {
+            int end=Math.min(start+1400,text.length());
+            if (end<text.length() && Character.isHighSurrogate(text.charAt(end-1))) end--;
+            String part=text.substring(start,end);
+            response.append("<Message>").append(part.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")).append("</Message>");
+            start=end;
+        }
+        return response.append("</Response>").toString();
     }
 }

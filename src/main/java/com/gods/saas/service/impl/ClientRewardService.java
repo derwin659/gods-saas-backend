@@ -5,7 +5,7 @@ import com.gods.saas.domain.dto.response.RedeemRewardResponse;
 import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.*;
 import com.gods.saas.service.impl.impl.NotificationService;
-import jakarta.transaction.Transactional;
+import org.springframework.transaction.annotation.Transactional;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Service;
@@ -37,30 +37,47 @@ public class ClientRewardService {
                 .toList();
     }
 
-    @Transactional
+    @Transactional(noRollbackFor=RewardUnavailableException.class)
     public RedeemRewardResponse redeemReward(Authentication authentication, Long rewardId) {
+        return redeem(getAuthenticatedCustomer(authentication),rewardId,null);
+    }
 
-        Customer customer = getAuthenticatedCustomer(authentication);
+    public static class RewardUnavailableException extends RuntimeException {
+        public RewardUnavailableException(String message) { super(message); }
+    }
 
-        Long tenantId = customer.getTenant().getId();
+    @Transactional(noRollbackFor=RewardUnavailableException.class)
+    public RedeemRewardResponse redeemForWhatsapp(Long tenantId,Long customerId,Long rewardId,int expectedPoints) {
+        Customer customer=customerRepository.findByIdAndTenantIdWithTenant(customerId,tenantId)
+                .filter(c->c.isPhoneVerified() && !Boolean.FALSE.equals(c.getActivo())
+                        && c.getWhatsappOptedOutAt()==null && Boolean.TRUE.equals(c.getWhatsappTransactionalEnabled()))
+                .orElseThrow(()->new RewardUnavailableException("Verifica tu cuenta y permisos de WhatsApp antes de canjear."));
+        return redeem(customer,rewardId,expectedPoints);
+    }
 
+    private RedeemRewardResponse redeem(Customer customer,Long rewardId,Integer expectedPoints) {
+        Long tenantId=customer.getTenant().getId();
         LoyaltyAccount loyalty = loyaltyAccountRepository
-                .findByTenant_IdAndCustomer_Id(tenantId, customer.getId())
-                .orElseThrow(() -> new RuntimeException("Cuenta de puntos no encontrada"));
+                .findForRedemption(tenantId, customer.getId())
+                .orElseThrow(() -> new RewardUnavailableException("Cuenta de puntos no encontrada"));
 
         RewardItem reward = rewardItemRepository
-                .findByIdAndTenant_IdAndActivoTrue(rewardId, tenantId)
-                .orElseThrow(() -> new RuntimeException("Premio no encontrado o inactivo"));
+                .findForRedemption(rewardId, tenantId)
+                .orElseThrow(() -> new RewardUnavailableException("Premio no encontrado o inactivo"));
 
+        if (reward.getPuntosRequeridos()==null || reward.getPuntosRequeridos()<0)
+            throw new RewardUnavailableException("El negocio debe revisar los puntos de ese premio.");
+        if (expectedPoints!=null && !expectedPoints.equals(reward.getPuntosRequeridos()))
+            throw new RewardUnavailableException("Los puntos requeridos cambiaron. Consulta PREMIOS y confirma de nuevo.");
         int puntosDisponibles = loyalty.getPuntosDisponibles() == null ? 0 : loyalty.getPuntosDisponibles();
         int puntosRequeridos = reward.getPuntosRequeridos() == null ? 0 : reward.getPuntosRequeridos();
 
         if (puntosDisponibles < puntosRequeridos) {
-            throw new RuntimeException("No tienes puntos suficientes para este canje");
+            throw new RewardUnavailableException("No tienes puntos suficientes para este canje");
         }
 
         if (reward.getStock() != null && reward.getStock() <= 0) {
-            throw new RuntimeException("Este premio no tiene stock disponible");
+            throw new RewardUnavailableException("Este premio no tiene stock disponible");
         }
 
         int nuevoSaldo = puntosDisponibles - puntosRequeridos;
@@ -121,7 +138,7 @@ public class ClientRewardService {
         String idCustomer = authentication.getName();
 
         return customerRepository.findById(Long.parseLong(idCustomer))
-                .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
+                .orElseThrow(() -> new RewardUnavailableException("Cliente no encontrado"));
     }
 
     private ClientRewardRedemptionResponse mapRedemption(RewardRedemption redemption) {

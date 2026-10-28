@@ -16,6 +16,10 @@ import java.util.Optional;
 
 @Repository
 public interface AppointmentRepository extends JpaRepository<Appointment, Long> {
+    @Query("select a from Appointment a left join fetch a.service left join fetch a.user left join fetch a.branch where a.tenant.id=:tenantId and a.customer.id=:customerId and a.fecha>=:fromDate and upper(coalesce(a.estado,'')) not in ('CANCELADO','CANCELADA','CANCELLED','ATENDIDO','COMPLETADO','COMPLETED','FINALIZADO') order by a.fecha,a.horaInicio")
+    List<Appointment> findUpcomingForCustomer(@Param("tenantId") Long tenantId,@Param("customerId") Long customerId,
+            @Param("fromDate") LocalDate fromDate,org.springframework.data.domain.Pageable pageable);
+
 
     @Query("""
     select a

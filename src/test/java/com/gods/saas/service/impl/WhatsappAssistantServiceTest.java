@@ -32,7 +32,7 @@ class WhatsappAssistantServiceTest {
     private final WhatsappAssistantUsageService usage = mock(WhatsappAssistantUsageService.class);
     private final WhatsappDepositService deposits = mock(WhatsappDepositService.class);
     private final WhatsappCustomerOnboarding onboarding=mock(WhatsappCustomerOnboarding.class);
-    private final WhatsappAssistantService service = new WhatsappAssistantService(jdbc, mapper, customers, tenants, loyalty, promotions, subscriptions, bookings, time, policy, interpreter, usage, deposits, onboarding);
+    private final WhatsappAssistantService service = new WhatsappAssistantService(jdbc, mapper, customers, tenants, loyalty, promotions, subscriptions, bookings, time, policy, interpreter, usage, deposits, onboarding, mock(WhatsappCustomerActions.class));
     private final Map<String,Object> session = new HashMap<>();
     private final String sid = "SM" + "a".repeat(32);
     private final String phone = "whatsapp:+51999999999";
@@ -94,7 +94,7 @@ class WhatsappAssistantServiceTest {
     }
     @Test void exhaustedQuotaDoesNotCallModelOrSendRepeatedReplies() throws Exception {
         when(usage.reserve(1L,"2026-10",100)).thenReturn(false);
-        assertNull(reply("puntos")); verify(interpreter,never()).interpret(anyString(),anyString()); verifyNoInteractions(bookings,loyalty);
+        assertTrue(reply("puntos").contains("limite mensual")); verify(interpreter,never()).interpret(anyString(),anyString()); verifyNoInteractions(bookings,loyalty);
     }
     @Test void pointsComeFromAuthenticatedCustomersTenant() throws Exception {
         when(interpreter.interpret(anyString(),anyString())).thenReturn(mapper.readTree("{\"intent\":\"POINTS\"}"));
@@ -116,6 +116,8 @@ class WhatsappAssistantServiceTest {
     }
     @Test void pointsFastPathCannotBypassMonthlyQuota() throws Exception {
         when(usage.reserve(1L,"2026-10",100)).thenReturn(false);
+        trackSession();
+        assertTrue(reply("mis puntos").contains("limite mensual"));
         assertNull(reply("mis puntos"));
         verifyNoInteractions(loyalty,bookings,promotions);
     }
@@ -341,5 +343,32 @@ class WhatsappAssistantServiceTest {
         assertEquals("https://wa.me/15005550006?text=GODS+INDYSTRY",status.get("bookingWhatsappUrl"));
         ReflectionTestUtils.setField(service,"tenantIds","2");
         assertEquals("",service.status(1L).get("bookingWhatsappUrl"));
+    }
+
+    @Test void numberedPromotionsReplyDoesNotNeedCatalogOrOpenAIAndDoesNotRepeatTitles() throws Exception {
+        trackSession();reply("hola");
+        when(promotions.findActiveClientPromotions(1L,40)).thenReturn(List.of(Promotion.builder().id(11L).titulo("Promo especial").descripcion("Para corte y barba").priceText("PEN 20").build()));
+        String answer=reply("3");
+        assertTrue(answer.contains("1. Promo especial"));assertEquals(answer.indexOf("Promo especial"),answer.lastIndexOf("Promo especial"));
+        verify(bookings,never()).getBootstrap(anyLong());verify(interpreter,never()).interpret(anyString(),anyString());
+    }
+    @Test void emptyPromotionsExplainAvailabilityAndKeepMenuUsable() throws Exception {
+        trackSession();reply("hola");assertTrue(reply("3").contains("No encontre promociones"));
+        assertTrue(reply("menu").contains("7. Ver y canjear premios"));
+        assertTrue(reply("5").contains("consultar barberos disponibles"));
+    }
+    @Test void barbersShortcutExplainsNeededInputsAndContinuesThroughRealAvailability() throws Exception {
+        trackSession();reply("hola");
+        catalog.setBarbers(List.of(BarberMiniResponse.builder().id(12L).nombre("Carlos").branchId(2L).build()));
+        when(bookings.getAvailability(1L,2L,3L,"2026-10-29",12L)).thenReturn(BookingAvailabilityResponse.builder().slots(List.of("17:00")).build());
+        assertTrue(reply("5").contains("necesito el servicio y el dia"));
+        assertTrue(reply("1").contains("¿Para que dia"));
+        String answer=reply("mañana");assertTrue(answer.contains("Carlos: 17:00"));
+        verify(bookings,never()).createAppointment(any(),any(),any());verify(interpreter,never()).interpret(anyString(),anyString());
+    }
+
+    @Test void throttledUserSeesRetryInstructionWithoutExecutingActions() throws Exception {
+        session.put("last_turn_at",Timestamp.from(Instant.now()));
+        assertTrue(reply("3").contains("vuelve a enviar"));verifyNoInteractions(customers,bookings,loyalty);
     }
 }
