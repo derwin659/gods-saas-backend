@@ -20,8 +20,8 @@ Cuotas iniciales configurables para un piloto, NO promesa de rentabilidad:
 |---|---:|
 | STARTER | 100 |
 | GROWTH / GODS_AI | 300 |
-| PRO / ENTERPRISE | 600 |
-| FREE / BASIC / Legacy / desconocido | 0 |
+| PRO / PRO_LEGACY / ENTERPRISE | 600 |
+| FREE / BASIC / STARTER_LEGACY / desconocido | 0 |
 
 Una interaccion no equivale a una cita: una reserva puede requerir varias. La apertura de negocio tambien consume cuota. Los creditos visuales de IA permanecen separados. El consumo se agrega por negocio y mes calendario en su zona horaria; no por sede. Al agotar cuota el asistente no responde para evitar gasto repetido. Las consultas entrantes siguen pudiendo generar cargos del proveedor: la cuota no es un limite monetario sobre todo el trafico de Twilio. Los avisos transaccionales existentes tienen su propio consumo.
 
@@ -91,3 +91,4 @@ application.yml y application-prod.yml ya incluyen la traduccion a variables de 
 | WHATSAPP_ASSISTANT_PRO_TURNS | 600 |
 
 Los cupos tienen esos valores por defecto; no es necesario definir las tres variables si no cambian. Mantener ENABLED=false hasta que el codigo actualizado este desplegado y esten definidos clave, modelo y tenant piloto. Activar el flag es una operacion posterior del piloto. Una suscripcion de ChatGPT no reemplaza la configuracion de la API del proveedor. No enviar la clave por el chat ni guardarla en documentos.
+PRO_LEGACY usa el mismo cupo configurable de PRO (600 por defecto), manteniendo precio y suscripcion originales. Sigue siendo obligatorio autorizar el tenant en whatsapp.assistant.tenant-ids y tener suscripcion activa.

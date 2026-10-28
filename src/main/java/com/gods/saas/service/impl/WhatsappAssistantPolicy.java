@@ -15,7 +15,7 @@ public class WhatsappAssistantPolicy {
         return Math.max(0, switch (plan.trim().toUpperCase(java.util.Locale.ROOT)) {
             case "STARTER" -> starterTurns;
             case "GROWTH", "GODS_AI" -> growthTurns;
-            case "PRO", "ENTERPRISE" -> proTurns;
+            case "PRO", "PRO_LEGACY", "ENTERPRISE" -> proTurns;
             default -> 0;
         });
     }
