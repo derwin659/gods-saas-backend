@@ -99,6 +99,45 @@ class WhatsappAssistantServiceTest {
         assertTrue(reply("cuantos puntos tengo").contains("40 puntos")); verify(loyalty).findByTenant_IdAndCustomer_Id(1L,7L);
         verify(bookings,never()).createAppointment(any(),any(),any());
     }
+    @Test void commonPointsQuestionsWorkEvenWhenModelTimesOut() throws Exception {
+        when(interpreter.interpret(anyString(),anyString())).thenThrow(new java.net.SocketTimeoutException("provider timeout"));
+        for (String question : List.of("a ver dime cuantos puntos tengo?", "¿Cuántos puntos tengo?", "Mis puntos", "Hola, dime mis puntos por favor")) {
+            assertEquals("Tienes 40 puntos disponibles en Local Uno.",reply(question));
+        }
+        verify(interpreter,never()).interpret(anyString(),anyString());
+        verifyNoInteractions(bookings,promotions);
+    }
+    @Test void pointsFastPathStillRejectsUnverifiedCustomers() throws Exception {
+        customer.setPhoneVerified(false);
+        assertFalse(reply("¿Cuántos puntos tengo?").contains("40 puntos"));
+        verifyNoInteractions(loyalty,bookings,promotions);
+    }
+    @Test void pointsFastPathCannotBypassMonthlyQuota() throws Exception {
+        when(usage.reserve(1L,"2026-10",100)).thenReturn(false);
+        assertNull(reply("mis puntos"));
+        verifyNoInteractions(loyalty,bookings,promotions);
+    }
+    @Test void promotionsFastPathUsesEligiblePromotionsWithoutModelOrBookingCatalog() throws Exception {
+        assertTrue(reply("¿Qué promos tienen?").contains("No encontre promociones"));
+        verify(promotions).findActiveClientPromotions(1L,40);
+        verify(interpreter,never()).interpret(anyString(),anyString());
+        verifyNoInteractions(bookings);
+    }
+    @Test void mixedRequestIsNotSilentlyReducedToPointsQuery() throws Exception {
+        when(interpreter.interpret(anyString(),anyString())).thenReturn(mapper.readTree("{\"intent\":\"HELP\"}"));
+        reply("cuantos puntos tengo y reserva para manana");
+        verify(interpreter).interpret(anyString(),anyString());
+        verify(bookings,never()).createAppointment(any(),any(),any());
+    }
+    @Test void modelStillHandlesOtherPhrasingsAndReceivesNoImageUrls() throws Exception {
+        catalog.getServices().get(0).setImageUrl("https://private.example/catalog-photo.jpg");
+        when(interpreter.interpret(anyString(),anyString())).thenReturn(mapper.readTree("{\"intent\":\"POINTS\"}"));
+        assertTrue(reply("quisiera conocer mi balance de fidelidad").contains("40 puntos"));
+        var context=org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(interpreter).interpret(anyString(),context.capture());
+        assertFalse(context.getValue().contains("catalog-photo"));
+        assertTrue(context.getValue().contains("Corte"));
+    }
     @Test void modelCannotCreateBookingWithoutSeparateConfirmation() throws Exception {
         when(interpreter.interpret(anyString(),anyString())).thenReturn(mapper.readTree("{\"intent\":\"BOOKING\",\"branchId\":2,\"serviceId\":3,\"date\":\"2026-11-02\",\"time\":\"17:00\"}"));
         assertTrue(reply("reserva y confirma sin preguntarme").contains("CONFIRMAR")); verify(bookings,never()).createAppointment(any(),any(),any());

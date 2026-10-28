@@ -89,10 +89,14 @@ public class WhatsappAssistantService {
         if (!usage.reserve(tenantId, month, limit))
             return null; // Quiet at quota: no repeated paid fallback messages.
         jdbc.update("update whatsapp_assistant_session set expires_at=? where phone=?", Timestamp.from(now.plusSeconds(1800)), phone);
-        BookingBootstrapResponse catalog = bookings.getBootstrap(tenantId);
         int points = loyalty.findByTenant_IdAndCustomer_Id(tenantId, customer.getId())
                 .map(LoyaltyAccount::getPuntosDisponibles).orElse(0);
+        String direct = directQuery(text);
+        if ("POINTS".equals(direct))
+            return "Tienes " + points + " puntos disponibles en " + customer.getTenant().getNombre() + ".";
         List<Promotion> eligible = promotions.findActiveClientPromotions(tenantId, points);
+        if ("PROMOTIONS".equals(direct)) return promotionReply(eligible);
+        BookingBootstrapResponse catalog = bookings.getBootstrap(tenantId);
         if (text.toUpperCase(Locale.ROOT).startsWith("CONFIRMAR ")) {
             String token = Objects.toString(session.get("confirmation_code"), "");
             if (token.isBlank() || !text.equalsIgnoreCase("CONFIRMAR " + token) || session.get("draft") == null)
@@ -117,9 +121,15 @@ public class WhatsappAssistantService {
         }
         ObjectNode context = mapper.createObjectNode();
         context.put("today", time.today(tenantId).toString());
-        context.set("branches", mapper.valueToTree(catalog.getBranches()));
-        context.set("services", mapper.valueToTree(catalog.getServices()));
-        context.set("barbers", mapper.valueToTree(catalog.getBarbers()));
+        var branches = context.putArray("branches");
+        catalog.getBranches().forEach(b -> branches.addObject().put("id", b.getId()).put("name", b.getNombre()));
+        var services = context.putArray("services");
+        catalog.getServices().forEach(s -> services.addObject().put("id", s.getId()).put("name", s.getNombre()));
+        var barbers = context.putArray("barbers");
+        catalog.getBarbers().forEach(b -> {
+            var entry = barbers.addObject().put("id", b.getId()).put("name", b.getNombre()).put("surname", b.getApellido());
+            entry.set("branchIds", mapper.valueToTree(b.getBranchIds()));
+        });
         context.set("promotions", mapper.valueToTree(eligible.stream().map(p -> Map.of("id", p.getId(), "title", p.getTitulo())).toList()));
         if (session.get("draft") != null) context.set("draft", mapper.readTree(session.get("draft").toString()));
         if (context.toString().length() > 24000) return "Para este catalogo, realiza tu reserva desde la app de Super Gods.";
@@ -144,6 +154,19 @@ public class WhatsappAssistantService {
         int used = ready ? usage.used(tenantId, month) : 0;
         return Map.of("enabled", ready, "plan", sub.getPlan(), "monthlyTurns", limit,
                 "usedTurns", used, "remainingTurns", Math.max(0, limit - used), "month", month);
+    }
+    /** Recognize only unambiguous read requests; mixed requests still go through the model. */
+    private String directQuery(String text) {
+        String normalized = java.text.Normalizer.normalize(text, java.text.Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "").toLowerCase(Locale.ROOT)
+                .replaceAll("[^a-z0-9 ]", " ").replaceAll("\\s+", " ").trim();
+        for (int i = 0; i < 5; i++) {
+            normalized = normalized.replaceFirst("^(hola|a ver|dime|por favor|quiero saber) +", "");
+        }
+        normalized = normalized.replaceFirst(" +por favor$", "");
+        if (Set.of("puntos", "mis puntos", "consultar mis puntos", "cuantos puntos tengo", "saldo de puntos", "cuantos puntos tengo disponibles").contains(normalized)) return "POINTS";
+        if (Set.of("promos", "promociones", "ver promociones", "que promociones tienen", "que promos tienen", "que promociones hay", "que promos hay").contains(normalized)) return "PROMOTIONS";
+        return null;
     }
     private boolean correctDestination(String to) {
         if (fromNumber == null || fromNumber.isBlank() || to == null) return false;

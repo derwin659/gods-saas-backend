@@ -92,3 +92,11 @@ application.yml y application-prod.yml ya incluyen la traduccion a variables de 
 
 Los cupos tienen esos valores por defecto; no es necesario definir las tres variables si no cambian. Mantener ENABLED=false hasta que el codigo actualizado este desplegado y esten definidos clave, modelo y tenant piloto. Activar el flag es una operacion posterior del piloto. Una suscripcion de ChatGPT no reemplaza la configuracion de la API del proveedor. No enviar la clave por el chat ni guardarla en documentos.
 PRO_LEGACY usa el mismo cupo configurable de PRO (600 por defecto), manteniendo precio y suscripcion originales. Sigue siendo obligatorio autorizar el tenant en whatsapp.assistant.tenant-ids y tener suscripcion activa.
+
+## Ajuste por timeout observado en piloto
+
+El proveedor supero la espera de lectura de 6 segundos. Se amplio a 10 segundos por defecto mediante WHATSAPP_ASSISTANT_READ_TIMEOUT_MS (acotado a 1000–10000 ms). No se agregaron reintentos automaticos dentro del webhook. Esto no garantiza que todas las llamadas al proveedor concluyan a tiempo; si persisten los timeouts para reservas, se debe evaluar procesamiento asincrono y entrega por el remitente Twilio.
+
+Consultas inequivocas como `¿Cuantos puntos tengo?`, `a ver dime cuantos puntos tengo?`, `mis puntos` y `¿Que promos tienen?` ahora responden desde el backend sin llamar al modelo ni cargar el catalogo de reservas. Se mantienen identidad verificada, negocio autorizado, suscripcion activa y cuota mensual. Las solicitudes mixtas o frases no reconocidas usan IA. El catalogo enviado al modelo ahora contiene IDs y nombres en vez de URLs de imagen y campos de presentacion innecesarios.
+
+Se agregaron 6 pruebas: consulta directa con timeout simulado, identidad, cuota, promociones, solicitud mixta y reduccion del contexto. La suite del asistente paso localmente; falta desplegar y repetir la prueba real.
