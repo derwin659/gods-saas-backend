@@ -72,6 +72,9 @@ runpod:
 # application.yml
 whatsapp:
   assistant:
+    deposits-enabled: ${WHATSAPP_ASSISTANT_DEPOSITS_ENABLED:false}
+    deposit-hold-minutes: ${WHATSAPP_ASSISTANT_DEPOSIT_HOLD_MINUTES:15}
+    deposit-status-content-sid: ${WHATSAPP_ASSISTANT_DEPOSIT_STATUS_CONTENT_SID:}
     enabled: ${WHATSAPP_ASSISTANT_ENABLED:false}
     tenant-ids: ${WHATSAPP_ASSISTANT_TENANT_IDS:}
     openai-api-key: ${WHATSAPP_ASSISTANT_OPENAI_API_KEY:}

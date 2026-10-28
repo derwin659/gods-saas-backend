@@ -28,6 +28,7 @@ public class OwnerAgendaAppointmentService {
     private static final LocalTime DEFAULT_CLOSING_TIME = LocalTime.of(21, 0);
 
     private final AppointmentRepository appointmentRepository;
+    private final WhatsappDepositService whatsappDeposits;
     private final BranchRepository branchRepository;
     private final CustomerRepository customerRepository;
     private final AppUserRepository appUserRepository;
@@ -210,6 +211,7 @@ public class OwnerAgendaAppointmentService {
             throw new RuntimeException("La cita no pertenece a la sede seleccionada");
         }
 
+        whatsappDeposits.beforeDecision(appointment);
         if (!Boolean.TRUE.equals(appointment.getDepositRequired())) {
             throw new RuntimeException("Esta cita no requiere pago inicial");
         }
@@ -236,7 +238,9 @@ public class OwnerAgendaAppointmentService {
             appointment.setEstado("DEPOSIT_REJECTED");
         }
 
-        return toAgendaResponse(appointmentRepository.save(appointment));
+        Appointment saved=appointmentRepository.save(appointment);
+        whatsappDeposits.decision(saved,approved);
+        return toAgendaResponse(saved);
     }
 
     @Transactional
@@ -692,7 +696,7 @@ public class OwnerAgendaAppointmentService {
         return switch (status) {
             case "PAID", "VALIDADO", "VALIDATED" -> "VALIDADO";
             case "REJECTED", "RECHAZADO" -> "RECHAZADO";
-            case "PENDING_VALIDATION", "PENDIENTE_VALIDACION", "PENDING_DEPOSIT_VALIDATION" -> "PENDIENTE_VALIDACION";
+            case "AWAITING_EVIDENCE", "AWAITING_REFERENCE", "PENDING_VALIDATION", "PENDIENTE_VALIDACION", "PENDING_DEPOSIT_VALIDATION" -> "PENDIENTE_VALIDACION";
             default -> "PENDIENTE_VALIDACION";
         };
     }

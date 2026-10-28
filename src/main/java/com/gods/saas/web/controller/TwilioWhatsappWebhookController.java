@@ -56,15 +56,17 @@ public class TwilioWhatsappWebhookController {
         );
         return ResponseEntity.ok()
                 .contentType(TWIML_TYPE)
-                .body(twiml(resolveReply(from, form.getFirst("To"), body, messageSid, result.reply())));
+                .body(twiml(resolveReply(from, form.getFirst("To"), body, messageSid, result.reply(), form.toSingleValueMap())));
     }
 
-    private String resolveReply(String from, String to, String body, String messageSid, String verificationReply) {
+    private String resolveReply(String from, String to, String body, String messageSid, String verificationReply, java.util.Map<String,String> form) {
         if (verificationReply != null || (body != null && body.stripLeading().toUpperCase(java.util.Locale.ROOT).startsWith("VERIFICAR GODS"))) {
             return verificationReply;
         }
         try {
-            String reply = assistantService.reply(from, to, body, messageSid);
+            String reply = form.containsKey("MediaUrl0")
+                    ? assistantService.replyWithMedia(from,to,body,messageSid,form)
+                    : assistantService.reply(from,to,body,messageSid);
             log.info("WhatsApp assistant result: replyPresent={}, dialogueVersion=2", reply != null && !reply.isBlank());
             return reply;
         } catch (Exception exception) {

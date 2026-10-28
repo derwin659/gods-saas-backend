@@ -49,7 +49,7 @@ public class NotificationServiceImpl implements NotificationService {
                     appointment.getBranch(),
                     appointment.getCustomer(),
                     NotificationType.BOOKING_CREATED,
-                    "Reserva confirmada",
+                    Boolean.TRUE.equals(appointment.getDepositRequired()) && !"PAID".equals(appointment.getDepositStatus()) ? "Reserva pendiente de validar adelanto" : "Reserva confirmada",
                     "Tu reserva de " + serviceName + " fue registrada para el " + date + " a las " + time + ".",
                     "APPOINTMENT",
                     appointment.getId()

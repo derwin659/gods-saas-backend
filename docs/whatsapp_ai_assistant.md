@@ -24,7 +24,7 @@ Barberos disponibles: se filtran por sede y servicios asignados y se consulta la
 
 Reserva: se muestra servicio, sede, profesional o cualquiera disponible, fecha, hora, promocion y precio calculado por las reglas existentes. Solo se crea la cita despues de `SI` en el paso de confirmacion o `CONFIRMAR CODIGO` valido. `NO` descarta el borrador. El backend revalida seleccion, precio y disponibilidad antes de crear la cita. Si cambia el precio, pide una nueva confirmacion.
 
-Si el negocio usa adelantos, se dirige al flujo de app para completar comprobantes. Canje de puntos, cancelacion/reprogramacion de citas existentes y solicitudes fuera del alcance se remiten a la app o al negocio. No se inventan respuestas de temas no presentes en el catalogo.
+Los adelantos por Yape pueden completarse por WhatsApp al activar el modulo de comprobantes; ver [Adelantos por WhatsApp](whatsapp_deposits.md). Si el modulo esta apagado o no hay Yape valido, se mantiene el flujo de app para completar comprobantes. Canje de puntos, cancelacion/reprogramacion de citas existentes y solicitudes fuera del alcance se remiten a la app o al negocio. No se inventan respuestas de temas no presentes en el catalogo.
 
 ## Memoria, seguridad y recuperacion
 

@@ -30,7 +30,8 @@ class WhatsappAssistantServiceTest {
     private final WhatsappAssistantPolicy policy = mock(WhatsappAssistantPolicy.class);
     private final WhatsappAssistantInterpreter interpreter = mock(WhatsappAssistantInterpreter.class);
     private final WhatsappAssistantUsageService usage = mock(WhatsappAssistantUsageService.class);
-    private final WhatsappAssistantService service = new WhatsappAssistantService(jdbc, mapper, customers, tenants, loyalty, promotions, subscriptions, bookings, time, policy, interpreter, usage);
+    private final WhatsappDepositService deposits = mock(WhatsappDepositService.class);
+    private final WhatsappAssistantService service = new WhatsappAssistantService(jdbc, mapper, customers, tenants, loyalty, promotions, subscriptions, bookings, time, policy, interpreter, usage, deposits);
     private final Map<String,Object> session = new HashMap<>();
     private final String sid = "SM" + "a".repeat(32);
     private final String phone = "whatsapp:+51999999999";
@@ -310,5 +311,17 @@ class WhatsappAssistantServiceTest {
         when(customers.findActiveByPhoneAcrossTenants("+51999999999")).thenReturn(List.of(customer));
         assertTrue(reply("Hola").contains("1. Reservar una cita"));
         verify(interpreter,never()).interpret(anyString(),anyString());
+    }
+    @Test void depositInstructionsAreOnlyIssuedAfterExplicitConfirmationAndUseHoldNotConfirmedBooking() throws Exception {
+        trackSession();catalog.setBookingDepositEnabled(true);
+        when(deposits.supported()).thenReturn(true);
+        when(deposits.offer(eq(1L),eq(2L),any(),eq(catalog))).thenReturn(new WhatsappDepositService.Offer(4L,new BigDecimal("10.00"),"Yape del negocio"));
+        when(deposits.begin(eq(1L),eq(7L),eq("+51999999999"),any(),any(),eq(catalog))).thenReturn("Horario apartado. Envia captura del Yape.");
+        reply("hola");reply("1");reply("1");reply("mañana");
+        assertTrue(reply("1").contains("Adelanto requerido: PEN 10.00"));
+        verify(deposits,never()).begin(any(),any(),anyString(),any(),any(),any());
+        assertTrue(reply("si").contains("Envia captura"));
+        verify(deposits).begin(eq(1L),eq(7L),eq("+51999999999"),any(),eq(new BigDecimal("25.00")),eq(catalog));
+        verify(bookings,never()).createAppointment(any(),any(),any());
     }
 }

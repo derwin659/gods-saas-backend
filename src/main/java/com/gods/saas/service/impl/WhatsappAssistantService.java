@@ -38,12 +38,21 @@ public class WhatsappAssistantService {
     private final WhatsappAssistantPolicy policy;
     private final WhatsappAssistantInterpreter interpreter;
     private final WhatsappAssistantUsageService usage;
+    private final WhatsappDepositService deposits;
     @Value("${whatsapp.assistant.enabled:false}") private boolean enabled;
     @Value("${whatsapp.assistant.tenant-ids:}") private String tenantIds;
     @Value("${whatsapp.twilio.from-number:}") private String fromNumber;
 
     @Transactional(rollbackFor = Exception.class)
     public String reply(String from, String to, String body, String messageSid) throws Exception {
+        return replyInternal(from,to,body,messageSid,Map.of());
+    }
+    @Transactional(rollbackFor = Exception.class)
+    public String replyWithMedia(String from,String to,String body,String messageSid,Map<String,String> media) throws Exception {
+        return replyInternal(from,to,body,messageSid,media);
+    }
+    private String replyInternal(String from,String to,String body,String messageSid,Map<String,String> media) throws Exception {
+        if (media.containsKey("MediaUrl0") && (body==null || body.isBlank())) body="COMPROBANTE";
         if (!enabled) return skipped("disabled");
         if (!correctDestination(to)) return skipped("destination_mismatch");
         if (from == null || !PHONE.matcher(from).matches()) return skipped("invalid_sender");
@@ -60,6 +69,9 @@ public class WhatsappAssistantService {
         if (last != null && instant(last).plusSeconds(2).isAfter(now)) return skipped("rate_limited");
         jdbc.update("update whatsapp_assistant_session set last_turn_at=? where phone=?", Timestamp.from(now), phone);
         String text = body.trim();
+        Set<Long> permitted=Arrays.stream(tenantIds.split(",")).map(String::trim).filter(s -> s.matches("[0-9]{1,18}")).map(Long::valueOf).collect(java.util.stream.Collectors.toSet());
+        String paymentReply=deposits.inbound(phone,text,messageSid,media,permitted);
+        if (paymentReply!=null) return paymentReply;
         ObjectNode oldRoot = draft(session);
         if (session.get("expires_at") == null || instant(session.get("expires_at")).isBefore(now)) oldRoot = mapper.createObjectNode();
         if ("SALIR".equalsIgnoreCase(text)) {
@@ -139,7 +151,7 @@ public class WhatsappAssistantService {
             String token = Objects.toString(session.get("confirmation_code"), "");
             if (token.isBlank() || !text.equalsIgnoreCase("CONFIRMAR " + token) || session.get("draft") == null)
                 return "No hay una confirmacion vigente con ese codigo. Pideme el horario de nuevo.";
-            if (Boolean.TRUE.equals(catalog.getBookingDepositEnabled())) return depositMessage();
+            if (Boolean.TRUE.equals(catalog.getBookingDepositEnabled()) && !deposits.supported()) return depositMessage();
             CreateAppointmentRequest request = request(oldRoot);
             if (!validRequest(request, catalog, eligible)) return "La seleccion ya no esta disponible. Pideme otra reserva.";
             BigDecimal current = bookings.quoteAssistantAppointment(tenantId, request);
@@ -151,6 +163,10 @@ public class WhatsappAssistantService {
             if (!available(tenantId, request)) {
                 clearDraft(phone);
                 return "Ese horario ya no esta disponible. Indica otro horario.";
+            }
+            if (Boolean.TRUE.equals(catalog.getBookingDepositEnabled())) {
+                String response=deposits.begin(tenantId,customer.getId(),phone,request,current,catalog);
+                clearDraft(phone);return response;
             }
             CreateAppointmentResponse result = bookings.createAppointment(tenantId, customer.getId(), request);
             clearDraft(phone);
@@ -453,16 +469,23 @@ public class WhatsappAssistantService {
             r.setHoraInicio(null); meta.put("mode","BOOKING");
             return ask(phone,r,meta,"TIME",prompt,availableSlots.stream().limit(16).map(s -> valueChoice(s,s)).toList());
         }
-        if (Boolean.TRUE.equals(catalog.getBookingDepositEnabled())) return ask(phone,r,meta,"MENU",depositMessage(),List.of());
+        if (Boolean.TRUE.equals(catalog.getBookingDepositEnabled()) && !deposits.supported()) return ask(phone,r,meta,"MENU",depositMessage(),List.of());
         if (!validRequest(r,catalog,eligible)) return ask(phone,r,meta,"SERVICE","La seleccion requiere revision. Elige un servicio de precio fijo o completa la reserva en la app:",serviceChoices(catalog));
         BigDecimal quote=bookings.quoteAssistantAppointment(tenantId,r);
         String service=catalog.getServices().stream().filter(s -> s.getId().equals(r.getServiceId())).findFirst().orElseThrow().getNombre();
         String branch=catalog.getBranches().stream().filter(b -> b.getId().equals(r.getBranchId())).findFirst().orElseThrow().getNombre();
         String barber=r.getBarberId()==null?"cualquier profesional disponible":catalog.getBarbers().stream().filter(b -> b.getId().equals(r.getBarberId())).findFirst().orElseThrow().getNombre();
         String promotion=r.getPromotionId()==null?"":". Promocion: "+eligible.stream().filter(p -> p.getId().equals(r.getPromotionId())).findFirst().orElseThrow().getTitulo();
+        String depositSummary="";
+        if (Boolean.TRUE.equals(catalog.getBookingDepositEnabled())) {
+            WhatsappDepositService.Offer offer=deposits.offer(tenantId,r.getBranchId(),quote,catalog);
+            if (offer==null) return ask(phone,r,meta,"MENU","No encontre datos de Yape validos para esta sede. Contacta al negocio o completa la reserva en la app.",List.of());
+            r.setDepositRequired(true);r.setDepositAmount(offer.amount());r.setDepositPaymentMethodId(offer.methodId());
+            depositSummary=" Adelanto requerido: "+catalog.getCurrency()+" "+offer.amount()+". Al confirmar apartaremos el horario y te mostraremos los datos de Yape; la cita solo quedara confirmada cuando el dueño apruebe el comprobante.";
+        }
         String token=UUID.randomUUID().toString().substring(0,8).toUpperCase(Locale.ROOT);
         String summary=service+" en "+branch+", con "+barber+", "+r.getDate()+" a las "+r.getHoraInicio()+promotion+". Total: "+catalog.getCurrency()+" "+quote
-                +". ¿Confirmo tu reserva? Responde SI o CONFIRMAR "+token+". Todavia no esta reservada.";
+                +depositSummary+". ¿Confirmo tu reserva? Responde SI o CONFIRMAR "+token+". Todavia no esta reservada.";
         ask(phone,r,meta,"CONFIRM",summary,List.of());
         jdbc.update("update whatsapp_assistant_session set confirmation_code=?,quote=? where phone=?",token,quote,phone);
         return summary;

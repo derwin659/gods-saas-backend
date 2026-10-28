@@ -13,6 +13,9 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.RoundingMode;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.PersistenceContext;
+import jakarta.persistence.LockModeType;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.LocalTime;
@@ -32,6 +35,7 @@ import java.util.LinkedHashMap;
 @Slf4j
 public class ClientBookingService {
 
+    @PersistenceContext private EntityManager bookingEntityManager;
     private final TenantPaymentMethodRepository tenantPaymentMethodRepository;
     private final TenantSettingsRepository tenantSettingsRepository;
     private final TenantRepository tenantRepository;
@@ -306,6 +310,17 @@ public class ClientBookingService {
             Long customerId,
             CreateAppointmentRequest req
     ) {
+        return createAppointmentInternal(tenantId, customerId, req, false);
+    }
+
+    @Transactional
+    public CreateAppointmentResponse createWhatsappDepositHold(Long tenantId, Long customerId, CreateAppointmentRequest req) {
+        if (!Boolean.TRUE.equals(req.getDepositRequired())) throw new IllegalArgumentException("Deposit required");
+        return createAppointmentInternal(tenantId, customerId, req, true);
+    }
+
+    private CreateAppointmentResponse createAppointmentInternal(Long tenantId, Long customerId, CreateAppointmentRequest req, boolean awaitingEvidence) {
+        if (bookingEntityManager.find(Tenant.class,tenantId,LockModeType.PESSIMISTIC_WRITE)==null) throw new IllegalArgumentException("Tenant no encontrado");
         Customer customer = customerRepository.findByTenant_IdAndId(tenantId, customerId)
                 .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
 
@@ -421,13 +436,13 @@ public class ClientBookingService {
                 throw new RuntimeException("El pago inicial no puede ser mayor al precio del servicio");
             }
 
-            if (Boolean.TRUE.equals(depositMethod.getRequiresOperationCode())
+            if (!awaitingEvidence && Boolean.TRUE.equals(depositMethod.getRequiresOperationCode())
                     && (req.getDepositOperationCode() == null
                     || req.getDepositOperationCode().isBlank())) {
                 throw new RuntimeException("Debes ingresar el número de operación o referencia");
             }
 
-            if (Boolean.TRUE.equals(depositMethod.getRequiresEvidence())
+            if (!awaitingEvidence && Boolean.TRUE.equals(depositMethod.getRequiresEvidence())
                     && (req.getDepositEvidenceUrl() == null
                     || req.getDepositEvidenceUrl().isBlank())) {
                 throw new RuntimeException("Debes adjuntar el comprobante del pago");
@@ -437,7 +452,7 @@ public class ClientBookingService {
                     .setScale(2, RoundingMode.HALF_UP);
 
             appointmentStatus = "PENDING_DEPOSIT_VALIDATION";
-            depositStatus = "PENDING_VALIDATION";
+            depositStatus = awaitingEvidence ? "AWAITING_EVIDENCE" : "PENDING_VALIDATION";
 
             depositMethodCode = depositMethod.getCode();
             depositMethodName = depositMethod.getDisplayName();
@@ -473,7 +488,7 @@ public class ClientBookingService {
                 .depositOperationCode(trimToNull(req.getDepositOperationCode()))
                 .depositEvidenceUrl(trimToNull(req.getDepositEvidenceUrl()))
                 .depositNote(trimToNull(req.getDepositNote()))
-                .depositPaidAt(depositRequired ? tenantTimeService.now(tenantId) : null)
+                .depositPaidAt(depositRequired && !awaitingEvidence ? tenantTimeService.now(tenantId) : null)
                 .build();
 
         Appointment saved = appointmentRepository.save(appointment);

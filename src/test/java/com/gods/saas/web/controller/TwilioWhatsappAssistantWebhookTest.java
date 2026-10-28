@@ -69,4 +69,13 @@ class TwilioWhatsappAssistantWebhookTest {
         org.junit.jupiter.api.Assertions.assertEquals(0,document.getElementsByTagName("Redirect").getLength());
         org.junit.jupiter.api.Assertions.assertEquals("Corte</Message><Redirect>otra-url</Redirect>",document.getElementsByTagName("Message").item(0).getTextContent());
     }
+    @Test void signedPhotoWithoutCaptionUsesMediaFlowAndKeepsTheOriginalSignedFields() throws Exception {
+        when(assistant.replyWithMedia(any(),any(),any(),any(),any())).thenReturn("Recibi tu captura");
+        mvc.perform(post("/api/public/whatsapp/twilio/inbound").contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .param("From","whatsapp:+51999999999").param("To","whatsapp:+15005550006").param("MessageSid","SM123")
+                .param("Body","").param("NumMedia","1").param("MediaUrl0","https://api.twilio.com/media").param("MediaContentType0","image/jpeg"))
+                .andExpect(status().isOk()).andExpect(content().string("<Response><Message>Recibi tu captura</Message></Response>"));
+        verify(assistant,never()).reply(any(),any(),any(),any());
+        verify(assistant).replyWithMedia(eq("whatsapp:+51999999999"),eq("whatsapp:+15005550006"),eq(""),eq("SM123"),argThat(form -> "image/jpeg".equals(form.get("MediaContentType0"))));
+    }
 }

@@ -18,6 +18,7 @@ public class OwnerAppointmentDepositService {
     private static final ZoneId BUSINESS_ZONE = ZoneId.of("America/Lima");
 
     private final AppointmentRepository appointmentRepository;
+    private final WhatsappDepositService whatsappDeposits;
 
     @Transactional
     public CreateAppointmentResponse validateDeposit(
@@ -30,6 +31,7 @@ public class OwnerAppointmentDepositService {
                 .findByIdAndTenant_Id(appointmentId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Reserva no encontrada"));
 
+        whatsappDeposits.beforeDecision(appointment);
         if (!Boolean.TRUE.equals(appointment.getDepositRequired())) {
             throw new RuntimeException("Esta reserva no requiere pago inicial");
         }
@@ -59,6 +61,7 @@ public class OwnerAppointmentDepositService {
         appointment.setDepositValidatedByUserId(actorUserId);
 
         Appointment saved = appointmentRepository.save(appointment);
+        whatsappDeposits.decision(saved,approved);
 
         return CreateAppointmentResponse.builder()
                 .appointmentId(saved.getId())
