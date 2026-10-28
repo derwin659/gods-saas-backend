@@ -3,6 +3,7 @@ package com.gods.saas.web.controller;
 import com.gods.saas.service.impl.OwnerWhatsappPhoneVerificationService;
 import com.gods.saas.service.impl.TwilioWebhookSignatureValidator;
 import com.gods.saas.service.impl.WhatsappAssistantService;
+import com.gods.saas.service.impl.WhatsappAssistantFailureDiagnostics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -65,7 +66,7 @@ public class TwilioWhatsappWebhookController {
             return assistantService.reply(from, to, body, messageSid);
         } catch (Exception exception) {
             // Do not log customer text, phone, provider bodies, tokens or credentials.
-            log.warn("WhatsApp assistant failed: {}", exception.getClass().getSimpleName());
+            log.warn("WhatsApp assistant failed: {}", WhatsappAssistantFailureDiagnostics.summarize(exception));
             return "No pude completar tu solicitud. Revisa tus reservas en la app antes de intentar otra vez.";
         }
     }
