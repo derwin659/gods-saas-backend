@@ -211,7 +211,7 @@ public class WhatsappAssistantService {
             case "REWARDS" -> actions.reply(phone,tenantId,customer.getId(),"premios",oldRoot);
             case "MY_REDEMPTIONS" -> actions.reply(phone,tenantId,customer.getId(),"mis canjes",oldRoot);
             case "MY_APPOINTMENTS" -> actions.reply(phone,tenantId,customer.getId(),"mis reservas",oldRoot);
-            case "BOOKING", "AVAILABILITY", "BARBERS", "SERVICES", "PACKAGES", "TEAM", "CONTINUE" -> prepare(phone, tenantId, intent, catalog, eligible, oldRoot);
+            case "BOOKING", "AVAILABILITY", "BARBERS", "SERVICES", "PACKAGES", "TEAM", "PROMOTION_DETAIL", "CONTINUE" -> prepare(phone, tenantId, intent, catalog, eligible, oldRoot);
             case "HANDOFF" -> "Para cancelar o reprogramar una cita existente, abre tus reservas en la app de Super Gods. Si necesitas otra ayuda, contacta al negocio.";
             default -> "Puedo ayudarte con puntos, promociones, precios y reservas de este negocio. "
                     + (metadata(oldRoot).path("lastPrompt").asText("").isBlank()?MENU:metadata(oldRoot).path("lastPrompt").asText())
@@ -373,6 +373,13 @@ public class WhatsappAssistantService {
         if ("MENU".equals(stage) && clean.matches("[1-6]")) {
             return result.put("intent",List.of("BOOKING","POINTS","PROMOTIONS","AVAILABILITY","BARBERS","SERVICES").get(Integer.parseInt(clean)-1));
         }
+        if ("PROMOTION_DETAIL".equals(stage)) {
+            if (Set.of("1","reservar","reservar esta promo","reservar esta promocion","quiero reservar esta promocion","si","si reservar").contains(clean))
+                return result.put("intent","BOOK_PROMOTION").put("promotionId",meta.path("detailPromotionId").asLong());
+            if (Set.of("2","no","volver","volver a promociones","ver otras promociones","otras promociones").contains(clean))
+                return result.put("intent","PROMOTIONS");
+            if (clean.matches("[0-9]{1,2}") || Set.of("hoy","manana","pasado manana").contains(clean)) return result.put("intent","HELP");
+        }
         if (("MENU".equals(stage) && "10".equals(clean)) || Set.of("paquetes","ver paquetes","paquetes y precios","combos","ver combos","que paquetes tienen","que incluye el paquete").contains(clean)) return result.put("intent","PACKAGES");
         if (Set.of("reservar","quiero reservar","reservar una cita","quiero una cita").contains(clean)) return result.put("intent","BOOKING");
         if (Set.of("servicios","servicios y precios","que servicios tienen","precios").contains(clean)) return result.put("intent","SERVICES");
@@ -386,7 +393,7 @@ public class WhatsappAssistantService {
                 case "BRANCH" -> result.put("branchId",option.path("id").asLong());
                 case "BARBER" -> { if (option.path("id").isNumber()) result.put("barberId",option.path("id").asLong()); else result.put("anyBarber",true); }
                 case "TIME" -> result.put("time",option.path("value").asText());
-                case "PROMOTION" -> result.put("promotionId",option.path("id").asLong()).put("intent","BOOKING");
+                case "PROMOTION" -> result.put("promotionId",option.path("id").asLong()).put("intent","PROMOTION_DETAIL");
             }
             return result;
         }
@@ -418,6 +425,34 @@ public class WhatsappAssistantService {
         return availability==null || availability.getSlots()==null?List.of():availability.getSlots();
     }
     private String prepare(String phone, Long tenantId, JsonNode intent, BookingBootstrapResponse catalog, List<Promotion> eligible, ObjectNode oldRoot) throws Exception {
+        Long promotionId=number(intent,"promotionId");
+        String action=intent.path("intent").asText();
+        if ("BOOK_PROMOTION".equals(action)) {
+            if (!"PROMOTION_DETAIL".equals(metadata(oldRoot).path("stage").asText())
+                    || !Objects.equals(promotionId,number(metadata(oldRoot),"detailPromotionId")))
+                return promotionMenu(phone,oldRoot,eligible);
+            Promotion selected=eligible.stream().filter(v -> Objects.equals(v.getId(),promotionId)).findFirst().orElse(null);
+            if (selected==null) return "Esa promocion ya no esta disponible para tu cuenta.\n"+promotionMenu(phone,oldRoot,eligible);
+            var booking=mapper.createObjectNode().put("intent","BOOKING").put("promotionId",promotionId);
+            ServiceMiniResponse linked=promotionService(selected,catalog);
+            if (linked!=null) booking.put("serviceId",linked.getId());
+            else if (selected.getRedirectType()!=null && "SERVICE".equals(selected.getRedirectType().name())
+                    || !Set.of("AMOUNT","PERCENT").contains(Objects.toString(selected.getDiscountType(),"").toUpperCase(Locale.ROOT))
+                    || selected.getDiscountValue()==null || selected.getDiscountValue().signum()<=0)
+                return "Esta promocion aun no tiene un servicio o paquete asociado para reservarla por WhatsApp. Contacta al negocio para que vincule la promocion con lo que incluye.\n\n"+metadata(oldRoot).path("lastPrompt").asText();
+            if (selected.getBranch()!=null) {
+                if (catalog.getBranches().stream().noneMatch(v -> Objects.equals(v.getId(),selected.getBranch().getId())))
+                    return "La sede de esta promocion no esta disponible para reservar. Contacta al negocio.";
+                booking.put("branchId",selected.getBranch().getId());
+            }
+            return prepareBooking(phone,tenantId,booking,catalog,eligible,mapper.createObjectNode());
+        }
+        if (promotionId!=null) {
+            Promotion selected=eligible.stream().filter(v -> Objects.equals(v.getId(),promotionId)).findFirst().orElse(null);
+            return selected==null?promotionMenu(phone,oldRoot,eligible):promotionDetail(phone,oldRoot,selected,catalog);
+        }
+        if ("PROMOTION_DETAIL".equals(metadata(oldRoot).path("stage").asText()) && Set.of("BOOKING","CONTINUE").contains(action))
+            return metadata(oldRoot).path("lastPrompt").asText();
         String answer=prepareBooking(phone,tenantId,intent,catalog,eligible,oldRoot);
         Long selected=number(intent,"serviceId");
         if (selected!=null && !Objects.equals(selected,number(oldRoot,"serviceId"))) {
@@ -435,9 +470,12 @@ public class WhatsappAssistantService {
         Long branchId=number(intent,"branchId"),serviceId=number(intent,"serviceId");
         if (branchId!=null && !branchId.equals(r.getBranchId())) {
             r.setBranchId(branchId); r.setBarberId(null); r.setHoraInicio(null); meta.put("barberChosen",false);
+            if (!promotionApplies(r.getPromotionId(),r.getServiceId(),branchId,eligible)) r.setPromotionId(null);
         }
         if (serviceId!=null && !serviceId.equals(r.getServiceId())) {
-            r.setServiceId(serviceId); r.setBarberId(null); r.setHoraInicio(null); r.setPromotionId(null); meta.put("barberChosen",false);
+            r.setServiceId(serviceId); r.setBarberId(null); r.setHoraInicio(null);
+            if (!promotionApplies(r.getPromotionId(),serviceId,r.getBranchId(),eligible)) r.setPromotionId(null);
+            meta.put("barberChosen",false);
         }
         if (intent.path("date").isTextual() && !intent.path("date").asText().equals(r.getDate())) { r.setDate(intent.path("date").asText()); r.setHoraInicio(null); }
         if (intent.path("anyBarber").asBoolean(false)) { r.setBarberId(null); meta.put("barberChosen",true); }
@@ -541,13 +579,48 @@ public class WhatsappAssistantService {
         jdbc.update("update whatsapp_assistant_session set confirmation_code=?,quote=? where phone=?",token,quote,phone);
         return summary;
     }
+    private boolean promotionApplies(Long id,Long serviceId,Long branchId,List<Promotion> eligible) {
+        if (id==null) return true;
+        return eligible.stream().anyMatch(p -> Objects.equals(p.getId(),id)
+                && (branchId==null || p.getBranch()==null || Objects.equals(p.getBranch().getId(),branchId))
+                && (p.getRedirectType()==null || !"SERVICE".equals(p.getRedirectType().name())
+                    || serviceId==null || Objects.equals(Objects.toString(serviceId),Objects.toString(p.getRedirectValue(),"").trim())));
+    }
+    private ServiceMiniResponse promotionService(Promotion promotion,BookingBootstrapResponse catalog) {
+        if (promotion.getRedirectType()==null || !"SERVICE".equals(promotion.getRedirectType().name())) return null;
+        try {
+            Long serviceId=Long.valueOf(promotion.getRedirectValue().trim());
+            return catalog.getServices().stream().filter(v -> v.getId().equals(serviceId)).findFirst().orElse(null);
+        } catch (RuntimeException invalid) {return null;}
+    }
+    private String promotionDetail(String phone,ObjectNode root,Promotion promotion,BookingBootstrapResponse catalog) throws Exception {
+        StringBuilder detail=new StringBuilder(promotion.getTitulo());
+        if (promotion.getSubtitulo()!=null && !promotion.getSubtitulo().isBlank()) detail.append("\n").append(promotion.getSubtitulo());
+        if (promotion.getPriceText()!=null && !promotion.getPriceText().isBlank()) detail.append("\nPrecio / oferta: ").append(promotion.getPriceText());
+        else if (promotion.getDiscountValue()!=null) detail.append("\nBeneficio: ").append(promotion.getDiscountValue())
+                .append("PERCENT".equalsIgnoreCase(promotion.getDiscountType())?" %":" "+catalog.getCurrency());
+        if (promotion.getDescripcion()!=null && !promotion.getDescripcion().isBlank()) detail.append("\n\n").append(promotion.getDescripcion());
+        ServiceMiniResponse linked=promotionService(promotion,catalog);
+        if (linked!=null) {
+            detail.append("\n\n").append(isPackage(linked)?"Paquete: ":"Servicio: ").append(linked.getNombre());
+            if (isPackage(linked)) detail.append("\nIncluye: ").append(packageIncludes(linked,catalog));
+            if (linked.getDuracionMinutos()!=null) detail.append("\nDuracion: ").append(linked.getDuracionMinutos()).append(" minutos.");
+        }
+        if (promotion.getBranch()!=null) catalog.getBranches().stream().filter(v -> v.getId().equals(promotion.getBranch().getId())).findFirst()
+                .ifPresent(v -> detail.append("\nSede: ").append(v.getNombre()));
+        if (promotion.getFechaFin()!=null) detail.append("\nVigente hasta: ").append(promotion.getFechaFin().format(java.time.format.DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")));
+        if (promotion.isSoloClientesConPuntos()) detail.append("\nRequiere al menos ").append(Objects.requireNonNullElse(promotion.getPuntosMinimos(),0)).append(" puntos disponibles.");
+        ObjectNode meta=metadata(root).deepCopy().put("detailPromotionId",promotion.getId());
+        return ask(phone,request(root),meta,"PROMOTION_DETAIL",detail+"\n\n¿Que deseas hacer? Aun no se ha reservado.",
+                List.of(valueChoice("RESERVE","Reservar esta promocion"),valueChoice("BACK","Volver a promociones")));
+    }
     private String promotionMenu(String phone,ObjectNode root,List<Promotion> eligible) throws Exception {
         if (eligible.isEmpty()) return ask(phone,request(root),metadata(root).deepCopy(),"PROMOTION",
                 "No encontre promociones vigentes disponibles para tu cuenta. Escribe RESERVAR o MENU para otras opciones.",List.of());
-        return ask(phone,request(root),metadata(root).deepCopy(),"PROMOTION","Promociones vigentes de este negocio. Elige una para consultar sus condiciones y reservar:",
+        return ask(phone,request(root),metadata(root).deepCopy(),"PROMOTION","Promociones vigentes de este negocio. Elige una para ver todo lo que incluye:",
                 eligible.stream().limit(8).map(p -> choice(p.getId(),p.getTitulo()
                         +(p.getPriceText()==null?"":" — "+p.getPriceText())
-                        +(p.getDescripcion()==null?"":". "+p.getDescripcion().substring(0,Math.min(100,p.getDescripcion().length()))))).toList());
+                        +(p.getSubtitulo()==null?"":". "+shortText(p.getSubtitulo(),100)))).toList());
     }    private List<String> filteredSlots(List<String> slots, ObjectNode meta) {
         String after=meta.path("afterTime").asText("");
         if (!after.matches("([01][0-9]|2[0-3]):[0-5][0-9]")) return slots;
@@ -608,7 +681,7 @@ public class WhatsappAssistantService {
                 && (r.getBarberId() == null || c.getBarbers().stream().anyMatch(b -> b.getId().equals(r.getBarberId())))
                 && (r.getPromotionId() == null || eligible.stream().anyMatch(p -> p.getId().equals(r.getPromotionId())
                     && (p.getBranch() == null || p.getBranch().getId().equals(r.getBranchId()))
-                    && (p.getRedirectType() == null || !"SERVICE".equals(p.getRedirectType().name()) || Objects.equals(p.getRedirectValue(), r.getServiceId().toString()))));
+                    && (p.getRedirectType() == null || !"SERVICE".equals(p.getRedirectType().name()) || Objects.equals(Objects.toString(p.getRedirectValue(),"").trim(), r.getServiceId().toString()))));
     }
 
     private boolean available(Long tenantId, CreateAppointmentRequest r) {

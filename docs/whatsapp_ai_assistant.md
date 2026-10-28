@@ -125,3 +125,12 @@ El agradecimiento posterior a la venta agrega el comando GODS seguido del codigo
 Se controla con la configuracion existente Link de reserva (includeBookingLink) del mensaje posventa. Si esa opcion o el mensaje estan apagados, no se agrega la invitacion. La consulta del estado se ejecuta en una transaccion de lectura independiente; si falla, se conserva el recibo original y no se bloquea la venta. No se programan envios nuevos ni se cambia el momento del agradecimiento.
 
 Desplegar el backend para modificar los mensajes nuevos. Actualizar Flutter para ver tambien la invitacion en la vista previa de configuracion. Sin migraciones ni variables adicionales. Los mensajes ya enviados no se editan.
+
+
+## Detalle de promociones antes de reservar
+
+Elegir una promocion por numero o nombre abre su titulo, subtitulo, precio/oferta, descripcion completa, contenido del paquete vinculado, duracion, sede, vencimiento y requisito de puntos cuando esten configurados. No inicia la reserva al elegirla. Ofrece 1. Reservar esta promocion y 2. Volver a promociones. La descripcion larga se entrega mediante la division de mensajes del webhook, sin recortarla como en el listado.
+
+Reservar utiliza el servicio o paquete asociado mediante redirectType=SERVICE y redirectValue=ID del servicio/paquete. Inicia un borrador nuevo con esa seleccion y sede de la promocion, y continua con profesional/dia/hora y confirmacion final. Una oferta fija sin servicio/paquete vinculado pide al negocio configurar la asociacion; no la aplica a un servicio arbitrario. Descuentos generales AMOUNT/PERCENT con valor valido permiten elegir servicio y conservan la promocion en ese paso. La vigencia y elegibilidad se vuelven a consultar al reservar.
+
+MENU y otras consultas siguen disponibles. Volver no crea cita ni modifica puntos. No requiere migracion ni nuevas variables, solo desplegar backend y volver a consultar promociones.

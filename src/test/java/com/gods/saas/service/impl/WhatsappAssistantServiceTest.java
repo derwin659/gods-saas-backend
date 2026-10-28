@@ -426,4 +426,45 @@ class WhatsappAssistantServiceTest {
         trackSession();catalog.setServices(List.of(item));reply("hola");String answer=reply("ver paquetes");
         assertTrue(answer.contains("Descripcion del negocio"));assertTrue(answer.contains("debe confirmar el negocio"));assertFalse(answer.contains("999"));
     }
+
+    private Promotion promo(boolean linked) {
+        Promotion promo=Promotion.builder().id(91L).titulo("GODS TOTAL LOOK").priceText("PEN 35.00")
+            .descripcion("Todo lo que incluye:\nCorte personalizado\nPerfilado de barba\nLavado y acabado premium")
+            .discountType("FIXED_PRICE").discountValue(new BigDecimal("35.00")).build();
+        if (linked) {promo.setRedirectType(com.gods.saas.domain.enums.PromotionRedirectType.SERVICE);promo.setRedirectValue("90");}
+        when(promotions.findActiveClientPromotions(1L,40)).thenReturn(List.of(promo));return promo;
+    }
+    @Test void promotionSelectionShowsFullDescriptionAndReserveOrBackInsteadOfServicePicker() throws Exception {
+        trackSession();packageCatalog();promo(true);reply("hola");reply("3");
+        String detail=reply("1");assertTrue(detail.contains("Lavado y acabado premium"));assertTrue(detail.contains("Incluye: Corte, Barba"));
+        assertTrue(detail.contains("1. Reservar esta promocion"));assertTrue(detail.contains("2. Volver a promociones"));
+        assertFalse(detail.contains("¿Para que servicio"));verify(bookings,never()).quoteAssistantAppointment(anyLong(),any());
+        assertTrue(reply("mañana").contains("Reservar esta promocion"));
+    }
+    @Test void reservePromotionKeepsLinkedPackageAndAppliesPromoOnlyAfterSeparateSelection() throws Exception {
+        trackSession();packageCatalog();promo(true);reply("hola");reply("3");reply("1");
+        String next=reply("1");assertTrue(next.contains("¿Para que dia"));assertFalse(next.contains("¿Para que servicio"));
+        reply("mañana");String summary=reply("1");assertTrue(summary.contains("Promocion: GODS TOTAL LOOK"));
+        when(bookings.createAppointment(eq(1L),eq(7L),any())).thenReturn(CreateAppointmentResponse.builder().appointmentId(333L).estado("CREATED").build());
+        assertTrue(reply("SI").contains("#333"));
+        verify(bookings).createAppointment(eq(1L),eq(7L),argThat(r->r.getServiceId()==90L&&r.getPromotionId()==91L));
+    }
+    @Test void backFromPromotionDetailDoesNotStartBooking() throws Exception {
+        trackSession();packageCatalog();promo(true);reply("hola");reply("3");reply("1");
+        assertTrue(reply("2").contains("Promociones vigentes"));verify(bookings,never()).createAppointment(any(),any(),any());
+    }
+    @Test void unlinkedFixedPricePromotionCannotBeAppliedToAnArbitraryService() throws Exception {
+        trackSession();promo(false);reply("hola");reply("3");reply("1");
+        assertTrue(reply("1").contains("aun no tiene un servicio o paquete asociado"));verify(bookings,never()).quoteAssistantAppointment(anyLong(),any());
+    }
+    @Test void promotionRemovedBetweenDetailAndReserveCannotContinueWithStaleOffer() throws Exception {
+        trackSession();packageCatalog();promo(true);reply("hola");reply("3");reply("1");
+        when(promotions.findActiveClientPromotions(1L,40)).thenReturn(List.of());
+        assertTrue(reply("1").contains("ya no esta disponible"));verify(bookings,never()).createAppointment(any(),any(),any());
+    }
+    @Test void genericPercentagePromotionIsRetainedWhenCustomerChoosesItsService() throws Exception {
+        trackSession();Promotion offer=promo(false);offer.setDiscountType("PERCENT");offer.setDiscountValue(new BigDecimal("10"));
+        reply("hola");reply("3");reply("1");assertTrue(reply("1").contains("¿Para que servicio"));
+        reply("1");reply("mañana");assertTrue(reply("1").contains("Promocion: GODS TOTAL LOOK"));
+    }
 }
