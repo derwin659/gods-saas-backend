@@ -88,7 +88,7 @@ class WhatsappAssistantServiceTest {
     }
     @Test void expiredSessionRequiresBusinessSelection() throws Exception {
         session.put("expires_at",Timestamp.from(Instant.now().minusSeconds(1)));
-        assertTrue(reply("puntos").contains("codigo")); verifyNoInteractions(customers,bookings,loyalty);
+        assertTrue(reply("puntos").contains("codigo")); verify(customers).findActiveByPhoneAcrossTenants("+51999999999"); verifyNoInteractions(bookings,loyalty);
     }
     @Test void exhaustedQuotaDoesNotCallModelOrSendRepeatedReplies() throws Exception {
         when(usage.reserve(1L,"2026-10",100)).thenReturn(false);
@@ -160,6 +160,143 @@ class WhatsappAssistantServiceTest {
     }
     @Test void depositsUseExistingAppFlowInsteadOfSkippingPayment() throws Exception {
         draft(); catalog.setBookingDepositEnabled(true); assertTrue(reply("CONFIRMAR ABCD1234").contains("comprobante"));
+        verify(bookings,never()).createAppointment(any(),any(),any());
+    }
+    /** Persist only the session mutations; each test turn represents a new customer message. */
+    private void trackSession() {
+        doAnswer(invocation -> {
+            String sql=invocation.getArgument(0);
+            Object[] args=(Object[])invocation.getRawArguments()[1];
+            if (sql.startsWith("update whatsapp_assistant_session set draft=?")) {
+                session.put("draft",args[0]); session.remove("confirmation_code"); session.remove("quote");
+            } else if (sql.startsWith("update whatsapp_assistant_session set confirmation_code=?")) {
+                session.put("confirmation_code",args[0]); session.put("quote",args[1]);
+            } else if (sql.startsWith("update whatsapp_assistant_session set draft=null")) {
+                session.remove("draft"); session.remove("confirmation_code"); session.remove("quote");
+            } else if (sql.startsWith("update whatsapp_assistant_session set tenant_id=null,draft=null")) {
+                session.remove("tenant_id");session.remove("draft");session.remove("quote");session.remove("confirmation_code");
+            } else if (sql.startsWith("update whatsapp_assistant_session set tenant_id=?")) {
+                session.put("tenant_id",args[0]);
+            }
+            return 1;
+        }).when(jdbc).update(anyString(),any(Object[].class));
+        when(bookings.getAvailability(1L,2L,3L,"2026-10-29",null)).thenReturn(BookingAvailabilityResponse.builder().slots(List.of("17:00","18:00")).build());
+    }
+    @Test void greetingAutomaticallySelectsOnlyVerifiedAllowedBusiness() throws Exception {
+        session.remove("tenant_id");
+        when(customers.findActiveByPhoneAcrossTenants("+51999999999")).thenReturn(List.of(customer));
+        trackSession();
+        assertTrue(reply("Hola").contains("Local Uno"));
+        assertEquals(1L,session.get("tenant_id"));
+        assertTrue(mapper.readTree(session.get("draft").toString()).path("_assistant").path("stage").asText().equals("MENU"));
+        verify(interpreter,never()).interpret(anyString(),anyString());
+    }
+    @Test void multipleBusinessesRequireExplicitChoiceAndExcludeUnverifiedAccounts() throws Exception {
+        session.remove("tenant_id"); trackSession();
+        var other=Customer.builder().id(9L).tenant(new Tenant(2L)).phoneVerified(true).whatsappTransactionalEnabled(true).build();
+        other.getTenant().setNombre("Local Dos");
+        var hidden=Customer.builder().id(10L).tenant(new Tenant(3L)).phoneVerified(false).whatsappTransactionalEnabled(true).build();
+        hidden.getTenant().setNombre("Privado");
+        ReflectionTestUtils.setField(service,"tenantIds","1,2,3");
+        Subscription sub=new Subscription();sub.setPlan("PRO");
+        when(subscriptions.getCurrentSubscriptionOrThrow(2L)).thenReturn(sub);
+        when(policy.monthlyTurns("PRO")).thenReturn(600);
+        when(time.today(2L)).thenReturn(LocalDate.of(2026,10,28));
+        when(usage.reserve(2L,"2026-10",600)).thenReturn(true);
+        when(customers.findActiveByPhoneAcrossTenants("+51999999999")).thenReturn(List.of(customer,other,hidden));
+        String prompt=reply("hola");
+        assertTrue(prompt.contains("1. Local Uno"));assertTrue(prompt.contains("2. Local Dos"));assertFalse(prompt.contains("Privado"));
+        assertNull(session.get("tenant_id"));
+        assertTrue(reply("2").contains("Estas en Local Dos"));assertEquals(2L,session.get("tenant_id"));
+        verifyNoInteractions(loyalty,bookings);
+    }
+    @Test void completeNumberedConversationKeepsMemoryAndCreatesOnlyAfterYes() throws Exception {
+        trackSession();
+        assertTrue(reply("hola").contains("1. Reservar"));
+        assertTrue(reply("1").contains("¿Para que servicio"));
+        assertTrue(reply("1").contains("¿Para que dia"));
+        assertTrue(reply("mañana").contains("17:00"));
+        String summary=reply("el segundo");
+        assertTrue(summary.contains("18:00"));assertTrue(summary.contains("Total: PEN 25.00"));
+        verify(bookings,never()).createAppointment(any(),any(),any());
+        // A points detour keeps the draft and confirmation intact.
+        assertTrue(reply("¿Cuántos puntos tengo?").contains("40 puntos"));
+        when(bookings.createAppointment(eq(1L),eq(7L),any())).thenReturn(CreateAppointmentResponse.builder().appointmentId(101L).estado("CONFIRMED").build());
+        assertTrue(reply("sí").contains("#101"));
+        var request=org.mockito.ArgumentCaptor.forClass(com.gods.saas.domain.dto.request.CreateAppointmentRequest.class);
+        verify(bookings).createAppointment(eq(1L),eq(7L),request.capture());
+        assertEquals("2026-10-29",request.getValue().getDate());assertEquals("18:00",request.getValue().getHoraInicio());
+        verify(interpreter,never()).interpret(anyString(),anyString());
+    }
+    @Test void freeTextFollowupsMergeOnlyNewFieldsAndUsePreviousPromptContext() throws Exception {
+        trackSession();
+        when(interpreter.interpret(eq("quiero atenderme"),anyString())).thenReturn(mapper.readTree("{\"intent\":\"BOOKING\",\"serviceId\":3}"));
+        assertTrue(reply("quiero atenderme").contains("¿Para que dia"));
+        when(interpreter.interpret(eq("el dia siguiente temprano"),anyString())).thenReturn(mapper.readTree("{\"intent\":\"CONTINUE\",\"date\":\"2026-10-29\"}"));
+        assertTrue(reply("el dia siguiente temprano").contains("17:00"));
+        var state=mapper.readTree(session.get("draft").toString());
+        assertEquals(3L,state.path("serviceId").asLong());assertEquals(2L,state.path("branchId").asLong());
+        assertEquals("2026-10-29",state.path("date").asText());
+        var context=org.mockito.ArgumentCaptor.forClass(String.class);
+        verify(interpreter).interpret(eq("el dia siguiente temprano"),context.capture());
+        assertTrue(context.getValue().contains("lastPrompt"));assertTrue(context.getValue().contains("DATE"));
+    }
+    @Test void modelTimeoutReturnsSavedOptionsAndNumbersCanContinue() throws Exception {
+        trackSession(); reply("hola"); reply("1");
+        when(interpreter.interpret(anyString(),anyString())).thenThrow(new org.springframework.web.client.RestClientException("private",new java.net.SocketTimeoutException()));
+        String fallback=reply("me gustaria arreglarme el cabello");
+        assertTrue(fallback.contains("esta tardando"));assertTrue(fallback.contains("Corte"));assertFalse(fallback.contains("private"));
+        assertTrue(reply("1").contains("¿Para que dia"));
+        verify(bookings,never()).createAppointment(any(),any(),any());
+    }
+    @Test void noDeclinesPendingBookingWithoutCreatingOrCancellingAppointments() throws Exception {
+        trackSession();reply("hola");reply("1");reply("1");reply("mañana");reply("1");
+        assertTrue(reply("no").contains("No se creo ninguna cita"));
+        verify(bookings,never()).createAppointment(any(),any(),any());
+        verify(bookings,never()).cancelAppointment(any(),any(),any());
+        assertFalse(session.containsKey("confirmation_code"));
+    }
+    @Test void availabilityConsultationNeverCreatesBookingAndHonorsTimeFilter() throws Exception {
+        trackSession();
+        when(interpreter.interpret(anyString(),anyString())).thenReturn(mapper.readTree("{\"intent\":\"AVAILABILITY\",\"serviceId\":3,\"date\":\"2026-10-29\",\"afterTime\":\"18:00\"}"));
+        String response=reply("que horas hay mañana desde las seis para corte");
+        assertTrue(response.contains("18:00"));assertFalse(response.contains("17:00"));
+        verify(bookings,never()).createAppointment(any(),any(),any());
+    }
+    @Test void availableBarbersComeFromLiveSchedulesAndAssignments() throws Exception {
+        trackSession();
+        var luis=BarberMiniResponse.builder().id(8L).nombre("Luis").branchIds(List.of(2L)).serviceIdsByBranch(Map.of(2L,List.of(3L))).build();
+        var busy=BarberMiniResponse.builder().id(9L).nombre("Ocupado").branchIds(List.of(2L)).serviceIdsByBranch(Map.of(2L,List.of(3L))).build();
+        var incompatible=BarberMiniResponse.builder().id(10L).nombre("Otro servicio").branchIds(List.of(2L)).serviceIdsByBranch(Map.of(2L,List.of(99L))).build();
+        catalog.setBarbers(List.of(luis,busy,incompatible));
+        when(bookings.getAvailability(1L,2L,3L,"2026-10-29",8L)).thenReturn(BookingAvailabilityResponse.builder().slots(List.of("17:00")).build());
+        when(bookings.getAvailability(1L,2L,3L,"2026-10-29",9L)).thenReturn(BookingAvailabilityResponse.builder().slots(List.of()).build());
+        when(interpreter.interpret(anyString(),anyString())).thenReturn(mapper.readTree("{\"intent\":\"BARBERS\",\"serviceId\":3,\"date\":\"2026-10-29\"}"));
+        String response=reply("quien esta libre mañana para corte");
+        assertTrue(response.contains("Luis"));assertFalse(response.contains("Ocupado"));assertFalse(response.contains("Otro servicio"));
+        verify(bookings,never()).getAvailability(1L,2L,3L,"2026-10-29",10L);
+        verify(bookings,never()).createAppointment(any(),any(),any());
+    }
+    @Test void pastOrInvalidDateAsksAgainInsteadOfCallingAvailability() throws Exception {
+        trackSession();
+        when(interpreter.interpret(anyString(),anyString())).thenReturn(mapper.readTree("{\"intent\":\"BOOKING\",\"serviceId\":3,\"date\":\"2026-02-31\"}"));
+        assertTrue(reply("reserva en una fecha invalida").contains("No entendi la fecha"));
+        verify(bookings,never()).getAvailability(any(),any(),any(),anyString(),any());
+    }
+    @Test void menuPreservesChosenServiceButInvalidatesOldConfirmation() throws Exception {
+        trackSession();reply("hola");reply("1");reply("1");reply("mañana");reply("1");
+        assertTrue(session.containsKey("confirmation_code"));
+        assertTrue(reply("menu").contains("Tu seleccion anterior"));
+        assertEquals(3L,mapper.readTree(session.get("draft").toString()).path("serviceId").asLong());
+        assertFalse(session.containsKey("confirmation_code"));
+        assertTrue(reply("2").contains("40 puntos"));
+        assertTrue(reply("1").contains("¿Confirmo tu reserva?"));
+        verify(bookings,never()).createAppointment(any(),any(),any());
+    }
+    @Test void unknownNumericOptionRepeatsQuestionWithoutAskingModelToGuess() throws Exception {
+        trackSession();reply("hola");reply("1");
+        assertTrue(reply("19").contains("¿Para que servicio"));
+        verify(interpreter,never()).interpret(anyString(),anyString());
         verify(bookings,never()).createAppointment(any(),any(),any());
     }
 }

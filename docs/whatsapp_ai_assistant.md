@@ -1,102 +1,102 @@
-# Asistente Super Gods por WhatsApp — piloto
+# Asistente conversacional Super Gods por WhatsApp
 
-Estado: implementacion local, desactivada por defecto; no desplegada ni probada con trafico real.
+Estado: implementado y probado localmente. El despliegue y las pruebas con Twilio/OpenAI reales son pasos posteriores. No se han modificado credenciales ni configuracion de produccion desde esta tarea.
 
-## Alcance
+## Experiencia del cliente
 
-Cliente registrado y con telefono E.164 verificado: escribe `GODS CODIGO_NEGOCIO`, consulta sus puntos reales, promociones elegibles, disponibilidad y solicita una reserva. Antes de escribir en agenda, el backend muestra servicio, sede, profesional, fecha, hora, moneda e importe y exige `CONFIRMAR CODIGO`. `SALIR` cierra la sesion. La seleccion del negocio caduca tras 30 minutos de inactividad.
+- `Hola` descubre los negocios donde el telefono entrante esta registrado y verificado como cliente, tiene consentimiento transaccional y el tenant esta autorizado para el piloto.
+- Si hay un negocio habilitado, abre su menu. Si hay varios, pregunta cual elegir mediante nombre o numero. No selecciona un negocio distinto por inferencia del modelo.
+- `GODS CODIGO` conserva el acceso directo. `CAMBIAR NEGOCIO` descarta el contexto anterior y ofrece los negocios elegibles. `SALIR` cierra la sesion.
+- Menu: 1 Reservar, 2 Puntos, 3 Promociones, 4 Horarios, 5 Barberos disponibles, 6 Servicios y precios.
+- El cliente puede escribir libremente o responder con el numero/nombre de una opcion. Se reconocen respuestas cortas como `mañana`, `cualquiera`, `el segundo` y `17:00` segun la pregunta previa.
+- El backend conserva servicio, sede, profesional, fecha, hora y promocion. Cada paso pregunta solo por datos faltantes o invalidos. Los cambios de servicio o sede eliminan selecciones dependientes que deben revisarse.
+- `MENU` conserva los datos elegidos pero invalida una confirmacion anterior. `NUEVA RESERVA` reinicia el borrador.
 
-La IA interpreta el mensaje mediante Responses API y salida JSON estructurada. No recibe identidad del cliente ni saldo, no tiene acceso SQL ni puede confirmar operaciones. El backend fija identidad y negocio, valida IDs contra catalogo, reconsulta disponibilidad y cotiza con las reglas existentes de ClientBookingService. Los detalles de catalogo y el texto escrito por el cliente se envian al proveedor; no se envia el historial privado del cliente. Se usa `store:false` y no se registra texto, telefonos ni errores completos del proveedor en logs nuevos.
+## Respuestas y reservas
 
-La verificacion entrante del owner sigue teniendo prioridad. El asistente solo procesa webhooks firmados enviados al numero central configurado. MessageSid evita repetir acciones; la sesion se bloquea en PostgreSQL por telefono. Cada intento atendido consume cuota persistente, incluso si falla el proveedor, para no reabrir gasto mediante reintentos.
+Puntos y promociones: las consultas claras responden desde el backend sin depender de OpenAI. Otras formulaciones se interpretan mediante IA. Los puntos vienen de la cuenta de fidelizacion del cliente autenticado por su WhatsApp verificado. Las promociones se filtran por vigencia, tenant y elegibilidad; al seleccionar una oferta se valida de nuevo antes de reservar.
 
-## Planes y costo
+Servicios y precios: se listan desde el catalogo del negocio. Los servicios con precio variable requieren completar la reserva en la app. El modelo no suministra el precio final.
 
-Se mantienen los planes comerciales vigentes: Starter S/49.90, Growth S/99.90 y Pro S/149.90. El usuario menciono Pro de 99: la decision sobre renombrar sigue pendiente y no se alteraron pagos, productos IAP ni contratos.
+Horarios: se consulta ClientBookingService con sede, servicio, fecha y profesional opcional. Se puede filtrar desde una hora. Una consulta de disponibilidad nunca crea por si sola una cita.
 
-Cuotas iniciales configurables para un piloto, NO promesa de rentabilidad:
+Barberos disponibles: se filtran por sede y servicios asignados y se consulta la disponibilidad real de cada profesional (maximo 20 por respuesta). Listar al equipo no afirma que todos esten libres.
 
-| Plan interno | Intentos atendidos por mes |
+Reserva: se muestra servicio, sede, profesional o cualquiera disponible, fecha, hora, promocion y precio calculado por las reglas existentes. Solo se crea la cita despues de `SI` en el paso de confirmacion o `CONFIRMAR CODIGO` valido. `NO` descarta el borrador. El backend revalida seleccion, precio y disponibilidad antes de crear la cita. Si cambia el precio, pide una nueva confirmacion.
+
+Si el negocio usa adelantos, se dirige al flujo de app para completar comprobantes. Canje de puntos, cancelacion/reprogramacion de citas existentes y solicitudes fuera del alcance se remiten a la app o al negocio. No se inventan respuestas de temas no presentes en el catalogo.
+
+## Memoria, seguridad y recuperacion
+
+La memoria se guarda dentro del campo `draft` de whatsapp_assistant_session, junto al objeto `_assistant` con modo, paso, opciones y ultima pregunta. No requiere nuevas columnas ni una migracion adicional a 20261028_whatsapp_assistant.sql. Los borradores antiguos siguen siendo compatibles.
+
+La sesion caduca tras 30 minutos de inactividad. Se conserva la validacion de firma de Twilio y del numero destinatario central, la identidad del cliente, suscripcion activa, lista de tenants autorizados y cuota mensual. MessageSid evita ejecutar de nuevo un mensaje repetido y la sesion se bloquea por telefono.
+
+El modelo solo interpreta intenciones y campos; no tiene acceso SQL, no elige identidad o tenant y no ejecuta confirmaciones. El contexto enviado incluye IDs/nombres de catalogo y el borrador con su ultima pregunta; no incluye fotos del catalogo ni historial privado de visitas. Se usa store=false. No se registran claves, texto del cliente o cuerpos de error en los nuevos logs.
+
+Ante timeout o error de interpretacion se informa al cliente y se muestran las opciones guardadas para continuar por numero. Las rutas de menu y las respuestas cortas reconocidas funcionan sin una llamada al modelo. Las frases libres siguen necesitando una llamada exitosa al proveedor y deben validarse en el piloto.
+
+La espera de lectura del proveedor es 10 segundos por defecto, configurable entre 1000 y 10000 ms. No se hacen reintentos automaticos dentro del webhook. Si la latencia total sigue superando el tiempo del webhook, sera necesario un flujo asincrono con envio saliente Twilio; esta entrega no implementa esa cola.
+
+## Planes y consumo
+
+Se mantienen precios y productos de suscripcion actuales: Starter S/49.90, Growth S/99.90 y Pro S/149.90. No se renombro Growth a Pro ni se cambiaron contratos.
+
+| Plan interno | Intentos atendidos por negocio y mes |
 |---|---:|
 | STARTER | 100 |
 | GROWTH / GODS_AI | 300 |
 | PRO / PRO_LEGACY / ENTERPRISE | 600 |
 | FREE / BASIC / STARTER_LEGACY / desconocido | 0 |
 
-Una interaccion no equivale a una cita: una reserva puede requerir varias. La apertura de negocio tambien consume cuota. Los creditos visuales de IA permanecen separados. El consumo se agrega por negocio y mes calendario en su zona horaria; no por sede. Al agotar cuota el asistente no responde para evitar gasto repetido. Las consultas entrantes siguen pudiendo generar cargos del proveedor: la cuota no es un limite monetario sobre todo el trafico de Twilio. Los avisos transaccionales existentes tienen su propio consumo.
+PRO_LEGACY conserva precio y suscripcion originales y comparte el cupo configurable de PRO. Siempre se necesita autorizar el tenant.
 
-El costo real incluye mensajes entrantes y salientes de Twilio, cargos de Meta, tokens del modelo, infraestructura, impuestos y soporte. Medirlo en un piloto antes de publicar cantidades incluidas. No hay recargas, cobro por exceso ni ajuste automatico de planes en esta entrega.
+Una interaccion no equivale a una reserva: cada respuesta atendida consume cuota; los intentos fallidos del proveedor tambien la consumen. El mes se calcula en la zona horaria del negocio. Los creditos visuales son independientes. Al agotarse el cupo el asistente queda en silencio para evitar respuestas pagadas repetidas.
 
-## Activacion controlada
+Estos cupos son de piloto y no garantizan rentabilidad. Los mensajes entrantes siguen pudiendo generar cargos de Twilio y no estan bloqueados por esta cuota. Los avisos transaccionales existentes se facturan aparte de este contador. El costo total incluye Twilio, Meta, tokens del modelo, infraestructura, impuestos y soporte. No hay cobro automatico por exceso ni recargas implementadas.
 
-1. Aplicar `src/main/resources/db/manual/20261028_whatsapp_assistant.sql` en PostgreSQL. `ddl-auto` es none.
-2. Configurar mediante variables/configuracion segura del servidor (nunca guardar valores secretos en Git):
+Starter mantiene su regla existente de hasta 5 promociones si promotionsEnabled=false. Esta entrega no agrega campañas masivas ni modifica el catalogo de planes.
 
-```yaml
-whatsapp:
-  assistant:
-    enabled: false
-    tenant-ids: "" # IDs de negocios piloto separados por coma; vacio no habilita ninguno.
-    openai-api-key: ${WHATSAPP_ASSISTANT_OPENAI_API_KEY:}
-    model: ${WHATSAPP_ASSISTANT_MODEL:} # Modelo de texto compatible con Responses + JSON Schema estricto.
-    starter-turns: 100
-    growth-turns: 300
-    pro-turns: 600
-```
+## Variables del servidor
 
-3. Mantener las propiedades Twilio existentes: auth-token, from-number, inbound-webhook-url y validate-inbound-signature=true. La URL firmada es la misma del webhook existente. No se requieren plantillas para este flujo de respuesta iniciado por el cliente; verificar las reglas y tarifas actuales de Meta antes de activarlo.
-4. Elegir un negocio de prueba con suscripcion activa, numero cliente verificado y catalogo/precios configurados. Habilitar unicamente ese tenant y el flag. Probar puntos, promociones, sin disponibilidad, confirmacion repetida y cambio de precio. Configurar tambien alertas y limites de gasto en las cuentas de proveedores.
-5. Desplegar el backend antes de la app; si el endpoint no existe la pantalla muestra estado no disponible sin bloquear las otras opciones.
-
-No se han aplicado migraciones, creado recursos externos ni cambiado credenciales o configuracion de produccion. No se realizaron llamadas pagadas a OpenAI ni a Twilio durante las pruebas locales.
-
-## API del dueño y app
-
-`GET /api/owner/whatsapp-settings/assistant` usa el tenant de la sesion autenticada. Devuelve enabled, plan, monthlyTurns, usedTurns, remainingTurns y month. La pantalla existente WhatsApp y mensajes muestra estado y consumo; el dueño no puede activar el flag global ni ampliar su cuota desde el cliente.
-
-## Limites del primer alcance
-
-- Reservas de un servicio del catalogo por conversacion. Los paquetes existentes dependen de su contrato de catalogo.
-- Negocios con adelanto y servicios de precio variable siguen reservando desde la app; no se evita el flujo de comprobante.
-- Sin canje de puntos, cancelacion/reprogramacion conversacional, audios, campañas automaticas ni contactos sin cuenta verificada en este piloto.
-- Starter conserva su regla existente de hasta 5 promociones cuando promotionsEnabled=false; el asistente consulta las promociones elegibles de ese negocio. No se habilitan campañas masivas adicionales.
-- Cuotas, sesiones e idempotencia necesitan PostgreSQL; las pruebas unitarias no sustituyen el ensayo de la migracion y de concurrencia con esa base.
-- Verificar concurrencia de reservas desde distintos canales contra las reglas actuales de agenda antes de abrir a todos los negocios.
-- Limpiar registros de MessageSid solo despues de la ventana de reintentos (minimo 7 dias); definir retencion operativa de sesiones y metricas.
-
-## Siguientes ampliaciones de producto
-
-Starter: puntos, consultas, reservas y recordatorios existentes. Growth: mayor consumo y promociones existentes. Pro: futura reprogramacion, campañas con consentimiento, bandeja para el dueño y analisis de citas recuperadas; estas ampliaciones no estan incluidas en el codigo del piloto actual.
-
-Referencia API: https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses
-
-## Verificacion local
-
-- 22 pruebas nuevas aprobadas: identidad y tenant, cuotas, confirmacion, cambios de precio, adelantos, firma/TwiML, SQL de idempotencia y concurrencia del consumo.
-- La migracion se ejecuto durante pruebas en H2 con modo PostgreSQL. Se verifico que 25 solicitudes concurrentes solo consumen 10 cupos cuando el limite es 10 y que un rollback externo no devuelve el consumo del proveedor.
-- Analisis estatico de la pantalla Flutter modificada sin incidencias.
-- No se verifico PostgreSQL de produccion, la interpretacion con un modelo real ni la entrega de WhatsApp; activar un piloto requiere esas comprobaciones.
-## Variables de entorno del servidor
-
-application.yml y application-prod.yml ya incluyen la traduccion a variables de entorno. No pegar otra seccion whatsapp duplicada.
+application.yml y application-prod.yml ya enlazan estas variables. No pegar una segunda seccion whatsapp en YAML.
 
 | Variable | Valor inicial |
 |---|---|
-| WHATSAPP_ASSISTANT_ENABLED | false |
-| WHATSAPP_ASSISTANT_TENANT_IDS | IDs piloto separados por coma; dejar vacio deshabilita todos |
-| WHATSAPP_ASSISTANT_OPENAI_API_KEY | Clave privada de API, guardar exclusivamente en el gestor de secretos/variables del servidor |
-| WHATSAPP_ASSISTANT_MODEL | ID de modelo habilitado para la cuenta, compatible con Responses y JSON Schema estricto |
+| WHATSAPP_ASSISTANT_ENABLED | false hasta activar el piloto |
+| WHATSAPP_ASSISTANT_TENANT_IDS | IDs numericos separados por coma; vacio no habilita ninguno |
+| WHATSAPP_ASSISTANT_OPENAI_API_KEY | Guardar solo en el gestor seguro de variables del servidor |
+| WHATSAPP_ASSISTANT_MODEL | Modelo habilitado en la cuenta con Responses y JSON Schema estricto |
+| WHATSAPP_ASSISTANT_READ_TIMEOUT_MS | 10000 |
 | WHATSAPP_ASSISTANT_STARTER_TURNS | 100 |
 | WHATSAPP_ASSISTANT_GROWTH_TURNS | 300 |
 | WHATSAPP_ASSISTANT_PRO_TURNS | 600 |
 
-Los cupos tienen esos valores por defecto; no es necesario definir las tres variables si no cambian. Mantener ENABLED=false hasta que el codigo actualizado este desplegado y esten definidos clave, modelo y tenant piloto. Activar el flag es una operacion posterior del piloto. Una suscripcion de ChatGPT no reemplaza la configuracion de la API del proveedor. No enviar la clave por el chat ni guardarla en documentos.
-PRO_LEGACY usa el mismo cupo configurable de PRO (600 por defecto), manteniendo precio y suscripcion originales. Sigue siendo obligatorio autorizar el tenant en whatsapp.assistant.tenant-ids y tener suscripcion activa.
+Los valores de cupos y timeout son opcionales si se conservan los predeterminados. Mantener configurados TWILIO_WHATSAPP_FROM_NUMBER, TWILIO_AUTH_TOKEN, TWILIO_INBOUND_WEBHOOK_URL y la validacion de firma. La verificacion de WhatsApp del owner sigue teniendo prioridad en el webhook. No enviar claves por chat ni guardarlas en Git.
 
-## Ajuste por timeout observado en piloto
+## Comprobar el despliegue
 
-El proveedor supero la espera de lectura de 6 segundos. Se amplio a 10 segundos por defecto mediante WHATSAPP_ASSISTANT_READ_TIMEOUT_MS (acotado a 1000–10000 ms). No se agregaron reintentos automaticos dentro del webhook. Esto no garantiza que todas las llamadas al proveedor concluyan a tiempo; si persisten los timeouts para reservas, se debe evaluar procesamiento asincrono y entrega por el remitente Twilio.
+1. Si ya se aplico 20261028_whatsapp_assistant.sql, no ejecutar otra migracion por esta ampliacion.
+2. Subir y desplegar el codigo actualizado del backend; aplicar variables en Railway no sube archivos locales.
+3. Esperar a que el nuevo despliegue quede activo. Los logs de una revision anterior no verifican la version nueva.
+4. Escribir `HOLA` desde un cliente verificado. Debe aparecer el menu numerado de seis opciones; esa es una diferencia visible respecto al saludo anterior.
+5. Probar puntos, promociones, seleccion de profesional, horarios sin disponibilidad y una reserva completa. Confirmar el resultado en la agenda.
+6. Probar cambio de precio y confirmacion repetida con datos controlados. Revisar consumo y gastos del proveedor antes de abrir el piloto a mas tenants.
 
-Consultas inequivocas como `¿Cuantos puntos tengo?`, `a ver dime cuantos puntos tengo?`, `mis puntos` y `¿Que promos tienen?` ahora responden desde el backend sin llamar al modelo ni cargar el catalogo de reservas. Se mantienen identidad verificada, negocio autorizado, suscripcion activa y cuota mensual. Las solicitudes mixtas o frases no reconocidas usan IA. El catalogo enviado al modelo ahora contiene IDs y nombres en vez de URLs de imagen y campos de presentacion innecesarios.
+Ejemplo de prueba guiada sin IA: `HOLA` → `1` → numero de servicio → sede/profesional si se solicitan → `mañana` → numero de horario → `SI`. Probar tambien texto libre con el modelo real; una prueba guiada no confirma conectividad o calidad de interpretacion de OpenAI.
 
-Se agregaron 6 pruebas: consulta directa con timeout simulado, identidad, cuota, promociones, solicitud mixta y reduccion del contexto. La suite del asistente paso localmente; falta desplegar y repetir la prueba real.
+## Estado para el dueño
+
+GET /api/owner/whatsapp-settings/assistant utiliza el tenant de la sesion autenticada y devuelve enabled, plan, monthlyTurns, usedTurns, remainingTurns y month. La pantalla WhatsApp y mensajes muestra estado, consumo y aviso al 80 %. No permite ampliar cuota ni activar tenants desde el cliente.
+
+## Verificacion local
+
+Las pruebas incluyen firma y XML del webhook, identidad/tenant/consentimiento, cuotas y concurrencia, idempotencia, consultas directas con timeout simulado, seleccion explicita de negocio, memoria entre turnos, menu, datos faltantes, cambios de precio, rechazo de reserva, disponibilidad y profesionales con agenda real simulada.
+
+Se prueba ademas una conversacion completa con persistencia SQL en H2 modo PostgreSQL: cada mensaje lee la sesion guardada y una confirmacion repetida no crea dos citas. Esto no sustituye una prueba en PostgreSQL real ni una prueba pagada de entrega Twilio/OpenAI.
+
+Comando: gradlew.bat test --tests '*WhatsappAssistant*' --tests '*TwilioWhatsappAssistantWebhookTest' --offline --console=plain.
+
+Operacion: conservar MessageSid al menos durante la ventana de reintentos (minimo 7 dias) y definir retencion de sesiones y metricas. Verificar tambien concurrencia de reservas desde otros canales antes de escalar.
+
+Documentacion oficial de la API utilizada: https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses
