@@ -388,4 +388,42 @@ class WhatsappAssistantServiceTest {
         assertTrue(reply("1").contains("Adelanto requerido: PEN 5.00"));assertEquals("Horario apartado",reply("SI"));
         verify(bookings,never()).createAppointment(any(),any(),any());
     }
+
+    private void packageCatalog() {
+        catalog.setServices(List.of(catalog.getServices().get(0),
+            ServiceMiniResponse.builder().id(4L).nombre("Barba").precio(20.0).build(),
+            ServiceMiniResponse.builder().id(90L).nombre("Experiencia completa").precio(35.0).duracionMinutos(75)
+                .descripcion("Corte, perfilado y cuidado personal en una sola visita").packageServiceIds(List.of(3L,4L)).build()));
+        when(bookings.getAvailability(1L,2L,90L,"2026-10-29",null)).thenReturn(BookingAvailabilityResponse.builder().slots(List.of("18:00")).build());
+        when(bookings.quoteAssistantAppointment(eq(1L),argThat(r->r!=null && Long.valueOf(90L).equals(r.getServiceId())))).thenReturn(new BigDecimal("35.00"));
+    }
+    @Test void servicesShowPackagePriceDescriptionAndIncludedNamesFromCatalog() throws Exception {
+        trackSession();packageCatalog();reply("hola");String answer=reply("6");
+        assertTrue(answer.contains("Paquete: Experiencia completa — PEN 35.00"));
+        assertTrue(answer.contains("Corte, perfilado y cuidado personal"));assertTrue(answer.contains("Incluye: Corte, Barba"));
+        verify(interpreter,never()).interpret(anyString(),anyString());
+    }
+    @Test void packagesCanBeSelectedAndBookedAsOneServiceAtTheirOwnPrice() throws Exception {
+        trackSession();packageCatalog();reply("hola");
+        assertTrue(reply("10").contains("1. Paquete: Experiencia completa"));
+        String detail=reply("1");assertTrue(detail.contains("Precio del paquete: PEN 35.00"));
+        assertTrue(detail.contains("Duracion: 75 minutos"));assertTrue(detail.contains("¿Para que dia"));
+        reply("mañana");assertTrue(reply("1").contains("Total: PEN 35.00"));
+        when(bookings.createAppointment(eq(1L),eq(7L),any())).thenReturn(CreateAppointmentResponse.builder().appointmentId(222L).estado("CREATED").build());
+        assertTrue(reply("SI").contains("#222"));
+        var request=org.mockito.ArgumentCaptor.forClass(com.gods.saas.domain.dto.request.CreateAppointmentRequest.class);
+        verify(bookings).createAppointment(eq(1L),eq(7L),request.capture());
+        assertEquals(90L,request.getValue().getServiceId());assertTrue(request.getValue().getServiceIds()==null || request.getValue().getServiceIds().isEmpty());
+        verify(interpreter,never()).interpret(anyString(),anyString());
+    }
+    @Test void packagesShortcutExplainsWhenNoPackagesExist() throws Exception {
+        trackSession();reply("hola");assertTrue(reply("ver paquetes").contains("no tiene paquetes activos"));
+        verify(bookings,never()).createAppointment(any(),any(),any());
+    }
+    @Test void packageDescriptionIsMappedFromDatabaseAndUnknownComponentsAreNotInvented() throws Exception {
+        var entity=ServiceEntity.builder().id(90L).nombre("Experiencia").precio(35.0).descripcion("Descripcion del negocio").packageServiceIds(List.of(999L)).build();
+        var item=ServiceMiniResponse.fromEntity(entity);assertEquals("Descripcion del negocio",item.getDescripcion());
+        trackSession();catalog.setServices(List.of(item));reply("hola");String answer=reply("ver paquetes");
+        assertTrue(answer.contains("Descripcion del negocio"));assertTrue(answer.contains("debe confirmar el negocio"));assertFalse(answer.contains("999"));
+    }
 }

@@ -25,7 +25,7 @@ public class WhatsappAssistantInterpreter {
     public JsonNode interpret(String text, String context) throws Exception {
         if (!configured()) throw new IllegalStateException("Assistant provider unavailable");
         Map<String, Object> properties = new LinkedHashMap<>();
-        properties.put("intent", Map.of("type", "string", "enum", List.of("POINTS", "PROMOTIONS", "BOOKING", "AVAILABILITY", "BARBERS", "SERVICES", "TEAM", "REWARDS", "MY_REDEMPTIONS", "MY_APPOINTMENTS", "CONTINUE", "HANDOFF", "HELP")));
+        properties.put("intent", Map.of("type", "string", "enum", List.of("POINTS", "PROMOTIONS", "BOOKING", "AVAILABILITY", "BARBERS", "SERVICES", "PACKAGES", "TEAM", "REWARDS", "MY_REDEMPTIONS", "MY_APPOINTMENTS", "CONTINUE", "HANDOFF", "HELP")));
         for (String name : List.of("branchId", "serviceId", "barberId", "promotionId")) {
             properties.put(name, Map.of("type", List.of("integer", "null")));
         }
@@ -43,7 +43,7 @@ public class WhatsappAssistantInterpreter {
                 + "Devuelve solo los datos nuevos o cambiados en este mensaje; null significa conservar lo anterior. "
                 + "Si el cliente responde a una pregunta previa usa CONTINUE; BOOKING para solicitar una reserva, "
                 + "AVAILABILITY para consultar horas, BARBERS para profesionales disponibles, TEAM para listar el equipo, "
-                + "SERVICES para servicios/precios, POINTS para saldo de puntos y PROMOTIONS para ofertas. "
+                + "SERVICES para servicios/precios, PACKAGES para ver paquetes/combos y su contenido, POINTS para saldo de puntos y PROMOTIONS para ofertas. "
                 + "REWARDS para consultar o solicitar canjear premios/puntos, MY_REDEMPTIONS para recuperar codigos de canje y MY_APPOINTMENTS para consultar sus reservas. El backend pedira confirmacion de canje. HANDOFF para cancelar/reprogramar citas existentes o atencion humana. "
                 + "Si pide otra reserva nueva usa BOOKING, pero no borres datos salvo que pida cambiarlos. "
                 + "No deduzcas servicio, sede ni profesional cuando haya varias opciones ambiguas. Si dice cualquiera establece anyBarber=true. "

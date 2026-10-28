@@ -211,7 +211,7 @@ public class WhatsappAssistantService {
             case "REWARDS" -> actions.reply(phone,tenantId,customer.getId(),"premios",oldRoot);
             case "MY_REDEMPTIONS" -> actions.reply(phone,tenantId,customer.getId(),"mis canjes",oldRoot);
             case "MY_APPOINTMENTS" -> actions.reply(phone,tenantId,customer.getId(),"mis reservas",oldRoot);
-            case "BOOKING", "AVAILABILITY", "BARBERS", "SERVICES", "TEAM", "CONTINUE" -> prepare(phone, tenantId, intent, catalog, eligible, oldRoot);
+            case "BOOKING", "AVAILABILITY", "BARBERS", "SERVICES", "PACKAGES", "TEAM", "CONTINUE" -> prepare(phone, tenantId, intent, catalog, eligible, oldRoot);
             case "HANDOFF" -> "Para cancelar o reprogramar una cita existente, abre tus reservas en la app de Super Gods. Si necesitas otra ayuda, contacta al negocio.";
             default -> "Puedo ayudarte con puntos, promociones, precios y reservas de este negocio. "
                     + (metadata(oldRoot).path("lastPrompt").asText("").isBlank()?MENU:metadata(oldRoot).path("lastPrompt").asText())
@@ -373,6 +373,7 @@ public class WhatsappAssistantService {
         if ("MENU".equals(stage) && clean.matches("[1-6]")) {
             return result.put("intent",List.of("BOOKING","POINTS","PROMOTIONS","AVAILABILITY","BARBERS","SERVICES").get(Integer.parseInt(clean)-1));
         }
+        if (("MENU".equals(stage) && "10".equals(clean)) || Set.of("paquetes","ver paquetes","paquetes y precios","combos","ver combos","que paquetes tienen","que incluye el paquete").contains(clean)) return result.put("intent","PACKAGES");
         if (Set.of("reservar","quiero reservar","reservar una cita","quiero una cita").contains(clean)) return result.put("intent","BOOKING");
         if (Set.of("servicios","servicios y precios","que servicios tienen","precios").contains(clean)) return result.put("intent","SERVICES");
         if (Set.of("barberos","ver barberos","quienes son los barberos","que barberos hay").contains(clean)) return result.put("intent","TEAM");
@@ -417,10 +418,19 @@ public class WhatsappAssistantService {
         return availability==null || availability.getSlots()==null?List.of():availability.getSlots();
     }
     private String prepare(String phone, Long tenantId, JsonNode intent, BookingBootstrapResponse catalog, List<Promotion> eligible, ObjectNode oldRoot) throws Exception {
+        String answer=prepareBooking(phone,tenantId,intent,catalog,eligible,oldRoot);
+        Long selected=number(intent,"serviceId");
+        if (selected!=null && !Objects.equals(selected,number(oldRoot,"serviceId"))) {
+            var pack=catalog.getServices().stream().filter(v -> v.getId().equals(selected) && isPackage(v)).findFirst();
+            if (pack.isPresent()) return packageDetail(pack.get(),catalog)+"\n\n"+answer;
+        }
+        return answer;
+    }
+    private String prepareBooking(String phone, Long tenantId, JsonNode intent, BookingBootstrapResponse catalog, List<Promotion> eligible, ObjectNode oldRoot) throws Exception {
         ObjectNode meta=metadata(oldRoot).deepCopy();
         CreateAppointmentRequest r=request(oldRoot);
         String action=intent.path("intent").asText();
-        String mode=Set.of("BOOKING","AVAILABILITY","BARBERS","SERVICES","TEAM").contains(action)?action:meta.path("mode").asText("BOOKING");
+        String mode=Set.of("BOOKING","AVAILABILITY","BARBERS","SERVICES","PACKAGES","TEAM").contains(action)?action:meta.path("mode").asText("BOOKING");
         meta.put("mode",mode);
         Long branchId=number(intent,"branchId"),serviceId=number(intent,"serviceId");
         if (branchId!=null && !branchId.equals(r.getBranchId())) {
@@ -447,9 +457,16 @@ public class WhatsappAssistantService {
         r.setDepositRequired(false);
         if (catalog.getServices().isEmpty() && !"TEAM".equals(mode))
             return ask(phone,r,meta,"MENU","El negocio no tiene servicios activos configurados. Contacta al negocio o escribe MENU para otra consulta.",List.of());
+        if ("PACKAGES".equals(mode)) {
+            var packages=catalog.getServices().stream().filter(this::isPackage).toList();
+            meta.put("mode","BOOKING");
+            if (packages.isEmpty()) return ask(phone,r,meta,"MENU","Este negocio no tiene paquetes activos configurados. Escribe SERVICIOS para consultar el catalogo o MENU para otras opciones.",List.of());
+            return ask(phone,r,meta,"SERVICE","Paquetes de "+catalog.getTenantName()+". Precio del paquete y servicios incluidos. Elige uno para ver su detalle y reservar:",
+                    packages.stream().limit(20).map(v -> serviceChoice(v,catalog)).toList());
+        }
         if ("SERVICES".equals(mode)) {
             meta.put("mode","BOOKING");
-            return ask(phone,r,meta,"SERVICE","Servicios y precios de "+catalog.getTenantName()+" ("+catalog.getCurrency()+"). Elige uno si deseas reservar:",serviceChoices(catalog));
+            return ask(phone,r,meta,"SERVICE","Servicios, paquetes y precios de "+catalog.getTenantName()+" ("+catalog.getCurrency()+"). Elige uno si deseas reservar:",serviceChoices(catalog));
         }
         if ("TEAM".equals(mode)) {
             return ask(phone,r,meta,"MENU",(catalog.getBarbers().isEmpty()?"No hay profesionales activos configurados.":"Profesionales del negocio:\n")+String.join("\n",catalog.getBarbers().stream().map(b -> b.getNombre()+" "+Objects.toString(b.getApellido(),"")).toList())
@@ -536,14 +553,47 @@ public class WhatsappAssistantService {
         if (!after.matches("([01][0-9]|2[0-3]):[0-5][0-9]")) return slots;
         return slots.stream().filter(s -> !LocalTime.parse(s).isBefore(LocalTime.parse(after))).toList();
     }
+    private boolean isPackage(ServiceMiniResponse service) {
+        return service.getPackageServiceIds()!=null && !service.getPackageServiceIds().isEmpty();
+    }
+    private String shortText(String value,int limit) {
+        String clean=Objects.toString(value,"").replaceAll("\\s+"," ").trim();
+        int count=clean.codePointCount(0,clean.length());
+        return count<=limit?clean:clean.substring(0,clean.offsetByCodePoints(0,limit))+"…";
+    }
+    private String servicePrice(ServiceMiniResponse service,BookingBootstrapResponse catalog) {
+        return service.getPrecio()==null?"precio no configurado"
+                :(Boolean.TRUE.equals(service.getPrecioVariable())?"Precio desde ":"")
+                +Objects.toString(catalog.getCurrency(),"PEN")+" "
+                +BigDecimal.valueOf(service.getPrecio()).setScale(2,java.math.RoundingMode.HALF_UP).toPlainString();
+    }
+    private String packageIncludes(ServiceMiniResponse service,BookingBootstrapResponse catalog) {
+        if (!isPackage(service)) return "";
+        List<String> names=new ArrayList<>();
+        boolean missing=false;
+        for (Long id:service.getPackageServiceIds().stream().limit(20).toList()) {
+            var match=catalog.getServices().stream().filter(v -> Objects.equals(v.getId(),id)).findFirst();
+            if (match.isPresent()) names.add(match.get().getNombre()); else missing=true;
+        }
+        String result=String.join(", ",names);
+        if (missing) result+=(result.isBlank()?"":"; ")+"hay componentes cuyo detalle debe confirmar el negocio";
+        return result;
+    }
+    private ObjectNode serviceChoice(ServiceMiniResponse service,BookingBootstrapResponse catalog) {
+        String label=(isPackage(service)?"Paquete: ":"")+service.getNombre()+" — "+servicePrice(service,catalog);
+        if (service.getDescripcion()!=null && !service.getDescripcion().isBlank()) label+="\n   "+shortText(service.getDescripcion(),120);
+        if (isPackage(service)) label+="\n   Incluye: "+shortText(packageIncludes(service,catalog),220);
+        return choice(service.getId(),label);
+    }
+    private String packageDetail(ServiceMiniResponse service,BookingBootstrapResponse catalog) {
+        String detail="Paquete: "+service.getNombre()+"\nPrecio del paquete: "+servicePrice(service,catalog);
+        if (service.getDescripcion()!=null && !service.getDescripcion().isBlank()) detail+="\nDescripcion: "+shortText(service.getDescripcion(),800);
+        detail+="\nIncluye: "+packageIncludes(service,catalog);
+        if (service.getDuracionMinutos()!=null) detail+="\nDuracion: "+service.getDuracionMinutos()+" minutos.";
+        return detail;
+    }
     private List<ObjectNode> serviceChoices(BookingBootstrapResponse catalog) {
-        return catalog.getServices().stream().limit(20).map(s -> {
-            String price = s.getPrecio() == null ? "precio no configurado"
-                    : (Boolean.TRUE.equals(s.getPrecioVariable()) ? "Precio desde " : "")
-                    + Objects.toString(catalog.getCurrency(), "PEN") + " "
-                    + BigDecimal.valueOf(s.getPrecio()).setScale(2, java.math.RoundingMode.HALF_UP).toPlainString();
-            return choice(s.getId(), s.getNombre() + " — " + price);
-        }).toList();
+        return catalog.getServices().stream().limit(20).map(v -> serviceChoice(v,catalog)).toList();
     }
     private List<ObjectNode> barberChoices(List<BarberMiniResponse> professionals) {
         List<ObjectNode> choices=new ArrayList<>(professionals.stream().limit(19).map(b -> choice(b.getId(),(b.getNombre()+" "+Objects.toString(b.getApellido(),"")).trim())).toList());

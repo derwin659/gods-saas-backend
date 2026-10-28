@@ -13,6 +13,7 @@ import lombok.NoArgsConstructor;
 public class ServiceMiniResponse {
     private Long id;
     private String nombre;
+    private String descripcion;
     private Integer duracionMinutos;
     private Double precio;
     private Boolean precioVariable;
@@ -23,6 +24,7 @@ public class ServiceMiniResponse {
         return ServiceMiniResponse.builder()
                 .id(s.getId())
                 .nombre(s.getNombre())
+                .descripcion(s.getDescripcion())
                 .duracionMinutos(s.getDuracionMinutos())
                 .precio(s.getPrecio())
                 .precioVariable(Boolean.TRUE.equals(s.getPrecioVariable()))
