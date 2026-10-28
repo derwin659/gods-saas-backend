@@ -9,6 +9,7 @@ import com.gods.saas.domain.model.*;
 import com.gods.saas.domain.repository.*;
 import com.gods.saas.service.impl.impl.SubscriptionService;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -20,6 +21,7 @@ import java.util.*;
 import java.util.regex.Pattern;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 public class WhatsappAssistantService {
     private static final Pattern PHONE = Pattern.compile("^whatsapp:\\+[1-9][0-9]{7,14}$");
@@ -42,18 +44,20 @@ public class WhatsappAssistantService {
 
     @Transactional(rollbackFor = Exception.class)
     public String reply(String from, String to, String body, String messageSid) throws Exception {
-        if (!enabled || !interpreter.configured() || !correctDestination(to) || from == null || !PHONE.matcher(from).matches()
-                || messageSid == null || !SID.matcher(messageSid).matches()
-                || body == null || body.isBlank() || body.length() > 1200) return null;
+        if (!enabled) return skipped("disabled");
+        if (!correctDestination(to)) return skipped("destination_mismatch");
+        if (from == null || !PHONE.matcher(from).matches()) return skipped("invalid_sender");
+        if (messageSid == null || !SID.matcher(messageSid).matches()
+                || body == null || body.isBlank() || body.length()>1200) return skipped("invalid_message");
         String phone = from.substring("whatsapp:".length());
         // Duplicate webhook retries never execute a second action or emit a second reply.
         if (jdbc.update("insert into whatsapp_assistant_message(message_sid) values (?) on conflict do nothing", messageSid) == 0)
-            return null;
+            return skipped("duplicate_message");
         jdbc.update("insert into whatsapp_assistant_session(phone) values (?) on conflict do nothing", phone);
         Map<String, Object> session = jdbc.queryForMap("select * from whatsapp_assistant_session where phone=? for update", phone);
         Instant now = Instant.now();
         Object last = session.get("last_turn_at");
-        if (last != null && instant(last).plusSeconds(2).isAfter(now)) return null;
+        if (last != null && instant(last).plusSeconds(2).isAfter(now)) return skipped("rate_limited");
         jdbc.update("update whatsapp_assistant_session set last_turn_at=? where phone=?", Timestamp.from(now), phone);
         String text = body.trim();
         ObjectNode oldRoot = draft(session);
@@ -74,7 +78,7 @@ public class WhatsappAssistantService {
                 return unavailable();
             Long selectedId = tenant.get().getId();
             int selectedLimit = policy.monthlyTurns(subscriptions.getCurrentSubscriptionOrThrow(selectedId).getPlan());
-            if (!usage.reserve(selectedId, YearMonth.from(time.today(selectedId)).toString(), selectedLimit)) return null;
+            if (!usage.reserve(selectedId, YearMonth.from(time.today(selectedId)).toString(), selectedLimit)) return skipped("monthly_quota_exhausted");
             jdbc.update("update whatsapp_assistant_session set tenant_id=?,draft=null,confirmation_code=null,quote=null,expires_at=? where phone=?",
                     tenant.get().getId(), Timestamp.from(now.plusSeconds(1800)), phone);
             return menu(phone, tenant.get().getNombre());
@@ -94,7 +98,7 @@ public class WhatsappAssistantService {
         if (limit == 0) return unavailable();
         String month = YearMonth.from(time.today(tenantId)).toString();
         if (!usage.reserve(tenantId, month, limit))
-            return null; // Quiet at quota: no repeated paid fallback messages.
+            return skipped("monthly_quota_exhausted"); // No repeated paid fallback messages.
         jdbc.update("update whatsapp_assistant_session set expires_at=? where phone=?", Timestamp.from(now.plusSeconds(1800)), phone);
         String clean = normalize(text);
         if ("menu".equals(clean)) {
@@ -194,10 +198,10 @@ public class WhatsappAssistantService {
         boolean active = false;
         try { subscriptions.validateSubscriptionActive(tenantId); active = true; }
         catch (RuntimeException ignored) { /* Return inactive status, never unlock an expired subscription. */ }
-        boolean ready = enabled && interpreter.configured() && allowed(tenantId) && limit > 0 && active;
+        boolean ready = enabled && allowed(tenantId) && limit > 0 && active;
         int used = ready ? usage.used(tenantId, month) : 0;
         return Map.of("enabled", ready, "plan", sub.getPlan(), "monthlyTurns", limit,
-                "usedTurns", used, "remainingTurns", Math.max(0, limit - used), "month", month);
+                "usedTurns", used, "remainingTurns", Math.max(0, limit - used), "month", month, "aiConfigured", interpreter.configured());
     }
     /** Recognize only unambiguous read requests; mixed requests still go through the model. */
     private String directQuery(String text) {
@@ -210,6 +214,10 @@ public class WhatsappAssistantService {
         normalized = normalized.replaceFirst(" +por favor$", "");
         if (Set.of("puntos", "mis puntos", "consultar mis puntos", "cuantos puntos tengo", "saldo de puntos", "cuantos puntos tengo disponibles").contains(normalized)) return "POINTS";
         if (Set.of("promos", "promociones", "ver promociones", "que promociones tienen", "que promos tienen", "que promociones hay", "que promos hay").contains(normalized)) return "PROMOTIONS";
+        return null;
+    }
+    private String skipped(String reason) {
+        log.info("WhatsApp assistant skipped: reason={}, dialogueVersion=2", reason);
         return null;
     }
     private boolean correctDestination(String to) {
@@ -290,7 +298,7 @@ public class WhatsappAssistantService {
         if (selected==null && candidates.size()==1) selected=candidates.get(0);
         if (selected!=null) {
             Long id=selected.getTenant().getId();
-            if (!usage.reserve(id, YearMonth.from(time.today(id)).toString(),policy.monthlyTurns(subscriptions.getCurrentSubscriptionOrThrow(id).getPlan()))) return null;
+            if (!usage.reserve(id, YearMonth.from(time.today(id)).toString(),policy.monthlyTurns(subscriptions.getCurrentSubscriptionOrThrow(id).getPlan()))) return skipped("monthly_quota_exhausted");
             jdbc.update("update whatsapp_assistant_session set tenant_id=?,expires_at=? where phone=?",id,Timestamp.from(now.plusSeconds(1800)),phone);
             return menu(phone,selected.getTenant().getNombre());
         }

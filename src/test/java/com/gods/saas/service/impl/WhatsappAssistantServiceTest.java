@@ -299,4 +299,16 @@ class WhatsappAssistantServiceTest {
         verify(interpreter,never()).interpret(anyString(),anyString());
         verify(bookings,never()).createAppointment(any(),any(),any());
     }
+    @Test void helloDoesNotDependOnModelCredentials() throws Exception {
+        trackSession();when(interpreter.configured()).thenReturn(false);
+        assertTrue(reply("Hola").contains("1. Reservar una cita"));
+        verify(interpreter,never()).interpret(anyString(),anyString());
+        verifyNoInteractions(bookings,loyalty,promotions);
+    }
+    @Test void freshOnboardingAlsoWorksWithoutModelCredentials() throws Exception {
+        trackSession();session.remove("tenant_id");when(interpreter.configured()).thenReturn(false);
+        when(customers.findActiveByPhoneAcrossTenants("+51999999999")).thenReturn(List.of(customer));
+        assertTrue(reply("Hola").contains("1. Reservar una cita"));
+        verify(interpreter,never()).interpret(anyString(),anyString());
+    }
 }

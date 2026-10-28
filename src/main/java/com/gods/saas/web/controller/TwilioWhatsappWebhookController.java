@@ -49,7 +49,7 @@ public class TwilioWhatsappWebhookController {
                 verificationService.verifyInbound(from, body);
 
         log.info(
-                "TWILIO WHATSAPP INBOUND => messageSid={}, verified={}",
+                "TWILIO WHATSAPP INBOUND => messageSid={}, verified={}, dialogueVersion=2",
                 messageSid,
                 result.verified()
         );
@@ -63,7 +63,9 @@ public class TwilioWhatsappWebhookController {
             return verificationReply;
         }
         try {
-            return assistantService.reply(from, to, body, messageSid);
+            String reply = assistantService.reply(from, to, body, messageSid);
+            log.info("WhatsApp assistant result: replyPresent={}, dialogueVersion=2", reply != null && !reply.isBlank());
+            return reply;
         } catch (Exception exception) {
             // Do not log customer text, phone, provider bodies, tokens or credentials.
             log.warn("WhatsApp assistant failed: {}", WhatsappAssistantFailureDiagnostics.summarize(exception));

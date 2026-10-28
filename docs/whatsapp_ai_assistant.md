@@ -100,3 +100,7 @@ Comando: gradlew.bat test --tests '*WhatsappAssistant*' --tests '*TwilioWhatsapp
 Operacion: conservar MessageSid al menos durante la ventana de reintentos (minimo 7 dias) y definir retencion de sesiones y metricas. Verificar tambien concurrencia de reservas desde otros canales antes de escalar.
 
 Documentacion oficial de la API utilizada: https://developers.openai.com/api/docs/guides/structured-outputs?api-mode=responses
+
+## Diagnostico de mensajes sin respuesta
+
+El saludo, menu y consultas directas no requieren credenciales de IA; aiConfigured se informa aparte en el endpoint de estado. El acceso sigue sujeto al flag, destinatario, identidad y cuota. El log entrante incluye dialogueVersion=2. `WhatsApp assistant skipped` explica las omisiones con codigos seguros: disabled, destination_mismatch, invalid_sender, invalid_message, duplicate_message, rate_limited o monthly_quota_exhausted. `WhatsApp assistant result: replyPresent=true` indica que el backend genero texto; no confirma entrega de Twilio. Si no aparece un log entrante nuevo, revisar recepcion/webhook antes de cambiar la IA.
