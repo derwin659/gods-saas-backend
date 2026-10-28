@@ -2,6 +2,7 @@ package com.gods.saas.web.controller;
 
 import com.gods.saas.service.impl.OwnerWhatsappPhoneVerificationService;
 import com.gods.saas.service.impl.TwilioWebhookSignatureValidator;
+import com.gods.saas.service.impl.WhatsappAssistantService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -22,6 +23,7 @@ public class TwilioWhatsappWebhookController {
 
     private final TwilioWebhookSignatureValidator signatureValidator;
     private final OwnerWhatsappPhoneVerificationService verificationService;
+    private final WhatsappAssistantService assistantService;
 
     @PostMapping(
             value = "/inbound",
@@ -52,7 +54,20 @@ public class TwilioWhatsappWebhookController {
         );
         return ResponseEntity.ok()
                 .contentType(MediaType.APPLICATION_XML)
-                .body(twiml(result.reply()));
+                .body(twiml(resolveReply(from, form.getFirst("To"), body, messageSid, result.reply())));
+    }
+
+    private String resolveReply(String from, String to, String body, String messageSid, String verificationReply) {
+        if (verificationReply != null || (body != null && body.stripLeading().toUpperCase(java.util.Locale.ROOT).startsWith("VERIFICAR GODS"))) {
+            return verificationReply;
+        }
+        try {
+            return assistantService.reply(from, to, body, messageSid);
+        } catch (Exception exception) {
+            // Do not log customer text, phone, provider bodies, tokens or credentials.
+            log.warn("WhatsApp assistant failed: {}", exception.getClass().getSimpleName());
+            return "No pude completar tu solicitud. Revisa tus reservas en la app antes de intentar otra vez.";
+        }
     }
 
     private String twiml(String message) {

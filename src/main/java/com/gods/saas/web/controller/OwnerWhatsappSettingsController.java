@@ -8,6 +8,7 @@ import com.gods.saas.domain.dto.response.WhatsappSettingsResponse;
 import com.gods.saas.security.SecurityUtils;
 import com.gods.saas.service.impl.OwnerWhatsappPhoneVerificationService;
 import com.gods.saas.service.impl.OwnerWhatsappSettingsService;
+import com.gods.saas.service.impl.WhatsappAssistantService;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
@@ -19,6 +20,7 @@ public class OwnerWhatsappSettingsController {
 
     private final OwnerWhatsappSettingsService service;
     private final OwnerWhatsappPhoneVerificationService phoneVerificationService;
+    private final WhatsappAssistantService assistantService;
 
     @GetMapping
     public WhatsappSettingsResponse getSettings(HttpServletRequest request) {
@@ -31,6 +33,11 @@ public class OwnerWhatsappSettingsController {
             @RequestBody UpdateWhatsappSettingsRequest body
     ) {
         return service.updateSettings(resolveTenantId(request), body);
+    }
+
+    @GetMapping("/assistant")
+    public java.util.Map<String, Object> getAssistantStatus(HttpServletRequest request) {
+        return assistantService.status(resolveTenantId(request));
     }
 
     @GetMapping("/recipient-verification")

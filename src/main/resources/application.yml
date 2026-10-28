@@ -71,6 +71,14 @@ runpod:
 
 # application.yml
 whatsapp:
+  assistant:
+    enabled: ${WHATSAPP_ASSISTANT_ENABLED:false}
+    tenant-ids: ${WHATSAPP_ASSISTANT_TENANT_IDS:}
+    openai-api-key: ${WHATSAPP_ASSISTANT_OPENAI_API_KEY:}
+    model: ${WHATSAPP_ASSISTANT_MODEL:}
+    starter-turns: ${WHATSAPP_ASSISTANT_STARTER_TURNS:100}
+    growth-turns: ${WHATSAPP_ASSISTANT_GROWTH_TURNS:300}
+    pro-turns: ${WHATSAPP_ASSISTANT_PRO_TURNS:600}
   central:
     enabled: ${WHATSAPP_CENTRAL_ENABLED:false}
     provider: ${WHATSAPP_CENTRAL_PROVIDER:TWILIO}

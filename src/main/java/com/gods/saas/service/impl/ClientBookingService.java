@@ -986,6 +986,19 @@ public class ClientBookingService {
         return time.withSecond(0).withNano(0).plusMinutes(minutesToAdd);
     }
 
+    /** Read-only quote using the same pricing rules as createAppointment. */
+    @Transactional(readOnly = true)
+    public BigDecimal quoteAssistantAppointment(Long tenantId, CreateAppointmentRequest req) {
+        Branch branch = branchRepository.findById(req.getBranchId()).orElseThrow();
+        if (branch.getTenant() == null || !tenantId.equals(branch.getTenant().getId())) {
+            throw new IllegalArgumentException("Invalid branch");
+        }
+        List<ServiceEntity> services = resolveBookingServices(tenantId, req.getServiceId(), req.getServiceIds());
+        BigDecimal original = getTotalServiceAmount(services);
+        Promotion promotion = resolvePromotionOrNull(tenantId, req.getPromotionId(), branch, services.get(0));
+        return original.subtract(calculatePromotionDiscount(promotion, original))
+                .max(BigDecimal.ZERO).setScale(2, RoundingMode.HALF_UP);
+    }
     private Promotion resolvePromotionOrNull(
             Long tenantId,
             Long promotionId,
