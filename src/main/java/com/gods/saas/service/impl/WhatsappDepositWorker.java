@@ -49,10 +49,13 @@ public class WhatsappDepositWorker {
         }
     }
     void processNotices() {
-        for (var row:jdbc.queryForList("select n.*,p.phone,p.tenant_id,p.customer_id,p.last_inbound_at from whatsapp_assistant_deposit_notice n join whatsapp_assistant_deposit p on p.appointment_id=n.appointment_id where n.state='PENDING' order by n.created_at limit 10")) {
+        for (var row:jdbc.queryForList("select n.*,p.phone,p.tenant_id,p.customer_id,p.last_inbound_at,p.state as payment_state from whatsapp_assistant_deposit_notice n join whatsapp_assistant_deposit p on p.appointment_id=n.appointment_id where n.state='PENDING' order by n.created_at limit 10")) {
             String key=row.get("event_key").toString();
             if (jdbc.update("update whatsapp_assistant_deposit_notice set state='PROCESSING',processing_at=now() where event_key=? and state='PENDING'",key)!=1) continue;
             try {
+                if (obsoleteNotice(key,row.get("payment_state").toString())) {
+                    jdbc.update("update whatsapp_assistant_deposit_notice set state='SKIPPED',error_code='OBSOLETE_STATE' where event_key=?",key);continue;
+                }
                 if (deposits.verifiedCustomer(WhatsappDepositService.id(row,"tenant_id"),WhatsappDepositService.id(row,"customer_id"),row.get("phone").toString())==null) {
                     jdbc.update("update whatsapp_assistant_deposit_notice set state='SKIPPED',error_code='CUSTOMER_NOT_VERIFIED' where event_key=?",key);continue;
                 }
@@ -66,5 +69,14 @@ public class WhatsappDepositWorker {
                 log.warn("WhatsApp deposit notice failed: {}",WhatsappAssistantFailureDiagnostics.summarize(failure));
             }
         }
+    }
+    private boolean obsoleteNotice(String key,String state) {
+        if (key.contains(":REFERENCE:")) return !"AWAITING_REFERENCE".equals(state);
+        if (key.contains(":READY:")) return !"PENDING_VALIDATION".equals(state);
+        if (key.contains(":PAID:")) return !"PAID".equals(state);
+        if (key.contains(":REJECTED:")) return !"REJECTED".equals(state);
+        if (key.contains(":EXPIRED:")) return !"EXPIRED".equals(state);
+        if (key.contains(":MEDIA_ERROR:")) return java.util.Set.of("PAID","EXPIRED","PENDING_VALIDATION").contains(state);
+        return false;
     }
 }

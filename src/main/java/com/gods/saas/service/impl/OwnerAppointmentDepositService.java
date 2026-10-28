@@ -31,7 +31,7 @@ public class OwnerAppointmentDepositService {
                 .findByIdAndTenant_Id(appointmentId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Reserva no encontrada"));
 
-        whatsappDeposits.beforeDecision(appointment);
+        whatsappDeposits.beforeDecision(appointment,Boolean.TRUE.equals(request.getApproved()),request.getOperationCode());
         if (!Boolean.TRUE.equals(appointment.getDepositRequired())) {
             throw new RuntimeException("Esta reserva no requiere pago inicial");
         }

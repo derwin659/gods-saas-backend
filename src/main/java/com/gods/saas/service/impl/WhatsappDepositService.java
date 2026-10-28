@@ -143,6 +143,8 @@ public class WhatsappDepositService {
         if (Set.of("CANCELADO","CANCELLED","ATENDIDO","COMPLETADO","FINALIZADO").contains(Objects.toString(appointment.getEstado(),"").toUpperCase(Locale.ROOT))) throw new IllegalStateException("APPOINTMENT_CLOSED");
         if (!Boolean.TRUE.equals(appointment.getDepositRequired()) || "PAID".equals(appointment.getDepositStatus())) throw new IllegalStateException("DEPOSIT_ALREADY_RESOLVED");
         appointment.setDepositEvidenceUrl(evidenceUrl);appointment.setDepositPaidAt(time.now(id(row,"tenant_id")));
+        appointment.setEstado("PENDING_DEPOSIT_VALIDATION");
+        appointment.setDepositValidatedAt(null);appointment.setDepositValidatedByUserId(null);
         if (Boolean.TRUE.equals(row.get("requires_reference")) && (!Boolean.TRUE.equals(row.get("reference_supplied")) || appointment.getDepositOperationCode()==null || appointment.getDepositOperationCode().isBlank())) {
             appointment.setDepositStatus("AWAITING_REFERENCE");
             jdbc.update("update whatsapp_assistant_deposit set state='AWAITING_REFERENCE' where appointment_id=?",id);
@@ -158,13 +160,31 @@ public class WhatsappDepositService {
     }
     @Transactional
     public void beforeDecision(Appointment appointment) {
+        beforeDecision(appointment,true,null);
+    }
+    @Transactional
+    public void beforeDecision(Appointment appointment,boolean approved,String operationCode) {
         if (!enabled) return;
         var rows=jdbc.queryForList("select * from whatsapp_assistant_deposit where appointment_id=? for update",appointment.getId());
         if (rows.isEmpty()) return;
+        var row=rows.get(0);
         entityManager.refresh(appointment);
-        if (!"PENDING_VALIDATION".equals(rows.get(0).get("state")) || appointment.getDepositEvidenceUrl()==null || appointment.getDepositEvidenceUrl().isBlank())
+        if (!Set.of("PENDING_VALIDATION","AWAITING_REFERENCE").contains(row.get("state").toString())
+                || appointment.getDepositEvidenceUrl()==null || appointment.getDepositEvidenceUrl().isBlank())
             throw new IllegalStateException("El comprobante de WhatsApp todavia no esta listo para validar o la reserva ya fue resuelta");
-        if (Set.of("CANCELADO","CANCELLED","ATENDIDO","COMPLETADO","FINALIZADO").contains(Objects.toString(appointment.getEstado(),"").toUpperCase(Locale.ROOT))) throw new IllegalStateException("La cita ya no admite aprobacion de adelanto");
+        if (Set.of("CANCELADO","CANCELLED","ATENDIDO","COMPLETADO","FINALIZADO").contains(Objects.toString(appointment.getEstado(),"").toUpperCase(Locale.ROOT)))
+            throw new IllegalStateException("La cita ya no admite aprobacion de adelanto");
+        String supplied=operationCode==null?null:operationCode.trim();
+        if (supplied!=null && !supplied.isBlank()) {
+            String parsed=reference("OPERACION "+supplied);
+            if (parsed==null) throw new IllegalArgumentException("El numero de operacion debe tener entre 4 y 40 caracteres e incluir digitos");
+            appointment.setDepositOperationCode(parsed);
+            jdbc.update("update whatsapp_assistant_deposit set reference_supplied=true where appointment_id=?",appointment.getId());
+        }
+        boolean hasReference=Boolean.TRUE.equals(row.get("reference_supplied")) || supplied!=null&&!supplied.isBlank();
+        if (approved && Boolean.TRUE.equals(row.get("requires_reference"))
+                && (!hasReference || appointment.getDepositOperationCode()==null || appointment.getDepositOperationCode().isBlank()))
+            throw new IllegalStateException("Falta el numero de operacion. Registralo desde el comprobante antes de aprobar el adelanto");
     }
     @Transactional
     public void decision(Appointment appointment,boolean approved) {

@@ -153,4 +153,49 @@ class WhatsappDepositWorkflowTest {
         assertEquals("123456",jdbc.queryForObject("select operation_reference from whatsapp_assistant_deposit_media where message_sid=?",String.class,sid));
         assertThrows(IllegalStateException.class,()->workflow.beforeDecision(appointment));
     }
+
+    @Test void ownerCanCompleteMissingReferenceFromPhotoAndApproveInOneDecision() {
+        begin();queueAndAttach("");
+        assertEquals("AWAITING_REFERENCE",state());
+        var owner=new OwnerAppointmentDepositService(appointments,workflow);
+        var approval=new ValidateAppointmentDepositRequest();approval.setApproved(true);
+        assertThrows(IllegalStateException.class,()->owner.validateDeposit(1L,5L,99L,approval));
+        approval.setOperationCode("654321");
+        assertEquals("CONFIRMED",owner.validateDeposit(1L,5L,99L,approval).getEstado());
+        assertEquals("654321",appointment.getDepositOperationCode());assertEquals("PAID",state());
+    }
+    @Test void ownerCanRejectPhotoWithMissingReferenceWithoutApprovingIt() {
+        begin();queueAndAttach("");
+        var rejection=new ValidateAppointmentDepositRequest();rejection.setApproved(false);
+        new OwnerAppointmentDepositService(appointments,workflow).validateDeposit(1L,5L,99L,rejection);
+        assertEquals("REJECTED",state());assertEquals("DEPOSIT_REJECTED",appointment.getEstado());
+    }
+    @Test void replacementPhotoClearsOldRejectionAndBecomesVisibleAsPendingReview() {
+        begin();queueAndAttach("123456");
+        var rejection=new ValidateAppointmentDepositRequest();rejection.setApproved(false);
+        new OwnerAppointmentDepositService(appointments,workflow).validateDeposit(1L,5L,99L,rejection);
+        String next="SM"+"9".repeat(32);workflow.inbound(phone,"",next,media(),Set.of(1L));
+        jdbc.update("update whatsapp_assistant_deposit_media set state='PROCESSING' where message_sid=?",next);
+        workflow.attach(next,"https://res.cloudinary.com/demo/replacement.jpg");
+        assertEquals("PENDING_DEPOSIT_VALIDATION",appointment.getEstado());assertNull(appointment.getDepositValidatedAt());
+        assertEquals("AWAITING_REFERENCE",state());
+    }
+    @Test void ownerAgendaResponseIncludesReceiptAndExactPendingReferenceStatus() {
+        begin();queueAndAttach("");
+        when(appointments.findOwnerAgendaByTenantBranchAndFecha(eq(1L),eq(2L),any())).thenReturn(List.of(appointment));
+        var agenda=new OwnerAgendaServiceImpl(appointments).getAgendaDelDia(1L,2L,appointment.getFecha()).get(0);
+        assertEquals(appointment.getDepositEvidenceUrl(),agenda.getComprobantePagoInicialUrl());
+        assertEquals("AWAITING_REFERENCE",agenda.getDepositStatus());assertTrue(agenda.getRequiereNumeroOperacion());
+        assertNull(agenda.getNumeroOperacionPagoInicial());
+        assertFalse(agenda.getPagoInicialValidado());
+    }
+    @Test void ownerApprovalDoesNotSendAnObsoleteMissingReferenceReminderAfterConfirmation() throws Exception {
+        begin();queueAndAttach("");
+        var approval=new ValidateAppointmentDepositRequest();approval.setApproved(true);approval.setOperationCode("654321");
+        new OwnerAppointmentDepositService(appointments,workflow).validateDeposit(1L,5L,99L,approval);
+        var sender=mock(TwilioDepositNoticeSender.class);when(sender.send(anyString(),anyString(),any())).thenReturn("SM"+"f".repeat(32));
+        var worker=new WhatsappDepositWorker(jdbc,workflow,downloader,mock(CloudinaryStorageService.class),sender);worker.processNotices();
+        verify(sender,times(1)).send(eq(phone),contains("aprobado"),any());
+        assertEquals("SKIPPED",jdbc.queryForObject("select state from whatsapp_assistant_deposit_notice where event_key like '%:REFERENCE:%'",String.class));
+    }
 }

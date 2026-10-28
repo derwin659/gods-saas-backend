@@ -162,7 +162,8 @@ public class OwnerAgendaController {
                 appointmentId,
                 session.userId(),
                 approved,
-                note
+                note,
+                getString(request,"operationCode")
         ), canViewPhone);
     }
 

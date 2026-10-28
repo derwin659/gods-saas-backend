@@ -6,4 +6,5 @@ import lombok.Data;
 public class ValidateAppointmentDepositRequest {
     private Boolean approved;
     private String note;
+    private String operationCode;
 }

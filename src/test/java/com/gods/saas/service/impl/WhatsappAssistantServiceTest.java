@@ -371,4 +371,21 @@ class WhatsappAssistantServiceTest {
         session.put("last_turn_at",Timestamp.from(Instant.now()));
         assertTrue(reply("3").contains("vuelve a enviar"));verifyNoInteractions(customers,bookings,loyalty);
     }
+
+    @Test void variablePriceServiceUsesStoredBaseAndCanBeBookedWithoutRepeatingServiceSelection() throws Exception {
+        trackSession();catalog.getServices().get(0).setPrecioVariable(true);
+        reply("hola");reply("1");assertTrue(reply("1").contains("¿Para que dia"));reply("mañana");
+        String summary=reply("1");assertTrue(summary.contains("Precio desde (base de la reserva): PEN 25.00"));
+        when(bookings.createAppointment(eq(1L),eq(7L),any())).thenReturn(CreateAppointmentResponse.builder().appointmentId(111L).estado("CREATED").build());
+        assertTrue(reply("SI").contains("#111"));verify(bookings).createAppointment(eq(1L),eq(7L),any());
+    }
+    @Test void variablePriceWithDepositUsesBaseQuoteForHoldAndNeverConfirmsPayment() throws Exception {
+        trackSession();catalog.getServices().get(0).setPrecioVariable(true);catalog.setBookingDepositEnabled(true);
+        when(deposits.supported()).thenReturn(true);
+        when(deposits.offer(eq(1L),eq(2L),eq(new BigDecimal("25.00")),eq(catalog))).thenReturn(new WhatsappDepositService.Offer(4L,new BigDecimal("5.00"),"Yape"));
+        when(deposits.begin(eq(1L),eq(7L),anyString(),any(),eq(new BigDecimal("25.00")),eq(catalog))).thenReturn("Horario apartado");
+        reply("hola");reply("1");reply("1");reply("mañana");
+        assertTrue(reply("1").contains("Adelanto requerido: PEN 5.00"));assertEquals("Horario apartado",reply("SI"));
+        verify(bookings,never()).createAppointment(any(),any(),any());
+    }
 }

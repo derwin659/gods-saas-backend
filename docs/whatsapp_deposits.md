@@ -10,7 +10,7 @@ Reutiliza la pantalla existente de configuracion de reservas y pago inicial. No 
 2. Agregar o activar Yape en los metodos de pago.
 3. Indicar numero de Yape en accountValue; usar instrucciones para el titular y cualquier indicacion que deba leer el cliente. Tambien puede guardarse el QR en qrImageUrl.
 4. El metodo debe estar activo y ser global al negocio o pertenecer a la sede elegida. Si hay un Yape por sede tiene preferencia sobre el global.
-5. Si el metodo requiere numero de operacion, el cliente debe proporcionarlo; la foto por si sola no lo reemplaza.
+5. Si el metodo requiere numero de operacion, el cliente puede proporcionarlo por chat o el dueno puede registrarlo desde la captura en el dialogo de aprobacion de Agenda. No se extrae ni se valida automaticamente con IA.
 
 ## Flujo del cliente
 
@@ -24,7 +24,7 @@ Reutiliza la pantalla existente de configuracion de reservas y pago inicial. No 
 - El dueño revisa el comprobante y el ingreso real desde la agenda. Aprobar cambia a PAID y a CONFIRMED/RESERVADO segun la ruta existente. Rechazar cambia a REJECTED/DEPOSIT_REJECTED y permite enviar otro comprobante, sin pedir otro pago automatico.
 - Cada aprobacion o rechazo genera un aviso persistente para el cliente. ESTADO permite consultar el ultimo adelanto aun si caduco la sesion conversacional.
 
-Si no hay Yape valido, el modulo esta apagado o el servicio tiene precio variable, se mantiene el flujo de app/contacto. El QR se comparte como enlace del metodo configurado, no se analiza ni se usa para ejecutar pagos.
+Si no hay Yape valido o el modulo esta apagado, se mantiene el flujo de app/contacto. Los servicios variables con precio base positivo permiten reservar usando ese valor; el resumen lo indica y el adelanto se calcula sobre la cotizacion base. El QR se comparte como enlace del metodo configurado, no se analiza ni se usa para ejecutar pagos.
 
 ## Plazo y estados
 
@@ -70,7 +70,7 @@ La API usa los valores TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN y TWILIO_WHATSAPP_F
 - Ante FAILED/UNKNOWN reconciliar el SID/log de Twilio antes de reencolar manualmente. No reintentar a ciegas para no duplicar mensajes.
 - Las fotos se descargan solo desde el endpoint de medios de la cuenta y MessageSid autenticados. Los redireccionamientos se limitan a HTTPS y dominios de proveedores permitidos y no reenvian la credencial inicial a los destinos.
 - Los comprobantes se guardan con el mecanismo de Cloudinary ya usado por la app. Definir retencion/acceso conforme a la politica del negocio; no enviarlos al modelo de IA.
-- El estado y el comprobante son visibles al consultar/refrescar la agenda existente; no se agrego un canal de refresco en tiempo real a la app.
+- La agenda actualizada consulta cambios cada 15 segundos mientras esta visible y la app activa, y tambien al volver a la app. Los errores de actualizacion en segundo plano conservan los datos visibles. No se ejecutan aprobaciones durante ese refresco.
 
 ## Costos y limites
 
@@ -85,3 +85,12 @@ Configurar un negocio autorizado con Yape y un adelanto pequeño de prueba. Eleg
 Las pruebas locales usan SQL en H2 modo PostgreSQL y dobles de Twilio/Cloudinary; no confirman disponibilidad de credenciales, aprobacion de plantilla ni entrega real del proveedor.
 
 Referencias del proveedor: https://www.twilio.com/docs/whatsapp/tutorial/send-and-receive-media-messages-whatsapp-nodejs y https://www.twilio.com/docs/whatsapp/key-concepts.
+
+
+## Correcciones de agenda y precio base
+
+La respuesta de Agenda incluye depositStatus (estado original) y requiereNumeroOperacion, ademas de los campos anteriores. En AWAITING_REFERENCE se muestra la captura y el dueno puede registrar la operacion al aprobar; la API recibe operationCode. Aprobar sin la referencia requerida o sin imagen sigue bloqueado. Rechazar una captura no exige completar una operacion.
+
+Una captura de reemplazo vuelve a PENDING_DEPOSIT_VALIDATION y limpia la validacion anterior. Si falta una nueva referencia, la respuesta de Agenda no propone el codigo del intento rechazado. Los avisos de falta de referencia que ya no correspondan se omiten tras la aprobacion.
+
+Estos cambios requieren desplegar backend y actualizar la app Flutter para obtener el refresco y el dialogo de operacion. No requieren una migracion adicional ni nuevas variables; sigue siendo necesaria la configuracion original del modulo de adelantos. La aprobacion sigue siendo manual: recibir una foto no confirma el pago.

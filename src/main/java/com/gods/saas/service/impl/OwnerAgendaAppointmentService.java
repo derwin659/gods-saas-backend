@@ -202,6 +202,19 @@ public class OwnerAgendaAppointmentService {
             boolean approved,
             String note
     ) {
+        return validateDeposit(tenantId,branchId,appointmentId,actorUserId,approved,note,null);
+    }
+
+    @Transactional
+    public OwnerAgendaResponse validateDeposit(
+            Long tenantId,
+            Long branchId,
+            Long appointmentId,
+            Long actorUserId,
+            boolean approved,
+            String note,
+            String operationCode
+    ) {
         Appointment appointment = appointmentRepository.findByIdAndTenant_Id(appointmentId, tenantId)
                 .orElseThrow(() -> new RuntimeException("Cita no encontrada"));
 
@@ -211,7 +224,7 @@ public class OwnerAgendaAppointmentService {
             throw new RuntimeException("La cita no pertenece a la sede seleccionada");
         }
 
-        whatsappDeposits.beforeDecision(appointment);
+        whatsappDeposits.beforeDecision(appointment,approved,operationCode);
         if (!Boolean.TRUE.equals(appointment.getDepositRequired())) {
             throw new RuntimeException("Esta cita no requiere pago inicial");
         }
@@ -624,7 +637,7 @@ public class OwnerAgendaAppointmentService {
                 ? a.getDepositStatus()
                 : (requierePagoInicial ? "PENDING_VALIDATION" : "NOT_REQUIRED");
 
-        Boolean pagoInicialValidado = "PAID".equalsIgnoreCase(depositStatus) || a.getDepositValidatedAt() != null;
+        Boolean pagoInicialValidado = "PAID".equalsIgnoreCase(depositStatus) || "VALIDATED".equalsIgnoreCase(depositStatus);
         String estadoPagoInicial = mapDepositStatusToFrontend(depositStatus, requierePagoInicial);
 
         return OwnerAgendaResponse.builder()
@@ -650,9 +663,12 @@ public class OwnerAgendaAppointmentService {
                 .precioServicio(precioServicio)
                 .saldoPendiente(saldoPendiente)
                 .estadoPagoInicial(estadoPagoInicial)
+                .depositStatus(depositStatus)
+                .requiereNumeroOperacion("AWAITING_REFERENCE".equalsIgnoreCase(depositStatus)
+                        || a.getDepositPaymentMethod()!=null && Boolean.TRUE.equals(a.getDepositPaymentMethod().getRequiresOperationCode()))
                 .pagoInicialValidado(pagoInicialValidado)
                 .metodoPagoInicial(resolveDepositMethod(a))
-                .numeroOperacionPagoInicial(a.getDepositOperationCode())
+                .numeroOperacionPagoInicial("AWAITING_REFERENCE".equalsIgnoreCase(depositStatus)?null:a.getDepositOperationCode())
                 .comprobantePagoInicialUrl(a.getDepositEvidenceUrl())
                 .build();
     }

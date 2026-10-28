@@ -17,7 +17,7 @@ Estado: implementado y probado localmente. El despliegue y las pruebas con Twili
 
 Puntos y promociones: las consultas claras responden desde el backend sin depender de OpenAI. Otras formulaciones se interpretan mediante IA. Los puntos vienen de la cuenta de fidelizacion del cliente autenticado por su WhatsApp verificado. Las promociones se filtran por vigencia, tenant y elegibilidad; al seleccionar una oferta se valida de nuevo antes de reservar.
 
-Servicios y precios: se listan desde el catalogo del negocio. Los servicios con precio variable requieren completar la reserva en la app. El modelo no suministra el precio final.
+Servicios y precios: se listan desde el catalogo del negocio. Los servicios con precio variable permiten reservar con el precio base positivo registrado. El resumen muestra que es un precio desde y usa esa cotizacion para calcular el adelanto. El modelo no suministra el precio final.
 
 Horarios: se consulta ClientBookingService con sede, servicio, fecha y profesional opcional. Se puede filtrar desde una hora. Una consulta de disponibilidad nunca crea por si sola una cita.
 

@@ -57,6 +57,8 @@ public class OwnerAgendaResponse {
      * NO_REQUIERE
      */
     private String estadoPagoInicial;
+    private String depositStatus;
+    private Boolean requiereNumeroOperacion;
 
     private Boolean pagoInicialValidado;
 }

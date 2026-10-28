@@ -502,7 +502,7 @@ public class WhatsappAssistantService {
             return ask(phone,r,meta,"TIME",prompt,availableSlots.stream().limit(16).map(s -> valueChoice(s,s)).toList());
         }
         if (Boolean.TRUE.equals(catalog.getBookingDepositEnabled()) && !deposits.supported()) return ask(phone,r,meta,"MENU",depositMessage(),List.of());
-        if (!validRequest(r,catalog,eligible)) return ask(phone,r,meta,"SERVICE","La seleccion requiere revision. Elige un servicio de precio fijo o completa la reserva en la app:",serviceChoices(catalog));
+        if (!validRequest(r,catalog,eligible)) return ask(phone,r,meta,"SERVICE","La seleccion requiere revision. Elige un servicio con precio base configurado o contacta al negocio:",serviceChoices(catalog));
         BigDecimal quote=bookings.quoteAssistantAppointment(tenantId,r);
         String service=catalog.getServices().stream().filter(s -> s.getId().equals(r.getServiceId())).findFirst().orElseThrow().getNombre();
         String branch=catalog.getBranches().stream().filter(b -> b.getId().equals(r.getBranchId())).findFirst().orElseThrow().getNombre();
@@ -516,7 +516,9 @@ public class WhatsappAssistantService {
             depositSummary=" Adelanto requerido: "+catalog.getCurrency()+" "+offer.amount()+". Al confirmar apartaremos el horario y te mostraremos los datos de Yape; la cita solo quedara confirmada cuando el dueño apruebe el comprobante.";
         }
         String token=UUID.randomUUID().toString().substring(0,8).toUpperCase(Locale.ROOT);
-        String summary=service+" en "+branch+", con "+barber+", "+r.getDate()+" a las "+r.getHoraInicio()+promotion+". Total: "+catalog.getCurrency()+" "+quote
+        boolean variablePrice=catalog.getServices().stream().anyMatch(s -> s.getId().equals(r.getServiceId()) && Boolean.TRUE.equals(s.getPrecioVariable()));
+        String summary=service+" en "+branch+", con "+barber+", "+r.getDate()+" a las "+r.getHoraInicio()+promotion+(variablePrice?". Precio desde (base de la reserva): ":". Total: ")+catalog.getCurrency()+" "+quote
+                +(variablePrice?". Usaremos este precio base para la reserva y el adelanto; el precio final puede variar segun lo acordado con el negocio":"")
                 +depositSummary+". ¿Confirmo tu reserva? Responde SI o CONFIRMAR "+token+". Todavia no esta reservada.";
         ask(phone,r,meta,"CONFIRM",summary,List.of());
         jdbc.update("update whatsapp_assistant_session set confirmation_code=?,quote=? where phone=?",token,quote,phone);
@@ -552,7 +554,7 @@ public class WhatsappAssistantService {
         if (r.getDate() == null || r.getBranchId() == null || r.getServiceId() == null) return false;
         try { LocalDate.parse(r.getDate()); } catch (RuntimeException e) { return false; }
         return c.getBranches().stream().anyMatch(b -> b.getId().equals(r.getBranchId()))
-                && c.getServices().stream().anyMatch(s -> s.getId().equals(r.getServiceId()) && !Boolean.TRUE.equals(s.getPrecioVariable()))
+                && c.getServices().stream().anyMatch(s -> s.getId().equals(r.getServiceId()) && s.getPrecio()!=null && s.getPrecio()>0)
                 && (r.getBarberId() == null || c.getBarbers().stream().anyMatch(b -> b.getId().equals(r.getBarberId())))
                 && (r.getPromotionId() == null || eligible.stream().anyMatch(p -> p.getId().equals(r.getPromotionId())
                     && (p.getBranch() == null || p.getBranch().getId().equals(r.getBranchId()))

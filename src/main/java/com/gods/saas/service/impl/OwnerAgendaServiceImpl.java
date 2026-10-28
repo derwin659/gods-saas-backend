@@ -68,7 +68,7 @@ public class OwnerAgendaServiceImpl implements OwnerAgendaService {
                             : (requierePagoInicial ? "PENDING_VALIDATION" : "NOT_REQUIRED");
 
                     Boolean pagoInicialValidado = "PAID".equalsIgnoreCase(depositStatus)
-                            || a.getDepositValidatedAt() != null;
+                            || "VALIDATED".equalsIgnoreCase(depositStatus);
 
                     String estadoPagoInicial = mapDepositStatusToFrontend(depositStatus, requierePagoInicial);
 
@@ -101,9 +101,12 @@ public class OwnerAgendaServiceImpl implements OwnerAgendaService {
                             .precioServicio(precioServicio)
                             .saldoPendiente(saldoPendiente)
                             .metodoPagoInicial(resolveDepositMethod(a))
-                            .numeroOperacionPagoInicial(a.getDepositOperationCode())
+                            .numeroOperacionPagoInicial("AWAITING_REFERENCE".equalsIgnoreCase(depositStatus)?null:a.getDepositOperationCode())
                             .comprobantePagoInicialUrl(a.getDepositEvidenceUrl())
                             .estadoPagoInicial(estadoPagoInicial)
+                .depositStatus(depositStatus)
+                .requiereNumeroOperacion("AWAITING_REFERENCE".equalsIgnoreCase(depositStatus)
+                        || a.getDepositPaymentMethod()!=null && Boolean.TRUE.equals(a.getDepositPaymentMethod().getRequiresOperationCode()))
                             .pagoInicialValidado(pagoInicialValidado)
 
                             .build();
