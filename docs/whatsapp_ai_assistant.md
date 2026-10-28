@@ -116,3 +116,12 @@ Servicios y precios identifica los paquetes configurados en el catalogo y muestr
 Al elegir un paquete, muestra descripcion, precio, contenido y duracion configurada antes de continuar con las preguntas de reserva. Se reserva el ID del paquete como un solo servicio al precio registrado; no suma otra vez los precios de los componentes. Se conservan las reglas de profesional, horario, promociones, adelanto y confirmacion. Si falta algun componente en el catalogo, pide confirmar el detalle con el negocio sin inventar nombres.
 
 El bootstrap incluye descripcion en ServiceMiniResponse. Es un campo adicional; esta ampliacion no necesita nuevas variables ni migraciones. Los paquetes deben estar creados como tales en Servicios y paquetes. Desplegar backend y enviar MENU para ver la opcion nueva; no requiere actualizar Flutter para utilizarla por WhatsApp.
+
+
+## Invitacion al asistente en el mensaje posventa
+
+El agradecimiento posterior a la venta agrega el comando GODS seguido del codigo real del negocio y un enlace al WhatsApp central con el mensaje preparado. La invitacion usa el mismo estado de habilitacion, plan y pilotos del asistente y solo aparece si existe un enlace valido. Esto permite que un recibo compartido manualmente desde el WhatsApp del dueno dirija al cliente al numero correcto del asistente.
+
+Se controla con la configuracion existente Link de reserva (includeBookingLink) del mensaje posventa. Si esa opcion o el mensaje estan apagados, no se agrega la invitacion. La consulta del estado se ejecuta en una transaccion de lectura independiente; si falla, se conserva el recibo original y no se bloquea la venta. No se programan envios nuevos ni se cambia el momento del agradecimiento.
+
+Desplegar el backend para modificar los mensajes nuevos. Actualizar Flutter para ver tambien la invitacion en la vista previa de configuracion. Sin migraciones ni variables adicionales. Los mensajes ya enviados no se editan.

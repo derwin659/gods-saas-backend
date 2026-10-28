@@ -47,6 +47,7 @@ public class CashSaleServiceImpl implements CashSaleService {
     private static final String WHATSAPP_APP_DOWNLOAD_URL_KEY = "whatsappAppDownloadUrl";
     private static final PhoneNumberUtil PHONE_NUMBER_UTIL = PhoneNumberUtil.getInstance();
     private final NotificationService notificationService;
+    private final PostSaleWhatsappAssistantInvitation assistantInvitation;
 
     @Value("${app.mobile.download-url:https://play.google.com/store/apps/details?id=com.gods.barberia}")
     private String mobileAppDownloadUrl;
@@ -887,6 +888,13 @@ public class CashSaleServiceImpl implements CashSaleService {
             message.append(bookingUrl);
         }
 
+        if (includeBookingLink && sale.getTenant()!=null) {
+            try {
+                message.append(assistantInvitation.build(sale.getTenant().getId()));
+            } catch (RuntimeException unavailable) {
+                // Booking assistance is optional; keep the receipt and sale available.
+            }
+        }
         message.append("\n\nTe esperamos pronto.");
         return message.toString();
     }
