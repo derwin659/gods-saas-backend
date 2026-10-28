@@ -23,7 +23,8 @@ class WhatsappCustomerOnboardingTest {
     final TenantTimeService time=mock(TenantTimeService.class);
     final JdbcTemplate jdbc=mock(JdbcTemplate.class);
     final ObjectMapper mapper=new ObjectMapper();
-    final WhatsappCustomerOnboarding service=new WhatsappCustomerOnboarding(customers,tenants,subscriptions,policy,usage,time,jdbc,mapper);
+    final InternationalPhoneService phones=mock(InternationalPhoneService.class);
+    final WhatsappCustomerOnboarding service=new WhatsappCustomerOnboarding(customers,tenants,subscriptions,policy,usage,time,jdbc,mapper,phones);
     final Instant now=Instant.parse("2026-10-28T18:00:00Z");
     final String phone="+51999999999";
     Tenant tenant;
@@ -31,6 +32,7 @@ class WhatsappCustomerOnboardingTest {
     @BeforeEach void setup() {
         ReflectionTestUtils.setField(service,"tenantIds","2,3");
         ReflectionTestUtils.setField(service,"signedInbound",true);
+        ReflectionTestUtils.setField(service,"entityManager",mock(jakarta.persistence.EntityManager.class));
         tenant=new Tenant(2L); tenant.setNombre("Barberia Indystry");tenant.setCodigo("INDYSTRY");tenant.setActive(true);
         when(tenants.findAllById(any())).thenReturn(List.of(tenant));
         when(tenants.findById(2L)).thenReturn(Optional.of(tenant));
@@ -58,7 +60,7 @@ class WhatsappCustomerOnboardingTest {
         assertTrue(saved.isPhoneVerified());assertFalse(saved.getWhatsappMarketingEnabled());assertFalse(saved.getAppActivated());
         assertTrue(saved.getCustomerNotes().contains("2026-10-28"));assertNull(saved.getPasswordHash());
     }
-    @Test void declineNeverCreatesCustomer() throws Exception {consent();assertTrue(reply("NO").contains("cancelado"));verify(customers,never()).saveAndFlush(any());}
+    @Test void declineNeverCreatesCustomer() throws Exception {consent();assertTrue(reply("NO").contains("cancelada"));verify(customers,never()).saveAndFlush(any());}
     @Test void existingUnverifiedAndNationalAliasesCannotBeClaimed() throws Exception {
         Customer old=new Customer();old.setTelefono("999999999");old.setPhoneVerified(false);
         when(customers.findPhoneCandidates(anyLong(),anyString(),anyString(),anyString(),anyString())).thenReturn(List.of(old));
@@ -93,5 +95,54 @@ class WhatsappCustomerOnboardingTest {
         Customer old=new Customer();old.setTelefono(phone);old.setPhoneVerified(true);old.setActivo(false);old.setWhatsappTransactionalEnabled(true);
         when(customers.findPhoneCandidates(anyLong(),anyString(),anyString(),anyString(),anyString())).thenReturn(List.of(old));
         assertTrue(reply("INDYSTRY").contains("Verifica"));verify(customers,never()).saveAndFlush(any());
+    }
+
+    private Customer existingCustomer(String storedPhone) {
+        Customer client=Customer.builder().id(71L).tenant(tenant).telefono(storedPhone).nombres("Cliente existente")
+                .phoneVerified(false).puntosDisponibles(150).passwordHash("existing-password-hash").build();
+        when(customers.findPhoneCandidates(anyLong(),anyString(),anyString(),anyString(),anyString())).thenReturn(List.of(client));
+        when(customers.findForWhatsappRecovery(71L,2L)).thenReturn(Optional.of(client));
+        return client;
+    }
+    @Test void existingCustomerCanVerifyPhoneWithExplicitConsentWithoutCreatingDuplicateOrChangingAccount() throws Exception {
+        Customer client=existingCustomer(phone);
+        assertTrue(reply("INDYSTRY").contains("Responde ACEPTO"));
+        assertFalse(client.isPhoneVerified());verify(customers,never()).saveAndFlush(any());
+        assertTrue(reply("ACEPTO").contains("1. Reservar"));
+        assertTrue(client.isPhoneVerified());assertTrue(client.getWhatsappTransactionalEnabled());assertFalse(client.getWhatsappMarketingEnabled());
+        assertEquals(71L,client.getId());assertEquals(150,client.getPuntosDisponibles());assertEquals("existing-password-hash",client.getPasswordHash());
+        verify(customers).saveAndFlush(same(client));assertTrue(client.getCustomerNotes().contains("Webhook Twilio firmado"));
+    }
+    @Test void nationalPhoneAliasIsNormalizedOnlyWhenItMatchesIncomingNumberInBusinessRegion() throws Exception {
+        Customer client=existingCustomer("999999999");
+        when(phones.normalize(tenant,"999999999")).thenReturn(new InternationalPhoneService.NormalizedPhone(phone,"51999999999","999999999",Set.of("999999999"),"PE","PE"));
+        assertTrue(reply("INDYSTRY").contains("ACEPTO"));reply("ACEPTO");assertEquals(phone,client.getTelefono());
+    }
+    @Test void aliasFromAnotherCountryCannotClaimExistingCustomer() throws Exception {
+        existingCustomer("999999999");
+        when(phones.normalize(tenant,"999999999")).thenReturn(new InternationalPhoneService.NormalizedPhone("+34999999999","34999999999","999999999",Set.of("999999999"),"ES","ES"));
+        assertFalse(reply("INDYSTRY").contains("Responde ACEPTO"));verify(customers,never()).saveAndFlush(any());
+    }
+    @Test void explicitConsentCanRestoreTransactionalNoticesButNeverAdvertising() throws Exception {
+        Customer client=existingCustomer(phone);client.setPhoneVerified(true);client.setWhatsappOptedOutAt(LocalDateTime.now());client.setWhatsappTransactionalEnabled(false);client.setWhatsappMarketingEnabled(true);
+        assertTrue(reply("INDYSTRY").contains("ACEPTO"));reply("ACEPTO");
+        assertNull(client.getWhatsappOptedOutAt());assertTrue(client.getWhatsappTransactionalEnabled());assertFalse(client.getWhatsappMarketingEnabled());
+    }
+    @Test void rejectionNeverVerifiesExistingCustomer() throws Exception {
+        Customer client=existingCustomer(phone);reply("INDYSTRY");reply("NO");assertFalse(client.isPhoneVerified());verify(customers,never()).saveAndFlush(any());
+    }
+    @Test void recoveryCannotProceedIfSignatureValidationIsDisabledOrTenantRemoved() throws Exception {
+        Customer client=existingCustomer(phone);reply("INDYSTRY");ReflectionTestUtils.setField(service,"signedInbound",false);
+        reply("ACEPTO");assertFalse(client.isPhoneVerified());verify(customers,never()).saveAndFlush(any());
+        ReflectionTestUtils.setField(service,"signedInbound",true);ReflectionTestUtils.setField(service,"tenantIds","3");reply("ACEPTO");verify(customers,never()).saveAndFlush(any());
+    }
+    @Test void duplicateCustomerRecordsOrInactiveAccountsCannotBeClaimed() throws Exception {
+        Customer client=existingCustomer(phone);Customer other=Customer.builder().id(72L).tenant(tenant).telefono(phone).build();
+        when(customers.findPhoneCandidates(anyLong(),anyString(),anyString(),anyString(),anyString())).thenReturn(List.of(client,other));
+        assertFalse(reply("INDYSTRY").contains("Responde ACEPTO"));verify(customers,never()).saveAndFlush(any());
+    }
+    @Test void pendingPhoneChangeIsRecheckedBeforeAnyUpdate() throws Exception {
+        Customer client=existingCustomer(phone);reply("INDYSTRY");client.setPhonePendiente("+51988888888");client.setPhonePendienteVerificacion(true);
+        assertFalse(reply("ACEPTO").contains("1. Reservar"));assertFalse(client.isPhoneVerified());verify(customers,never()).saveAndFlush(any());
     }
 }

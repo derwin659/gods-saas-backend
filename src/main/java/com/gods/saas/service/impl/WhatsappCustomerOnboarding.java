@@ -28,6 +28,8 @@ public class WhatsappCustomerOnboarding {
     private final TenantTimeService time;
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
+    private final InternationalPhoneService phones;
+    @jakarta.persistence.PersistenceContext private jakarta.persistence.EntityManager entityManager;
     @Value("${whatsapp.assistant.tenant-ids:}") private String tenantIds;
     @Value("${whatsapp.twilio.validate-inbound-signature:true}") private boolean signedInbound;
 
@@ -75,15 +77,46 @@ public class WhatsappCustomerOnboarding {
         if (!matches.isEmpty()) {
             if (matches.size()!=1) return blocked(phone,now);
             Customer client=matches.get(0);
-            if (!phone.equals(client.getTelefono()) || !client.isPhoneVerified() || Boolean.FALSE.equals(client.getActivo())
-                    || client.getWhatsappOptedOutAt()!=null || !Boolean.TRUE.equals(client.getWhatsappTransactionalEnabled())) return blocked(phone,now);
+            if (!recoverable(client,tenant,phone)) return blocked(phone,now);
+            if (!phone.equals(client.getTelefono()) || !client.isPhoneVerified()
+                    || client.getWhatsappOptedOutAt()!=null || !Boolean.TRUE.equals(client.getWhatsappTransactionalEnabled())) {
+                if (!signedInbound) return blocked(phone,now);
+                return prompt(phone,mapper.createObjectNode().put("stage","REGISTER_EXISTING").put("tenant",tenant.getId()).put("existingCustomer",client.getId()),now,
+                        "Puedes continuar como cliente de "+tenant.getNombre()+" con tu ficha existente. Confirma que este WhatsApp es tuyo y aceptas recibir avisos de tus reservas por este medio. No incluye publicidad. Responde ACEPTO o NO.");
+            }
             return activate(phone,tenant,now,true);
         }
         return prompt(phone,mapper.createObjectNode().put("stage","REGISTER_NAME").put("tenant",tenant.getId()),now,
                 "Estas en "+tenant.getNombre()+". Para reservar crearemos tu ficha de cliente. ¿Cual es tu nombre? Escribe SALIR para cancelar.");
     }
+    private boolean recoverable(Customer client,Tenant tenant,String phone) {
+        if (client==null || client.getId()==null || client.getTenant()==null || !tenant.getId().equals(client.getTenant().getId())
+                || Boolean.FALSE.equals(client.getActivo()) || client.isPhonePendienteVerificacion()
+                || client.getPhonePendiente()!=null && !client.getPhonePendiente().isBlank()) return false;
+        if (phone.equals(client.getTelefono())) return true;
+        try {return phone.equals(phones.normalize(tenant,client.getTelefono()).e164());}
+        catch (RuntimeException invalid) {return false;}
+    }
+    private String recover(String phone,Tenant tenant,Long customerId,Instant now) throws Exception {
+        int limit=policy.monthlyTurns(subscriptions.getCurrentSubscriptionOrThrow(tenant.getId()).getPlan());
+        if (!usage.reserve(tenant.getId(),YearMonth.from(time.today(tenant.getId())).toString(),limit))
+            return "Este negocio alcanzo su limite mensual del asistente. Contacta al negocio para reservar.";
+        jdbc.queryForList("select tenant_id from tenant where tenant_id=? for update",tenant.getId());
+        Customer client=customers.findForWhatsappRecovery(customerId,tenant.getId()).orElse(null);
+        if (client==null) return blocked(phone,now);
+        entityManager.refresh(client);
+        List<Customer> matches=existing(tenant.getId(),phone);
+        if (matches.size()!=1 || !Objects.equals(matches.get(0).getId(),customerId) || !recoverable(client,tenant,phone)) return blocked(phone,now);
+        client.setTelefono(phone);client.setPhoneVerified(true);
+        client.setWhatsappTransactionalEnabled(true);client.setWhatsappOptedOutAt(null);client.setWhatsappMarketingEnabled(false);
+        client.setFechaActualizacion(LocalDateTime.ofInstant(now,ZoneOffset.UTC));
+        String audit="ACEPTO verificacion del numero y avisos transaccionales por WhatsApp: "+now+". Webhook Twilio firmado; sin consentimiento de publicidad.";
+        client.setCustomerNotes(client.getCustomerNotes()==null || client.getCustomerNotes().isBlank()?audit:client.getCustomerNotes()+"\n"+audit);
+        customers.saveAndFlush(client);
+        return "¡Listo! Tu numero quedo verificado para continuar como cliente.\n"+activate(phone,tenant,now,false);
+    }
     private String blocked(String phone,Instant now) throws Exception {
-        return prompt(phone,mapper.createObjectNode(),now,"Este numero ya tiene una ficha en el negocio. Verifica tu cuenta y permisos de WhatsApp en la app o consulta al negocio. No crearemos una ficha duplicada.");
+        return prompt(phone,mapper.createObjectNode(),now,"No puedo habilitar esta ficha automaticamente. Verifica tu cuenta en la app o consulta al negocio para revisar fichas duplicadas, estado o un cambio de telefono pendiente. No crearemos otra ficha.");
     }
     @Transactional(rollbackFor=Exception.class)
     public String reply(String phone,String text,ObjectNode root,Instant now) throws Exception {
@@ -94,8 +127,12 @@ public class WhatsappCustomerOnboarding {
             if (!signedInbound) return "El registro por WhatsApp requiere validar la firma de Twilio. Contacta al negocio o registrate en la app.";
             Tenant tenant=tenants.findById(meta.path("tenant").asLong()).orElse(null);
             if (!eligible(tenant)) return prompt(phone,mapper.createObjectNode(),now,"Esta barberia ya no esta habilitada. Escribe otro nombre o codigo.");
-            if (Set.of("no","no acepto","cancelar").contains(input)) return prompt(phone,mapper.createObjectNode(),now,"Registro cancelado. No creamos ninguna ficha. Escribe otra barberia para empezar de nuevo.");
+            if (Set.of("no","no acepto","cancelar").contains(input)) return prompt(phone,mapper.createObjectNode(),now,"Solicitud cancelada. No creamos ni modificamos tu ficha. Escribe otra barberia para empezar de nuevo.");
             if (Set.of("hola","menu","ayuda").contains(input)) return meta.path("lastPrompt").asText();
+            if (stage.equals("REGISTER_EXISTING")) {
+                if (!Set.of("acepto","si acepto").contains(input)) return meta.path("lastPrompt").asText();
+                return recover(phone,tenant,meta.path("existingCustomer").asLong(),now);
+            }
             if (stage.equals("REGISTER_NAME")) {
                 String name=text.trim().replaceAll("\\s+"," ");
                 if (name.length()<2 || name.length()>120 || !name.matches("[\\p{L}\\p{M} .'-]+")) return "Escribe tu nombre con letras (entre 2 y 120 caracteres), o SALIR para cancelar.";

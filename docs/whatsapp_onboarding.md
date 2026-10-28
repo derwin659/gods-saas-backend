@@ -8,8 +8,8 @@
 - Clientes conocidos: HOLA conserva el acceso a su unico negocio elegible; si tienen varios, pide elegir. CAMBIAR BARBERIA/CAMBIAR NEGOCIO siempre permite buscar otro.
 - Clientes nuevos: pide nombre, explica el registro y los avisos transaccionales, y requiere ACEPTO o SI ACEPTO. NO cancela sin crear ficha. SALIR cierra la sesion.
 - El registro crea una ficha del negocio con telefono E164, origen WHATSAPP, cero puntos y publicidad desactivada. No crea contrasena, activa la app ni concede bonos. La fecha y el texto del consentimiento se guardan en las notas de la ficha.
-- La posesion del numero se acredita por el mensaje entrante firmado de Twilio. Si la validacion de firmas esta desactivada, el registro se bloquea. Esto no reemplaza la verificacion de cuentas existentes.
-- Si ya existe una ficha con ese telefono, incluso formato nacional, inactiva, sin verificar o con avisos desactivados, no se crea otra ni se reactiva. El usuario debe resolver la verificacion/permisos en la app o con el negocio. No se expone historial de otra ficha.
+- La posesion del numero se acredita por el mensaje entrante firmado de Twilio. Si la validacion de firmas esta desactivada, el registro se bloquea. Para cuentas existentes, el canal firmado permite verificar el numero tras consentimiento explicito y las comprobaciones indicadas abajo.
+- Si existe una sola ficha activa con ese telefono, sin cambios de telefono pendientes, el asistente permite verificarla y habilitar avisos transaccionales tras responder ACEPTO. No crea otra ficha ni modifica puntos, historial, contrasena, bonos o roles. La publicidad queda desactivada. Un telefono en formato nacional se normaliza solo si corresponde al mismo numero entrante en la region del negocio. Fichas duplicadas, inactivas, numeros que no coinciden y cambios de telefono pendientes siguen requiriendo revision en la app o por el negocio.
 - Tras aceptar aparece el menu de reservas/puntos/promociones/servicios/horarios/barberos. Se conserva la confirmacion explicita de reserva y el flujo de adelantos si esta habilitado.
 - El alta consume una interaccion del cupo del negocio. Las preguntas de nombre/consentimiento no requieren OpenAI.
 
@@ -32,3 +32,12 @@ La URL proviene de `GET /api/owner/whatsapp-settings/assistant`, con el tenant a
 Con un numero realmente nuevo: HOLA -> GODS <codigo real> -> nombre -> ACEPTO -> reservar -> elegir servicio/dia/barbero/hora -> revisar resumen -> SI. Si usa adelanto: datos Yape -> captura/referencia -> revisar en agenda -> aprobar -> comprobar aviso.
 
 Repetir con NO, SALIR, codigo inexistente, coincidencias de nombre y una ficha existente sin verificar. Revisar que no se creen fichas duplicadas ni reservas antes de confirmar. Verificar delivery real en Twilio; las pruebas locales no llaman a WhatsApp, OpenAI ni Yape.
+
+
+## Continuar con una ficha existente
+
+Enviar GODS MALALO (reemplazar MALALO por el codigo real), leer la confirmacion de numero y avisos, y responder ACEPTO. La recepcion de un mensaje con firma Twilio valida acredita control del numero. Se vuelve a validar negocio, identidad de la ficha, telefono, estado y ausencia de duplicados al aceptar, con bloqueo de la ficha. Solo entonces se habilita el menu de cliente. NO cancela sin modificarla.
+
+Una persona cuyo numero tambien se usa como dueno/profesional puede seguir este flujo como cliente. No se modifican AppUser, roles, permisos, contrasenas ni el acceso de dueno. No se permite reactivar fichas inactivas ni resolver colisiones de identidad automaticamente. La verificacion y consentimiento quedan registrados en las notas de la ficha.
+
+La ampliacion requiere desplegar backend; no hay nuevas variables ni migraciones. Despues del despliegue repetir GODS y el codigo para que el asistente inicie la confirmacion nueva.

@@ -13,6 +13,10 @@ import java.util.List;
 import java.util.Optional;
 
 public interface CustomerRepository extends JpaRepository<Customer, Long> {
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select c from Customer c where c.id=:customerId and c.tenant.id=:tenantId")
+    Optional<Customer> findForWhatsappRecovery(@Param("customerId") Long customerId,@Param("tenantId") Long tenantId);
+
 
     List<Customer> findByTenant_IdAndNombresContainingIgnoreCaseOrderByNombresAsc(
             Long tenantId, String nombres, Pageable pageable
