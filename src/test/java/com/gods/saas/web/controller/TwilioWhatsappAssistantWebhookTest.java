@@ -45,4 +45,28 @@ class TwilioWhatsappAssistantWebhookTest {
             .param("From","whatsapp:+51999999999").param("To","whatsapp:+15005550006").param("MessageSid","SM123").param("Body","reserva"))
             .andExpect(status().isOk()).andExpect(content().string(org.hamcrest.Matchers.not(org.hamcrest.Matchers.containsString("secret"))));
     }
+    @Test void spanishMenuAndEmojiRoundTripThroughRealXmlParserInUtf8() throws Exception {
+        String menu="¿Que deseas hacer mañana?\n1. Promoción de corte & barba 🧔\n2. 'Mis puntos' <consulta>";
+        when(assistant.reply(any(),any(),any(),any())).thenReturn(menu);
+        var response=mvc.perform(post("/api/public/whatsapp/twilio/inbound").contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .param("From","whatsapp:+51999999999").param("To","whatsapp:+15005550006").param("MessageSid","SM123").param("Body","hola"))
+                .andExpect(status().isOk()).andReturn().getResponse();
+        org.junit.jupiter.api.Assertions.assertEquals("UTF-8",response.getCharacterEncoding());
+        var factory=javax.xml.parsers.DocumentBuilderFactory.newInstance();
+        factory.setFeature("http://apache.org/xml/features/disallow-doctype-decl",true);
+        var document=factory.newDocumentBuilder().parse(new java.io.ByteArrayInputStream(response.getContentAsByteArray()));
+        org.junit.jupiter.api.Assertions.assertEquals("Response",document.getDocumentElement().getTagName());
+        org.junit.jupiter.api.Assertions.assertEquals(menu,document.getElementsByTagName("Message").item(0).getTextContent());
+        org.junit.jupiter.api.Assertions.assertFalse(response.getContentAsString(java.nio.charset.StandardCharsets.UTF_8).contains("&iquest;"));
+    }
+    @Test void catalogControlCharactersCannotMakeInvalidXmlOrInjectNewVerbs() throws Exception {
+        when(assistant.reply(any(),any(),any(),any())).thenReturn("Corte\u0001\u0000</Message><Redirect>otra-url</Redirect>");
+        var response=mvc.perform(post("/api/public/whatsapp/twilio/inbound").contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                .param("From","whatsapp:+51999999999").param("To","whatsapp:+15005550006").param("MessageSid","SM123").param("Body","promos"))
+                .andExpect(status().isOk()).andReturn().getResponse();
+        var document=javax.xml.parsers.DocumentBuilderFactory.newInstance().newDocumentBuilder()
+                .parse(new java.io.ByteArrayInputStream(response.getContentAsByteArray()));
+        org.junit.jupiter.api.Assertions.assertEquals(0,document.getElementsByTagName("Redirect").getLength());
+        org.junit.jupiter.api.Assertions.assertEquals("Corte</Message><Redirect>otra-url</Redirect>",document.getElementsByTagName("Message").item(0).getTextContent());
+    }
 }

@@ -9,7 +9,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.util.MultiValueMap;
-import org.springframework.web.util.HtmlUtils;
+import java.nio.charset.StandardCharsets;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -22,6 +22,7 @@ import org.springframework.web.bind.annotation.RestController;
 @Slf4j
 public class TwilioWhatsappWebhookController {
 
+    private static final MediaType TWIML_TYPE = new MediaType("application", "xml", StandardCharsets.UTF_8);
     private final TwilioWebhookSignatureValidator signatureValidator;
     private final OwnerWhatsappPhoneVerificationService verificationService;
     private final WhatsappAssistantService assistantService;
@@ -29,7 +30,7 @@ public class TwilioWhatsappWebhookController {
     @PostMapping(
             value = "/inbound",
             consumes = MediaType.APPLICATION_FORM_URLENCODED_VALUE,
-            produces = MediaType.APPLICATION_XML_VALUE
+            produces = MediaType.APPLICATION_XML_VALUE + ";charset=UTF-8"
     )
     public ResponseEntity<String> inbound(
             @RequestHeader(value = "X-Twilio-Signature", required = false) String signature,
@@ -38,7 +39,7 @@ public class TwilioWhatsappWebhookController {
         if (!signatureValidator.isValid(signature, form)) {
             log.warn("Webhook Twilio rechazado por firma invalida.");
             return ResponseEntity.status(403)
-                    .contentType(MediaType.APPLICATION_XML)
+                    .contentType(TWIML_TYPE)
                     .body("<Response></Response>");
         }
 
@@ -54,7 +55,7 @@ public class TwilioWhatsappWebhookController {
                 result.verified()
         );
         return ResponseEntity.ok()
-                .contentType(MediaType.APPLICATION_XML)
+                .contentType(TWIML_TYPE)
                 .body(twiml(resolveReply(from, form.getFirst("To"), body, messageSid, result.reply())));
     }
 
@@ -77,7 +78,12 @@ public class TwilioWhatsappWebhookController {
         if (message == null || message.isBlank()) {
             return "<Response></Response>";
         }
-        String safe = HtmlUtils.htmlEscape(message == null ? "" : message);
+        // XML 1.0 permits Unicode but not HTML named entities such as &iquest; or &ntilde;.
+        StringBuilder valid = new StringBuilder();
+        message.codePoints().filter(cp -> cp == 9 || cp == 10 || cp == 13
+                || cp >= 0x20 && cp <= 0xD7FF || cp >= 0xE000 && cp <= 0xFFFD
+                || cp >= 0x10000 && cp <= 0x10FFFF).forEach(valid::appendCodePoint);
+        String safe = valid.toString().replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
         return "<Response><Message>" + safe + "</Message></Response>";
     }
 }
