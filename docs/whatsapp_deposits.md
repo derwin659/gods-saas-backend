@@ -97,3 +97,6 @@ Estos cambios requieren desplegar backend y actualizar la app Flutter para obten
 
 ### Comprobantes enviados inmediatamente
 Los mensajes con MediaUrl0 se procesan aunque lleguen dentro de los dos segundos del mensaje anterior. Se conservan la validacion de firma/destino, la deduplicacion por MessageSid, el bloqueo de sesion y las validaciones del comprobante. El acuse «Recibi tu captura» indica recepcion; «Captura adjuntada» o «Comprobante ... adjuntado a la agenda» confirma almacenamiento. Un fallo de descarga/almacenamiento requiere revisar los logs del worker; esta correccion no recupera reservas vencidas automaticamente.
+
+### Identificadores de mensajes con imagen
+El webhook acepta MessageSid SM y MM (32 digitos hexadecimales despues del prefijo), conforme al formato de Twilio. Antes se aceptaba solo SM y una foto con MM se descartaba como invalid_message antes de encolar el adjunto. Tras desplegar, reenviar la imagen para una reserva vigente; no se recuperan automaticamente fotos descartadas. Se conserva la deduplicacion y la vinculacion de URL de descarga al mismo mensaje/cuenta.

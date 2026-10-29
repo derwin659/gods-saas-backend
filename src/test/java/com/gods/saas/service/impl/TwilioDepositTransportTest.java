@@ -12,6 +12,7 @@ class TwilioDepositTransportTest {
         var downloader=new TwilioDepositMediaDownloader();ReflectionTestUtils.setField(downloader,"accountSid",account);
         String valid="https://api.twilio.com/2010-04-01/Accounts/"+account+"/Messages/"+message+"/Media/"+media;
         assertTrue(downloader.validSource(valid,message));
+        assertTrue(downloader.validSource(valid.replace(message,"MM"+"b".repeat(32)),"MM"+"b".repeat(32)));
         for(String invalid:new String[]{valid.replace("https:","http:"),valid.replace("api.twilio.com","evil.example"),
                 valid.replace(account,"AC"+"d".repeat(32)),valid.replace(message,"SM"+"e".repeat(32)),valid+"?url=http://127.0.0.1",valid.replace("api.twilio.com","user@api.twilio.com"),valid.replace("api.twilio.com","api.twilio.com:8443")})
             assertFalse(downloader.validSource(invalid,message));

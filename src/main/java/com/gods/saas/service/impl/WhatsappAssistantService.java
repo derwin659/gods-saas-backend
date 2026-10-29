@@ -25,7 +25,7 @@ import java.util.regex.Pattern;
 @RequiredArgsConstructor
 public class WhatsappAssistantService {
     private static final Pattern PHONE = Pattern.compile("^whatsapp:\\+[1-9][0-9]{7,14}$");
-    private static final Pattern SID = Pattern.compile("^SM[0-9a-fA-F]{32}$");
+    private static final Pattern SID = Pattern.compile("^(SM|MM)[0-9a-fA-F]{32}$");
     private final JdbcTemplate jdbc;
     private final ObjectMapper mapper;
     private final CustomerRepository customers;

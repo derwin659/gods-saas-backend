@@ -87,6 +87,17 @@ class WhatsappAssistantServiceTest {
         assertNull(service.replyWithMedia(phone,to,"",sid,Map.of("MediaUrl0","https://api.twilio.com/receipt")));
         verifyNoInteractions(deposits);
     }
+    @Test void mediaMessageSidReachesReceiptProcessingWithoutCaption() throws Exception {
+        String mediaSid="MM"+"b".repeat(32);
+        Map<String,String> media=Map.of("MediaUrl0","https://api.twilio.com/receipt","MediaContentType0","image/jpeg");
+        when(deposits.inbound("+51999999999","COMPROBANTE",mediaSid,media,Set.of(1L))).thenReturn("Recibi tu captura");
+        assertEquals("Recibi tu captura",service.replyWithMedia(phone,to,null,mediaSid,media));
+        verify(deposits).inbound("+51999999999","COMPROBANTE",mediaSid,media,Set.of(1L));
+    }
+    @Test void invalidMediaSidStillRejectedBeforeDatabaseAccess() throws Exception {
+        assertNull(service.replyWithMedia(phone,to,null,"ME"+"b".repeat(32),Map.of("MediaUrl0","https://api.twilio.com/receipt")));
+        verifyNoInteractions(jdbc,deposits);
+    }
     @Test void disabledNeverTouchesDatabaseOrProvider() throws Exception {
         ReflectionTestUtils.setField(service,"enabled",false); assertNull(reply("puntos")); verifyNoInteractions(jdbc,customers,bookings);
     }
