@@ -73,9 +73,11 @@ public class WhatsappDepositService {
         jdbc.update("insert into whatsapp_assistant_deposit(appointment_id,tenant_id,customer_id,phone,state,expires_at,last_inbound_at,requires_reference,instructions) values (?,?,?,?,'AWAITING_EVIDENCE',?,?,?,?)",
                 appointment.getId(),tenantId,customerId,phone,Timestamp.from(deadline),Timestamp.from(Instant.now()),Boolean.TRUE.equals(method.getRequiresOperationCode()),offer.details());
         return "Horario apartado para la reserva #"+appointment.getId()+" hasta "+deadline.atZone(time.getZone(tenantId)).toLocalTime().withSecond(0).withNano(0)
-                +". Aun no esta confirmada.\n"+offer.details()+"\nEnvia la captura como foto en este chat. "
-                +(Boolean.TRUE.equals(method.getRequiresOperationCode())?"Incluye el numero de operacion en el texto de la foto o envialo despues como OPERACION 123456. ":"")
-                +"El dueño revisara el pago antes de confirmar. No vuelvas a pagar si ya realizaste el adelanto.";
+                +". Aun no esta confirmada.\n"+offer.details()
+                +(Boolean.TRUE.equals(method.getRequiresOperationCode())
+                    ?"\n\nPaso 1: realiza el adelanto por Yape.\nPaso 2: envia primero el numero de operacion en un mensaje, por ejemplo: OPERACION 123456 (usa el numero real de tu pago).\nCuando lo registremos, te pediremos la foto del comprobante para completar el paso 3."
+                    :"\n\nPaso 1: realiza el adelanto por Yape.\nPaso 2: adjunta la captura del comprobante como foto en este chat.")
+                +"\nEl dueño revisara el comprobante antes de confirmar tu reserva. No vuelvas a pagar si ya realizaste el adelanto.";
     }
 
     /** Called only after signature, destination and MessageSid validation. */
@@ -119,7 +121,7 @@ public class WhatsappDepositService {
         if ("AWAITING_REFERENCE".equals(state) && appointment.getDepositEvidenceUrl()!=null && !appointment.getDepositEvidenceUrl().isBlank()) {
             ready(row,appointment); return "Numero de operacion registrado. El comprobante ya esta pendiente de revision del dueño.";
         }
-        return "Numero de operacion registrado. Ahora envia la captura del comprobante como foto.";
+        return "Numero de operacion registrado para la reserva #"+appointmentId+".\nAhora completa el paso final: adjunta la captura del comprobante de Yape como foto en este chat. Espera el aviso de que quedo adjuntada a la agenda. La reserva se confirmara cuando el dueño apruebe el adelanto. No vuelvas a pagar.";
     }
     public Customer verifiedCustomer(Long tenantId,Long customerId,String phone) {
         return customers.findByIdAndTenantIdWithTenant(customerId,tenantId)
