@@ -68,7 +68,9 @@ public class WhatsappAssistantService {
         Map<String, Object> session = jdbc.queryForMap("select * from whatsapp_assistant_session where phone=? for update", phone);
         Instant now = Instant.now();
         Object last = session.get("last_turn_at");
-        if (last != null && instant(last).plusSeconds(2).isAfter(now)) {
+        // Receipts often arrive immediately after confirmation or an operation reference.
+        // Keep SID deduplication and the session lock, but never discard their media on text throttling.
+        if (!media.containsKey("MediaUrl0") && last != null && instant(last).plusSeconds(2).isAfter(now)) {
             skipped("rate_limited");
             return "Espera unos segundos y vuelve a enviar tu mensaje para continuar.";
         }

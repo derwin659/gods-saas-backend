@@ -94,3 +94,6 @@ La respuesta de Agenda incluye depositStatus (estado original) y requiereNumeroO
 Una captura de reemplazo vuelve a PENDING_DEPOSIT_VALIDATION y limpia la validacion anterior. Si falta una nueva referencia, la respuesta de Agenda no propone el codigo del intento rechazado. Los avisos de falta de referencia que ya no correspondan se omiten tras la aprobacion.
 
 Estos cambios requieren desplegar backend y actualizar la app Flutter para obtener el refresco y el dialogo de operacion. No requieren una migracion adicional ni nuevas variables; sigue siendo necesaria la configuracion original del modulo de adelantos. La aprobacion sigue siendo manual: recibir una foto no confirma el pago.
+
+### Comprobantes enviados inmediatamente
+Los mensajes con MediaUrl0 se procesan aunque lleguen dentro de los dos segundos del mensaje anterior. Se conservan la validacion de firma/destino, la deduplicacion por MessageSid, el bloqueo de sesion y las validaciones del comprobante. El acuse «Recibi tu captura» indica recepcion; «Captura adjuntada» o «Comprobante ... adjuntado a la agenda» confirma almacenamiento. Un fallo de descarga/almacenamiento requiere revisar los logs del worker; esta correccion no recupera reservas vencidas automaticamente.

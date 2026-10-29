@@ -72,6 +72,21 @@ class WhatsappAssistantServiceTest {
         session.put("draft","{\"branchId\":2,\"serviceId\":3,\"date\":\"2026-11-02\",\"horaInicio\":\"17:00\"}");
         session.put("confirmation_code","ABCD1234"); session.put("quote",new BigDecimal("25.00"));
     }
+    @Test void immediateReceiptIsProcessedEvenWithinTextThrottleWindow() throws Exception {
+        session.put("last_turn_at",Timestamp.from(Instant.now()));
+        Map<String,String> media=Map.of("MediaUrl0","https://api.twilio.com/receipt","MediaContentType0","image/jpeg");
+        when(deposits.inbound(eq("+51999999999"),eq("COMPROBANTE"),eq(sid),eq(media),eq(Set.of(1L))))
+            .thenReturn("Recibi tu captura para la reserva #858.");
+        assertTrue(service.replyWithMedia(phone,to,"",sid,media).contains("Recibi tu captura"));
+        verify(deposits).inbound("+51999999999","COMPROBANTE",sid,media,Set.of(1L));
+        verifyNoInteractions(interpreter,bookings);
+    }
+    @Test void duplicateImmediateReceiptDoesNotQueueMediaAgain() throws Exception {
+        session.put("last_turn_at",Timestamp.from(Instant.now()));
+        when(jdbc.update(startsWith("insert into whatsapp_assistant_message"), any(Object[].class))).thenReturn(0);
+        assertNull(service.replyWithMedia(phone,to,"",sid,Map.of("MediaUrl0","https://api.twilio.com/receipt")));
+        verifyNoInteractions(deposits);
+    }
     @Test void disabledNeverTouchesDatabaseOrProvider() throws Exception {
         ReflectionTestUtils.setField(service,"enabled",false); assertNull(reply("puntos")); verifyNoInteractions(jdbc,customers,bookings);
     }
