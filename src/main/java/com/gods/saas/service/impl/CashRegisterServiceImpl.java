@@ -1333,13 +1333,13 @@ public class CashRegisterServiceImpl implements CashRegisterService {
 
         if (barberUserId == null) {
             if (requiresBarber) {
-                throw new IllegalStateException("Debes seleccionar un barbero para este movimiento.");
+                throw new IllegalStateException("Debes seleccionar un empleado para este movimiento.");
             }
             return null;
         }
 
         AppUser barber = appUserRepository.findByIdAndTenant_Id(barberUserId, tenantId)
-                .orElseThrow(() -> new IllegalStateException("Barbero no encontrado."));
+                .orElseThrow(() -> new IllegalStateException("Empleado no encontrado."));
 
         boolean hasBarberRoleInBranch = userTenantRoleRepository.existsByUser_IdAndTenant_IdAndBranch_IdAndRole(
                 barberUserId,
@@ -1348,7 +1348,21 @@ public class CashRegisterServiceImpl implements CashRegisterService {
                 RoleType.BARBER
         );
         if (!hasBarberRoleInBranch) {
-            throw new IllegalStateException("El usuario seleccionado no es un barbero valido.");
+            boolean salariedEmployeeInBranch = List.of(RoleType.ADMIN, RoleType.CASHIER).stream()
+                    .anyMatch(role -> userTenantRoleRepository.existsByUser_IdAndTenant_IdAndBranch_IdAndRole(
+                            barberUserId, tenantId, branchId, role));
+            if (!salariedEmployeeInBranch) {
+                throw new IllegalStateException("El empleado no está asignado a esta sede.");
+            }
+            if (!Boolean.TRUE.equals(barber.getActivo())) {
+                throw new IllegalStateException("El empleado seleccionado está inactivo.");
+            }
+            if (!Boolean.TRUE.equals(barber.getSalaryMode())
+                    || barber.getFixedSalaryAmount() == null
+                    || barber.getFixedSalaryAmount().signum() <= 0
+                    || barber.getSalaryFrequency() == null) {
+                throw new IllegalStateException("Configura el sueldo y la frecuencia de este empleado antes de pagarlo.");
+            }
         }
 
         return barber;
