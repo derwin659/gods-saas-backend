@@ -516,6 +516,31 @@ class WhatsappAssistantServiceTest {
         customer.getTenant().setCodigo("INDYSTRY");
         when(tenants.findById(1L)).thenReturn(Optional.of(customer.getTenant()));
         when(businessSenders.selection(1L)).thenReturn(new WhatsappBusinessSenderService.Selection("BUSINESS","+51911111111","CONNECTED","BUSINESS","+51911111111"));
-        assertEquals("https://wa.me/51911111111?text=GODS+INDYSTRY",service.status(1L).get("bookingWhatsappUrl"));
+        assertEquals("https://wa.me/51911111111?text=RESERVAR",service.status(1L).get("bookingWhatsappUrl"));
+    }
+    @Test void ordinaryOwnNumberMessageDoesNotStartBotOrDiscardAnotherChatDraft() throws Exception {
+        draft();session.put("destination_phone","+15005550006");
+        var own=new WhatsappBusinessSenderService.Connection(1L,"+51911111111","AC"+"a".repeat(32),"1".repeat(32),"","");
+        when(businessSenders.inbound("whatsapp:+51911111111")).thenReturn(Optional.of(own));
+        assertNull(service.reply(phone,"whatsapp:+51911111111","Hola, quiero hablar con el dueño",sid));
+        verify(jdbc,never()).update(contains("set tenant_id=null,draft=null"),any(Object[].class));
+        verifyNoInteractions(onboarding,deposits,bookings,loyalty,usage);
+    }
+    @Test void ownNumberStartsOnlyFromExplicitKeywordAndContinuesRegistration() throws Exception {
+        var own=new WhatsappBusinessSenderService.Connection(1L,"+51911111111","AC"+"a".repeat(32),"1".repeat(32),"","");
+        when(businessSenders.inbound("whatsapp:+51911111111")).thenReturn(Optional.of(own));
+        when(onboarding.replyForTenant(anyString(),anyString(),any(),any(),eq(1L))).thenReturn("Escribe tu nombre");
+        session.clear();
+        assertEquals("Escribe tu nombre",service.reply(phone,"whatsapp:+51911111111","MENÚ",sid));
+        session.put("destination_phone","+51911111111");session.put("expires_at",Timestamp.from(Instant.now().plusSeconds(600)));
+        session.put("draft","{\"_assistant\":{\"stage\":\"REGISTER_NAME\",\"tenant\":1}}");
+        assertEquals("Escribe tu nombre",service.reply(phone,"whatsapp:+51911111111","Juan",sid));
+    }
+    @Test void expiredOwnConversationDoesNotRespondUntilKeywordIsSent() throws Exception {
+        var own=new WhatsappBusinessSenderService.Connection(1L,"+51911111111","AC"+"a".repeat(32),"1".repeat(32),"","");
+        when(businessSenders.inbound("whatsapp:+51911111111")).thenReturn(Optional.of(own));
+        session.put("destination_phone","+51911111111");session.put("expires_at",Timestamp.from(Instant.now().minusSeconds(1)));
+        assertNull(service.reply(phone,"whatsapp:+51911111111","Hola",sid));
+        verifyNoInteractions(onboarding,deposits,usage);
     }
 }

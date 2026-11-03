@@ -16,6 +16,7 @@ public class WhatsappBusinessSenderService {
     public static final String MODE_KEY = "whatsappSenderMode";
     public static final String PHONE_KEY = "whatsappBusinessPhone";
     private final TenantSettingsRepository settings;
+    private final WhatsappBusinessConnectionStore automaticConnections;
     private final ObjectMapper mapper=new ObjectMapper().enable(JsonParser.Feature.STRICT_DUPLICATE_DETECTION);
     @Value("${whatsapp.twilio.business-connections:}") private String businessConnections;
     @Value("${whatsapp.twilio.from-number:}") private String sharedPhone;
@@ -66,6 +67,15 @@ public class WhatsappBusinessSenderService {
         return phone.matches("\\+[1-9][0-9]{7,14}") ? phone : null;
     }
     private Map<Long,Connection> connections() {
+        Map<Long,Connection> result=new LinkedHashMap<>(manualConnections());
+        for(var connection:automaticConnections.active()) {
+            if(result.containsKey(connection.tenantId()))continue;
+            if(result.values().stream().anyMatch(existing -> existing.phone().equals(connection.phone()) || existing.accountSid().equals(connection.accountSid())))return Map.of();
+            result.put(connection.tenantId(),connection);
+        }
+        return result;
+    }
+    private Map<Long,Connection> manualConnections() {
         if (businessConnections==null || businessConnections.isBlank()) return Map.of();
         try {
             var root=mapper.readTree(businessConnections);

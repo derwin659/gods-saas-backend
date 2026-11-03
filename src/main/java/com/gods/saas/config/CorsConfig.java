@@ -37,7 +37,8 @@ public class CorsConfig {
                 "Content-Type",
                 "Accept",
                 "Origin",
-                "X-Requested-With"
+                "X-Requested-With",
+                "X-Whatsapp-Onboarding-Token"
         ));
 
         config.setExposedHeaders(List.of(

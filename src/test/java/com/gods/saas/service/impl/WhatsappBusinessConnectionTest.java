@@ -15,7 +15,7 @@ import static org.mockito.Mockito.*;
 
 class WhatsappBusinessConnectionTest {
     final TenantSettingsRepository repository=mock(TenantSettingsRepository.class);
-    final WhatsappBusinessSenderService senders=new WhatsappBusinessSenderService(repository);
+    final WhatsappBusinessSenderService senders=new WhatsappBusinessSenderService(repository,mock(WhatsappBusinessConnectionStore.class));
     final String centralAccount="AC"+"c".repeat(32),accountA="AC"+"a".repeat(32),accountB="AC"+"b".repeat(32);
     final String tokenA="1".repeat(32),tokenB="2".repeat(32),centralToken="3".repeat(32);
     final String phoneA="+51911111111",phoneB="+51922222222",shared="+15005550006";

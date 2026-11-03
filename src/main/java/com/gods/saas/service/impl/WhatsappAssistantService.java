@@ -73,6 +73,14 @@ public class WhatsappAssistantService {
         session.putAll(jdbc.queryForMap("select * from whatsapp_assistant_session where phone=? for update",phone));
         String destination=WhatsappBusinessSenderService.normalizePhone(to);
         String previousDestination=Objects.toString(session.get("destination_phone"),"");
+        if (destinationTenant!=null) {
+            ObjectNode stored=draft(session);
+            boolean unexpired=session.get("expires_at")!=null && instant(session.get("expires_at")).isAfter(Instant.now());
+            boolean sameConversation=destination.equals(previousDestination) && unexpired
+                    && (session.get("tenant_id") instanceof Number currentTenant && currentTenant.longValue()==destinationTenant
+                        || metadata(stored).path("stage").asText().startsWith("REGISTER_") && metadata(stored).path("tenant").asLong()==destinationTenant);
+            if (!sameConversation && !businessActivation(body,destinationTenant)) return skipped("awaiting_business_keyword");
+        }
         boolean channelChanged=!previousDestination.isBlank() && !previousDestination.equals(destination);
         boolean businessMismatch=destinationTenant!=null && session.get("tenant_id")!=null
                 && !Objects.equals(destinationTenant,((Number)session.get("tenant_id")).longValue());
@@ -263,8 +271,9 @@ public class WhatsappAssistantService {
         result.put("effectiveSenderMode",senderSelection.effectiveSenderMode());
         result.put("businessConnectionStatus",senderSelection.businessConnectionStatus());
         result.put("businessCode",code);
+        String invitation="BUSINESS".equals(senderSelection.effectiveSenderMode()) ? "RESERVAR" : "GODS "+code;
         result.put("bookingWhatsappUrl",ready && sender.matches("\\+[1-9][0-9]{7,14}") && !code.isBlank()
-                ? "https://wa.me/"+sender.substring(1)+"?text="+java.net.URLEncoder.encode("GODS "+code,java.nio.charset.StandardCharsets.UTF_8) : "");
+                ? "https://wa.me/"+sender.substring(1)+"?text="+java.net.URLEncoder.encode(invitation,java.nio.charset.StandardCharsets.UTF_8) : "");
         return result;
     }
     /** Recognize only unambiguous read requests; mixed requests still go through the model. */
@@ -283,6 +292,12 @@ public class WhatsappAssistantService {
     private String skipped(String reason) {
         log.info("WhatsApp assistant skipped: reason={}, dialogueVersion=3", reason);
         return null;
+    }
+    private boolean businessActivation(String text,Long tenantId) {
+        if (Set.of("reservar","menu").contains(normalize(text))) return true;
+        if (!text.stripLeading().toUpperCase(Locale.ROOT).startsWith("GODS ")) return false;
+        String code=tenants.findById(tenantId).map(Tenant::getCodigo).orElse("");
+        return !code.isBlank() && text.trim().equalsIgnoreCase("GODS "+code);
     }
     private boolean correctDestination(String to) {
         if (fromNumber == null || fromNumber.isBlank() || to == null) return false;

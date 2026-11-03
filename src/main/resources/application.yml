@@ -71,6 +71,15 @@ runpod:
 
 # application.yml
 whatsapp:
+  onboarding:
+    enabled: ${WHATSAPP_ONBOARDING_ENABLED:false}
+    app-id: ${WHATSAPP_META_APP_ID:}
+    app-secret: ${WHATSAPP_META_APP_SECRET:}
+    config-id: ${WHATSAPP_META_CONFIG_ID:}
+    solution-id: ${WHATSAPP_META_SOLUTION_ID:}
+    graph-version: ${WHATSAPP_META_GRAPH_VERSION:v24.0}
+    web-url: ${WHATSAPP_ONBOARDING_WEB_URL:}
+    encryption-key: ${WHATSAPP_CREDENTIALS_ENCRYPTION_KEY:}
   assistant:
     deposits-enabled: ${WHATSAPP_ASSISTANT_DEPOSITS_ENABLED:false}
     deposit-hold-minutes: ${WHATSAPP_ASSISTANT_DEPOSIT_HOLD_MINUTES:15}

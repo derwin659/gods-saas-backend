@@ -56,6 +56,7 @@ public class SecurityConfig {
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
 
+                        .requestMatchers("/api/public/whatsapp/onboarding/**").permitAll()
                         // Necesario para CORS preflight desde React/Vercel/local
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers("/api/super-admin/academy", "/api/super-admin/academy/**").hasRole("SUPER_ADMIN")

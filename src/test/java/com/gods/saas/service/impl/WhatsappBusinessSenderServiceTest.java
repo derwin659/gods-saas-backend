@@ -13,7 +13,7 @@ import static org.mockito.Mockito.*;
 class WhatsappBusinessSenderServiceTest {
     final TenantSettingsRepository repository=mock(TenantSettingsRepository.class);
     final CentralWhatsappSenderService central=mock(CentralWhatsappSenderService.class);
-    final WhatsappBusinessSenderService senders=new WhatsappBusinessSenderService(repository);
+    final WhatsappBusinessSenderService senders=new WhatsappBusinessSenderService(repository,mock(WhatsappBusinessConnectionStore.class));
     final OwnerWhatsappSettingsService service=new OwnerWhatsappSettingsService(repository,central,senders);
     final TenantSettings settings=new TenantSettings();
     @BeforeEach void setup() {

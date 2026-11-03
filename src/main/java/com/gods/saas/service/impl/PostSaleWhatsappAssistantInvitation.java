@@ -20,6 +20,7 @@ public class PostSaleWhatsappAssistantInvitation {
         String code=Objects.toString(status.get("businessCode"),"").trim();
         String url=Objects.toString(status.get("bookingWhatsappUrl"),"").trim();
         if (code.isBlank() || url.isBlank()) return "";
-        return "\n\nTambien puedes reservar por WhatsApp con nuestro asistente. Abre este enlace y envia: GODS "+code+"\n"+url;
+        String activation="BUSINESS".equals(status.get("effectiveSenderMode")) ? "RESERVAR" : "GODS "+code;
+        return "\n\nTambien puedes reservar por WhatsApp con nuestro asistente. Abre este enlace y envia: "+activation+"\n"+url;
     }
 }
