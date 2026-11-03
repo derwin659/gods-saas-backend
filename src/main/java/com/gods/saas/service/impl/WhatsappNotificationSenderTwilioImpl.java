@@ -47,6 +47,7 @@ public class WhatsappNotificationSenderTwilioImpl {
     private String defaultOwnerBookingContentSid;
 
     private final TenantSettingsRepository tenantSettingsRepository;
+    private final WhatsappBusinessSenderService businessSenders;
     private final WhatsappRecipientResolver recipientResolver;
     private final OwnerBookingWhatsappPayloadFactory ownerBookingPayloadFactory;
 
@@ -86,11 +87,20 @@ public class WhatsappNotificationSenderTwilioImpl {
                 )
         );
         String messagingServiceSid = cleanText(readString(config, MESSAGING_SERVICE_SID_KEY, defaultMessagingServiceSid));
+        var selection=businessSenders.selection(notification.getTenant().getId(),config);
+        var own=selection.businessConnected() ? businessSenders.connection(notification.getTenant().getId()).orElseThrow() : null;
+        if (own!=null) {
+            accountSid=own.accountSid();
+            authToken=own.authToken();
+            fromNumber=own.phone();
+            messagingServiceSid=null;
+        }
         String ownerBookingContentSid = cleanText(readString(
                 config,
                 OWNER_BOOKING_CONTENT_SID_KEY,
                 defaultOwnerBookingContentSid
         ));
+        if (own!=null) ownerBookingContentSid=cleanText(own.bookingContentSid());
         OwnerBookingWhatsappPayloadFactory.Payload ownerBookingPayload = ownerBookingPayloadFactory
                 .from(notification)
                 .orElse(null);

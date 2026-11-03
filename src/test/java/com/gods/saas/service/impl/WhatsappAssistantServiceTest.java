@@ -32,7 +32,8 @@ class WhatsappAssistantServiceTest {
     private final WhatsappAssistantUsageService usage = mock(WhatsappAssistantUsageService.class);
     private final WhatsappDepositService deposits = mock(WhatsappDepositService.class);
     private final WhatsappCustomerOnboarding onboarding=mock(WhatsappCustomerOnboarding.class);
-    private final WhatsappAssistantService service = new WhatsappAssistantService(jdbc, mapper, customers, tenants, loyalty, promotions, subscriptions, bookings, time, policy, interpreter, usage, deposits, onboarding, mock(WhatsappCustomerActions.class));
+    private final WhatsappBusinessSenderService businessSenders=mock(WhatsappBusinessSenderService.class);
+    private final WhatsappAssistantService service = new WhatsappAssistantService(jdbc, mapper, customers, tenants, loyalty, promotions, subscriptions, bookings, time, policy, interpreter, usage, deposits, onboarding, mock(WhatsappCustomerActions.class),businessSenders);
     private final Map<String,Object> session = new HashMap<>();
     private final String sid = "SM" + "a".repeat(32);
     private final String phone = "whatsapp:+51999999999";
@@ -364,6 +365,7 @@ class WhatsappAssistantServiceTest {
     @Test void ownerBookingLinkUsesAuthenticatedBusinessAndConfiguredCentralNumber() {
         customer.getTenant().setCodigo("INDYSTRY");
         when(tenants.findById(1L)).thenReturn(Optional.of(customer.getTenant()));
+        when(businessSenders.selection(1L)).thenReturn(new WhatsappBusinessSenderService.Selection("SHARED","","NOT_REQUESTED","SHARED","+15005550006"));
         var status=service.status(1L);
         assertEquals("INDYSTRY",status.get("businessCode"));
         assertEquals("https://wa.me/15005550006?text=GODS+INDYSTRY",status.get("bookingWhatsappUrl"));
@@ -492,5 +494,28 @@ class WhatsappAssistantServiceTest {
         trackSession();Promotion offer=promo(false);offer.setDiscountType("PERCENT");offer.setDiscountValue(new BigDecimal("10"));
         reply("hola");reply("3");reply("1");assertTrue(reply("1").contains("¿Para que servicio"));
         reply("1");reply("mañana");assertTrue(reply("1").contains("Promocion: GODS TOTAL LOOK"));
+    }
+    @Test void ownNumberCannotSelectAnotherBusiness() throws Exception {
+        var connection=new WhatsappBusinessSenderService.Connection(1L,"+51911111111","AC"+"b".repeat(32),"a".repeat(32),"","");
+        when(businessSenders.inbound("whatsapp:+51911111111")).thenReturn(Optional.of(connection));
+        when(onboarding.replyForTenant(anyString(),anyString(),any(),any(),eq(1L))).thenReturn("Estas en Local Uno");
+        session.put("destination_phone","+51911111111");
+        assertEquals("Estas en Local Uno",service.reply(phone,"whatsapp:+51911111111","GODS OTRO",sid));
+        verify(onboarding,never()).reply(anyString(),anyString(),any(),any());
+        verify(onboarding).replyForTenant(eq("+51999999999"),eq("GODS OTRO"),any(),any(),eq(1L));
+        verifyNoInteractions(bookings,loyalty);
+    }
+    @Test void channelSwitchClearsOldQuoteBeforeProcessingConfirmation() throws Exception {
+        draft();session.put("destination_phone","+51911111111");
+        when(onboarding.reply(anyString(),anyString(),any(),any())).thenReturn("Elige tu negocio");
+        reply("CONFIRMAR ABCD1234");
+        verify(jdbc).update(contains("set tenant_id=null,draft=null,confirmation_code=null,quote=null,expires_at=null,last_turn_at=null"),eq("+51999999999"));
+        verify(bookings,never()).createAppointment(any(),any(),any());
+    }
+    @Test void ownBookingLinkUsesOnlyAssignedNumber() {
+        customer.getTenant().setCodigo("INDYSTRY");
+        when(tenants.findById(1L)).thenReturn(Optional.of(customer.getTenant()));
+        when(businessSenders.selection(1L)).thenReturn(new WhatsappBusinessSenderService.Selection("BUSINESS","+51911111111","CONNECTED","BUSINESS","+51911111111"));
+        assertEquals("https://wa.me/51911111111?text=GODS+INDYSTRY",service.status(1L).get("bookingWhatsappUrl"));
     }
 }

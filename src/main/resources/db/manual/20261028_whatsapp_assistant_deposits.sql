@@ -4,6 +4,7 @@ CREATE TABLE IF NOT EXISTS whatsapp_assistant_deposit (
  tenant_id bigint NOT NULL REFERENCES tenant(tenant_id),
  customer_id bigint NOT NULL REFERENCES customer(customer_id),
  phone varchar(20) NOT NULL,
+ sender_phone varchar(20),
  state varchar(32) NOT NULL,
  expires_at timestamp with time zone NOT NULL,
  last_inbound_at timestamp with time zone NOT NULL,

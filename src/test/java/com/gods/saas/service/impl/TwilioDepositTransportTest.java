@@ -9,7 +9,7 @@ import static org.junit.jupiter.api.Assertions.*;
 class TwilioDepositTransportTest {
     final String account="AC"+"a".repeat(32),message="SM"+"b".repeat(32),media="ME"+"c".repeat(32);
     @Test void downloadIsBoundToConfiguredAccountAndSpecificInboundMessageWithoutNetworkAccess(){
-        var downloader=new TwilioDepositMediaDownloader();ReflectionTestUtils.setField(downloader,"accountSid",account);
+        var downloader=new TwilioDepositMediaDownloader(org.mockito.Mockito.mock(WhatsappBusinessSenderService.class));ReflectionTestUtils.setField(downloader,"accountSid",account);
         String valid="https://api.twilio.com/2010-04-01/Accounts/"+account+"/Messages/"+message+"/Media/"+media;
         assertTrue(downloader.validSource(valid,message));
         assertTrue(downloader.validSource(valid.replace(message,"MM"+"b".repeat(32)),"MM"+"b".repeat(32)));
@@ -18,7 +18,7 @@ class TwilioDepositTransportTest {
             assertFalse(downloader.validSource(invalid,message));
     }
     TwilioDepositNoticeSender sender(){
-        var sender=new TwilioDepositNoticeSender(new ObjectMapper());
+        var sender=new TwilioDepositNoticeSender(new ObjectMapper(),org.mockito.Mockito.mock(WhatsappBusinessSenderService.class));
         ReflectionTestUtils.setField(sender,"accountSid",account);ReflectionTestUtils.setField(sender,"token","secret-not-printed");ReflectionTestUtils.setField(sender,"from","+15005550006");
         return sender;
     }

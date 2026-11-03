@@ -37,6 +37,7 @@ class WhatsappDepositWorkflowTest {
         jdbc.execute("create table customer(customer_id bigint primary key)");jdbc.update("insert into customer values (7)");
         jdbc.execute("create table appointment(appointment_id bigint primary key)");jdbc.update("insert into appointment values (99)");
         try(var connection=source.getConnection()){ScriptUtils.executeSqlScript(connection,new ClassPathResource("db/manual/20261028_whatsapp_assistant_deposits.sql"));}
+        jdbc.execute("create table whatsapp_assistant_session(phone varchar(20) primary key,destination_phone varchar(20))");
         workflow=new WhatsappDepositService(jdbc,bookings,appointments,customers,methods,time,downloader);
         ReflectionTestUtils.setField(workflow,"enabled",true);ReflectionTestUtils.setField(workflow,"entityManager",mock(EntityManager.class));
         Tenant tenant=new Tenant(1L);tenant.setNombre("Gods");tenant.setActive(true);

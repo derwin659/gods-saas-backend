@@ -10,12 +10,26 @@ import java.util.*;
 
 /** Only authenticated media belonging to this Twilio account and inbound message may be downloaded. */
 @Service
+@lombok.RequiredArgsConstructor
 public class TwilioDepositMediaDownloader {
+    private final WhatsappBusinessSenderService businessSenders;
     static final int MAX_BYTES=5*1024*1024;
     @Value("${whatsapp.twilio.account-sid:}") private String accountSid;
     @Value("${whatsapp.twilio.auth-token:}") private String token;
 
     public boolean validSource(String url,String messageSid) {
+        return validSourceForAccount(url,messageSid,accountSid);
+    }
+    public boolean validSource(String url,String messageSid,Long tenantId,String origin) {
+        try { return validSourceForAccount(url,messageSid,outbound(tenantId,origin).accountSid()); }
+        catch (IllegalStateException invalid) { return false; }
+    }
+    private WhatsappBusinessSenderService.Connection outbound(Long tenantId,String origin) {
+        if (origin==null || origin.isBlank() || businessSenders.isSharedDestination(origin))
+            return new WhatsappBusinessSenderService.Connection(null,"",accountSid,token,"","");
+        return businessSenders.forOrigin(tenantId,origin).orElseThrow(() -> new IllegalStateException("SENDER_NOT_PROVISIONED"));
+    }
+    private boolean validSourceForAccount(String url,String messageSid,String accountSid) {
         try {
             URI uri=URI.create(url);
             String prefix="/2010-04-01/Accounts/"+accountSid+"/Messages/"+messageSid+"/Media/";
@@ -25,12 +39,17 @@ public class TwilioDepositMediaDownloader {
         } catch (RuntimeException invalid) {return false;}
     }
     public MultipartFile download(String url,String sid,String contentType) throws IOException {
-        if (!validSource(url,sid) || accountSid==null || token==null || token.isBlank()) throw new IOException("INVALID_MEDIA_SOURCE");
+        return download(url,sid,contentType,null,null);
+    }
+    public MultipartFile download(String url,String sid,String contentType,Long tenantId,String origin) throws IOException {
+        var outbound=outbound(tenantId,origin);
+        String outboundAccount=outbound.accountSid(),outboundToken=outbound.authToken();
+        if (!validSourceForAccount(url,sid,outboundAccount) || outboundAccount==null || outboundToken==null || outboundToken.isBlank()) throw new IOException("INVALID_MEDIA_SOURCE");
         URI current=URI.create(url);
         for (int hop=0;hop<4;hop++) {
             HttpURLConnection connection=(HttpURLConnection)current.toURL().openConnection();
             connection.setConnectTimeout(2000);connection.setReadTimeout(8000);connection.setInstanceFollowRedirects(false);
-            if (hop==0) connection.setRequestProperty("Authorization","Basic "+Base64.getEncoder().encodeToString((accountSid+":"+token).getBytes(StandardCharsets.UTF_8)));
+            if (hop==0) connection.setRequestProperty("Authorization","Basic "+Base64.getEncoder().encodeToString((outboundAccount+":"+outboundToken).getBytes(StandardCharsets.UTF_8)));
             try {
                 int status=connection.getResponseCode();
                 if (status>=300 && status<400) {

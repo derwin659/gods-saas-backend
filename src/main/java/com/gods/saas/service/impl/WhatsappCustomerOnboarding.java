@@ -119,6 +119,15 @@ public class WhatsappCustomerOnboarding {
         return prompt(phone,mapper.createObjectNode(),now,"No puedo habilitar esta ficha automaticamente. Verifica tu cuenta en la app o consulta al negocio para revisar fichas duplicadas, estado o un cambio de telefono pendiente. No crearemos otra ficha.");
     }
     @Transactional(rollbackFor=Exception.class)
+    public String replyForTenant(String phone,String text,ObjectNode root,Instant now,Long tenantId) throws Exception {
+        Tenant tenant=tenants.findById(tenantId).orElse(null);
+        if (!eligible(tenant)) return "Este negocio no tiene disponible el asistente. Contacta al negocio.";
+        JsonNode meta=root.path("_assistant");
+        if (meta.path("stage").asText().startsWith("REGISTER_") && meta.path("tenant").asLong()==tenantId)
+            return reply(phone,text,root,now);
+        return enter(phone,tenant,now);
+    }
+    @Transactional(rollbackFor=Exception.class)
     public String reply(String phone,String text,ObjectNode root,Instant now) throws Exception {
         ObjectNode meta=root.path("_assistant") instanceof ObjectNode node?node.deepCopy():mapper.createObjectNode();
         String stage=meta.path("stage").asText();

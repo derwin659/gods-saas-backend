@@ -100,6 +100,7 @@ whatsapp:
     account-sid: ${TWILIO_ACCOUNT_SID:}
     auth-token: ${TWILIO_AUTH_TOKEN:}
     from-number: ${TWILIO_WHATSAPP_FROM_NUMBER:}
+    business-connections: ${TWILIO_WHATSAPP_BUSINESS_CONNECTIONS:}
     messaging-service-sid: ${TWILIO_MESSAGING_SERVICE_SID:}
     status-callback-url: ${TWILIO_STATUS_CALLBACK_URL:}
     owner-booking-content-sid: ${TWILIO_OWNER_BOOKING_CONTENT_SID:}

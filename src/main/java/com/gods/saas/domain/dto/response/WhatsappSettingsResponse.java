@@ -17,10 +17,15 @@ public class WhatsappSettingsResponse {
     private Boolean ownerBookingAlertIncludeProfessional;
     private Boolean ownerBookingAlertIncludeStaffCreated;
     private String appDownloadUrl;
+    private String senderMode;
+    private String businessPhone;
     private String provider;
     private String connectionStatus;
     private String senderPhone;
     private String senderLabel;
+    private String businessConnectionStatus;
+    private String effectiveSenderMode;
+    private String effectiveSenderPhone;
     private Boolean connected;
     private Boolean centralNotificationsEnabled;
     private String centralProvider;

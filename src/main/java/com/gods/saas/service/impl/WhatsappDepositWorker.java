@@ -38,7 +38,9 @@ public class WhatsappDepositWorker {
             CloudinaryStorageService.UploadResult upload=null;
             try {
                 var payment=jdbc.queryForMap("select * from whatsapp_assistant_deposit where appointment_id=?",row.get("appointment_id"));
-                var image=downloader.download(row.get("media_url").toString(),sid,row.get("content_type").toString());
+                String origin=java.util.Objects.toString(payment.get("sender_phone"),null);
+                var image=origin==null ? downloader.download(row.get("media_url").toString(),sid,row.get("content_type").toString())
+                        : downloader.download(row.get("media_url").toString(),sid,row.get("content_type").toString(),WhatsappDepositService.id(payment,"tenant_id"),origin);
                 upload=storage.uploadAppointmentDepositEvidence(WhatsappDepositService.id(payment,"tenant_id"),WhatsappDepositService.id(payment,"customer_id"),image);
                 deposits.attach(sid,upload.getSecureUrl());
             } catch (Exception failure) {
@@ -49,7 +51,7 @@ public class WhatsappDepositWorker {
         }
     }
     void processNotices() {
-        for (var row:jdbc.queryForList("select n.*,p.phone,p.tenant_id,p.customer_id,p.last_inbound_at,p.state as payment_state from whatsapp_assistant_deposit_notice n join whatsapp_assistant_deposit p on p.appointment_id=n.appointment_id where n.state='PENDING' order by n.created_at limit 10")) {
+        for (var row:jdbc.queryForList("select n.*,p.phone,p.tenant_id,p.customer_id,p.sender_phone,p.last_inbound_at,p.state as payment_state from whatsapp_assistant_deposit_notice n join whatsapp_assistant_deposit p on p.appointment_id=n.appointment_id where n.state='PENDING' order by n.created_at limit 10")) {
             String key=row.get("event_key").toString();
             if (jdbc.update("update whatsapp_assistant_deposit_notice set state='PROCESSING',processing_at=now() where event_key=? and state='PENDING'",key)!=1) continue;
             try {
@@ -59,7 +61,9 @@ public class WhatsappDepositWorker {
                 if (deposits.verifiedCustomer(WhatsappDepositService.id(row,"tenant_id"),WhatsappDepositService.id(row,"customer_id"),row.get("phone").toString())==null) {
                     jdbc.update("update whatsapp_assistant_deposit_notice set state='SKIPPED',error_code='CUSTOMER_NOT_VERIFIED' where event_key=?",key);continue;
                 }
-                String sid=sender.send(row.get("phone").toString(),row.get("body").toString(),WhatsappDepositService.instant(row.get("last_inbound_at")));
+                String origin=java.util.Objects.toString(row.get("sender_phone"),null);
+                String sid=origin==null ? sender.send(row.get("phone").toString(),row.get("body").toString(),WhatsappDepositService.instant(row.get("last_inbound_at")))
+                        : sender.send(WhatsappDepositService.id(row,"tenant_id"),origin,row.get("phone").toString(),row.get("body").toString(),WhatsappDepositService.instant(row.get("last_inbound_at")));
                 jdbc.update("update whatsapp_assistant_deposit_notice set state='SENT',provider_sid=? where event_key=?",sid,key);
             } catch (Exception failure) {
                 // An HTTP timeout can mean the provider accepted the message. Do not blindly resend.

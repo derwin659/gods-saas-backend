@@ -15,6 +15,8 @@ public class UpdateWhatsappSettingsRequest {
     private Boolean ownerBookingAlertIncludeProfessional;
     private Boolean ownerBookingAlertIncludeStaffCreated;
     private String appDownloadUrl;
+    private String senderMode;
+    private String businessPhone;
     private String provider;
     private String connectionStatus;
     private String senderPhone;

@@ -21,6 +21,7 @@ public class WhatsappNotificationSenderRouter implements WhatsappNotificationSen
     private final WhatsappNotificationSenderMetaCloudImpl metaCloudSender;
     private final WhatsappNotificationSenderTwilioImpl twilioSender;
     private final CentralWhatsappSenderService centralWhatsappSenderService;
+    private final WhatsappBusinessSenderService businessSenders;
 
     @Override
     public String send(Notification notification) {
@@ -45,6 +46,9 @@ public class WhatsappNotificationSenderRouter implements WhatsappNotificationSen
                 .trim()
                 .toUpperCase(Locale.ROOT);
 
+        if (businessSenders.selection(notification.getTenant().getId(),config).businessConnected()) {
+            return twilioSender.send(notification);
+        }
         if ("MANUAL".equals(provider)) {
             throw new RuntimeException("WhatsApp está en modo MANUAL. No se envía automáticamente.");
         }

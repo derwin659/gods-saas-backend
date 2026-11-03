@@ -16,7 +16,10 @@ import java.util.TreeMap;
 
 @Service
 @Slf4j
+@lombok.RequiredArgsConstructor
 public class TwilioWebhookSignatureValidator {
+    private final WhatsappBusinessSenderService businessSenders;
+    @Value("${whatsapp.twilio.account-sid:}") private String accountSid;
 
     @Value("${whatsapp.twilio.auth-token:}")
     private String authToken;
@@ -28,11 +31,20 @@ public class TwilioWebhookSignatureValidator {
     private boolean validateSignature;
 
     public boolean isValid(String signature, Map<String, List<String>> parameters) {
+        String to=single(parameters,"To");
+        String inboundAccount=single(parameters,"AccountSid");
+        boolean shared=businessSenders.isSharedDestination(to);
+        var own=shared ? java.util.Optional.<WhatsappBusinessSenderService.Connection>empty() : businessSenders.inbound(to);
+        if (!shared && own.isEmpty()) return false;
+        String expectedAccount=shared ? accountSid : own.orElseThrow().accountSid();
+        if (expectedAccount==null || !expectedAccount.equals(inboundAccount)) return false;
+        String signingToken=shared ? authToken : own.orElseThrow().authToken();
         if (!validateSignature) {
+            if (!shared) return false;
             log.warn("La validacion de firma del webhook Twilio esta desactivada.");
             return true;
         }
-        if (!hasText(signature) || !hasText(authToken) || !hasText(inboundWebhookUrl)) {
+        if (!hasText(signature) || !hasText(signingToken) || !hasText(inboundWebhookUrl)) {
             return false;
         }
 
@@ -51,7 +63,7 @@ public class TwilioWebhookSignatureValidator {
 
             Mac mac = Mac.getInstance("HmacSHA1");
             mac.init(new SecretKeySpec(
-                    authToken.trim().getBytes(StandardCharsets.UTF_8),
+                    signingToken.trim().getBytes(StandardCharsets.UTF_8),
                     "HmacSHA1"
             ));
             String expected = Base64.getEncoder().encodeToString(
@@ -68,6 +80,10 @@ public class TwilioWebhookSignatureValidator {
         }
     }
 
+    private String single(Map<String,List<String>> parameters,String key) {
+        var values=parameters.get(key);
+        return values==null || values.size()!=1 ? null : values.get(0);
+    }
     private boolean hasText(String value) {
         return value != null && !value.trim().isEmpty();
     }

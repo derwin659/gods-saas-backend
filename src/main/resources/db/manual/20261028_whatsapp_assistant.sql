@@ -1,6 +1,7 @@
 -- Pilot is disabled by default. Apply manually before enabling whatsapp.assistant.enabled.
 CREATE TABLE IF NOT EXISTS whatsapp_assistant_session (
     phone varchar(20) PRIMARY KEY,
+    destination_phone varchar(20),
     tenant_id bigint REFERENCES tenant(tenant_id),
     draft text,
     confirmation_code varchar(12),

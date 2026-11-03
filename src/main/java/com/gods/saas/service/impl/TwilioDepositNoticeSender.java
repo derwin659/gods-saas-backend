@@ -16,21 +16,37 @@ import java.util.*;
 @RequiredArgsConstructor
 public class TwilioDepositNoticeSender {
     private final ObjectMapper mapper;
+    private final WhatsappBusinessSenderService businessSenders;
     @Value("${whatsapp.twilio.account-sid:}") private String accountSid;
     @Value("${whatsapp.twilio.auth-token:}") private String token;
     @Value("${whatsapp.twilio.from-number:}") private String from;
     @Value("${whatsapp.assistant.deposit-status-content-sid:}") private String contentSid;
     public String send(String phone,String body,Instant lastInbound) throws Exception {
-        var form=messageForm(phone,body,lastInbound);
+        return send(null,null,phone,body,lastInbound);
+    }
+    public String send(Long tenantId,String origin,String phone,String body,Instant lastInbound) throws Exception {
+        var outbound=outbound(tenantId,origin);
+        var form=messageForm(phone,body,lastInbound,outbound);
+        String outboundAccount=outbound.accountSid();
+        String outboundToken=outbound.authToken();
         var factory=new SimpleClientHttpRequestFactory();factory.setConnectTimeout(2000);factory.setReadTimeout(8000);
         JsonNode response=RestClient.builder().requestFactory(factory).baseUrl("https://api.twilio.com").build().post()
-                .uri("/2010-04-01/Accounts/"+accountSid+"/Messages.json").headers(h -> h.setBasicAuth(accountSid,token))
+                .uri("/2010-04-01/Accounts/"+outboundAccount+"/Messages.json").headers(h -> h.setBasicAuth(outboundAccount,outboundToken))
                 .contentType(MediaType.APPLICATION_FORM_URLENCODED).body(form).retrieve().body(JsonNode.class);
         if (response==null || !response.path("sid").asText().matches("SM[0-9a-fA-F]{32}")) throw new IllegalStateException("INVALID_TWILIO_RESPONSE");
         return response.path("sid").asText();
     }
 
     org.springframework.util.LinkedMultiValueMap<String,String> messageForm(String phone,String body,Instant lastInbound) throws Exception {
+        return messageForm(phone,body,lastInbound,outbound(null,null));
+    }
+    WhatsappBusinessSenderService.Connection outbound(Long tenantId,String origin) {
+        if (origin==null || origin.isBlank() || businessSenders.isSharedDestination(origin))
+            return new WhatsappBusinessSenderService.Connection(null,from,accountSid,token,"",contentSid);
+        return businessSenders.forOrigin(tenantId,origin).orElseThrow(() -> new IllegalStateException("SENDER_NOT_PROVISIONED"));
+    }
+    org.springframework.util.LinkedMultiValueMap<String,String> messageForm(String phone,String body,Instant lastInbound,WhatsappBusinessSenderService.Connection outbound) throws Exception {
+        String accountSid=outbound.accountSid(),token=outbound.authToken(),from=outbound.phone(),contentSid=outbound.depositContentSid();
         if (accountSid==null || !accountSid.matches("AC[0-9a-fA-F]{32}") || token==null || token.isBlank() || from==null || from.isBlank()) throw new IllegalStateException("TWILIO_NOT_CONFIGURED");
         var form=new LinkedMultiValueMap<String,String>();
         form.add("To","whatsapp:"+phone);form.add("From",from.startsWith("whatsapp:")?from:"whatsapp:"+from);

@@ -41,6 +41,7 @@ public class WhatsappAssistantService {
     private final WhatsappDepositService deposits;
     private final WhatsappCustomerOnboarding onboarding;
     private final WhatsappCustomerActions actions;
+    private final WhatsappBusinessSenderService businessSenders;
     @Value("${whatsapp.assistant.enabled:false}") private boolean enabled;
     @Value("${whatsapp.assistant.tenant-ids:}") private String tenantIds;
     @Value("${whatsapp.twilio.from-number:}") private String fromNumber;
@@ -56,7 +57,10 @@ public class WhatsappAssistantService {
     private String replyInternal(String from,String to,String body,String messageSid,Map<String,String> media) throws Exception {
         if (media.containsKey("MediaUrl0") && (body==null || body.isBlank())) body="COMPROBANTE";
         if (!enabled) return skipped("disabled");
-        if (!correctDestination(to)) return skipped("destination_mismatch");
+        var ownDestination=businessSenders.inbound(to);
+        Long destinationTenant=ownDestination.map(WhatsappBusinessSenderService.Connection::tenantId).orElse(null);
+        if (!correctDestination(to) && destinationTenant==null) return skipped("destination_mismatch");
+        if (destinationTenant!=null && !allowed(destinationTenant)) return skipped("tenant_not_enabled");
         if (from == null || !PHONE.matcher(from).matches()) return skipped("invalid_sender");
         if (messageSid == null || !SID.matcher(messageSid).matches()
                 || body == null || body.isBlank() || body.length()>1200) return skipped("invalid_message");
@@ -65,7 +69,18 @@ public class WhatsappAssistantService {
         if (jdbc.update("insert into whatsapp_assistant_message(message_sid) values (?) on conflict do nothing", messageSid) == 0)
             return skipped("duplicate_message");
         jdbc.update("insert into whatsapp_assistant_session(phone) values (?) on conflict do nothing", phone);
-        Map<String, Object> session = jdbc.queryForMap("select * from whatsapp_assistant_session where phone=? for update", phone);
+        Map<String,Object> session=new org.springframework.util.LinkedCaseInsensitiveMap<>();
+        session.putAll(jdbc.queryForMap("select * from whatsapp_assistant_session where phone=? for update",phone));
+        String destination=WhatsappBusinessSenderService.normalizePhone(to);
+        String previousDestination=Objects.toString(session.get("destination_phone"),"");
+        boolean channelChanged=!previousDestination.isBlank() && !previousDestination.equals(destination);
+        boolean businessMismatch=destinationTenant!=null && session.get("tenant_id")!=null
+                && !Objects.equals(destinationTenant,((Number)session.get("tenant_id")).longValue());
+        if (channelChanged || businessMismatch || previousDestination.isBlank() && destinationTenant!=null) {
+            jdbc.update("update whatsapp_assistant_session set tenant_id=null,draft=null,confirmation_code=null,quote=null,expires_at=null,last_turn_at=null where phone=?",phone);
+            session.clear();
+        }
+        jdbc.update("update whatsapp_assistant_session set destination_phone=? where phone=?",destination,phone);
         Instant now = Instant.now();
         Object last = session.get("last_turn_at");
         // Receipts often arrive immediately after confirmation or an operation reference.
@@ -77,6 +92,7 @@ public class WhatsappAssistantService {
         jdbc.update("update whatsapp_assistant_session set last_turn_at=? where phone=?", Timestamp.from(now), phone);
         String text = body.trim();
         Set<Long> permitted=Arrays.stream(tenantIds.split(",")).map(String::trim).filter(s -> s.matches("[0-9]{1,18}")).map(Long::valueOf).collect(java.util.stream.Collectors.toSet());
+        if (destinationTenant!=null) permitted=Set.of(destinationTenant);
         String paymentReply=deposits.inbound(phone,text,messageSid,media,permitted);
         if (paymentReply!=null) return paymentReply;
         ObjectNode oldRoot = draft(session);
@@ -84,6 +100,13 @@ public class WhatsappAssistantService {
         if ("SALIR".equalsIgnoreCase(text)) {
             jdbc.update("update whatsapp_assistant_session set tenant_id=null,draft=null,confirmation_code=null,quote=null,expires_at=null where phone=?", phone);
             return "Conversacion cerrada. Para volver escribe HOLA.";
+        }
+        if (destinationTenant!=null) {
+            boolean switching=text.toUpperCase(Locale.ROOT).startsWith("GODS ")
+                    || normalize(text).matches("^(quiero reservar en|quiero una cita en|reservar en) .+")
+                    || Set.of("cambiar negocio","otro negocio","cambiar barberia","otra barberia").contains(normalize(text));
+            if (switching || session.get("tenant_id")==null || session.get("expires_at")==null || instant(session.get("expires_at")).isBefore(now))
+                return onboarding.replyForTenant(phone,text,switching ? mapper.createObjectNode() : oldRoot,now,destinationTenant);
         }
         if (text.toUpperCase(Locale.ROOT).startsWith("GODS ")) {
             return onboarding.reply(phone,text.substring(5).trim(),mapper.createObjectNode(),now);
@@ -229,12 +252,16 @@ public class WhatsappAssistantService {
         boolean active = false;
         try { subscriptions.validateSubscriptionActive(tenantId); active = true; }
         catch (RuntimeException ignored) { /* Return inactive status, never unlock an expired subscription. */ }
-        boolean ready = enabled && allowed(tenantId) && limit > 0 && active;
+        var senderSelection=businessSenders.selection(tenantId);
+        boolean ready = enabled && allowed(tenantId) && limit > 0 && active && !senderSelection.effectiveSenderPhone().isBlank();
         int used = ready ? usage.used(tenantId, month) : 0;
         var result = new java.util.LinkedHashMap<String,Object>(Map.of("enabled", ready, "plan", sub.getPlan(), "monthlyTurns", limit,
                 "usedTurns", used, "remainingTurns", Math.max(0, limit - used), "month", month, "aiConfigured", interpreter.configured()));
         String code=tenants.findById(tenantId).map(Tenant::getCodigo).orElse("");
-        String sender=Objects.toString(fromNumber, "").replaceFirst("^whatsapp:", "");
+        String sender=senderSelection.effectiveSenderPhone();
+        result.put("senderMode",senderSelection.senderMode());
+        result.put("effectiveSenderMode",senderSelection.effectiveSenderMode());
+        result.put("businessConnectionStatus",senderSelection.businessConnectionStatus());
         result.put("businessCode",code);
         result.put("bookingWhatsappUrl",ready && sender.matches("\\+[1-9][0-9]{7,14}") && !code.isBlank()
                 ? "https://wa.me/"+sender.substring(1)+"?text="+java.net.URLEncoder.encode("GODS "+code,java.nio.charset.StandardCharsets.UTF_8) : "");

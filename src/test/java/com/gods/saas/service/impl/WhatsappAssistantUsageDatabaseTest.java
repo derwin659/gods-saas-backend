@@ -89,7 +89,7 @@ class WhatsappAssistantUsageDatabaseTest {
         var time=mock(TenantTimeService.class);
         var policy=mock(WhatsappAssistantPolicy.class);
         var interpreter=mock(WhatsappAssistantInterpreter.class);
-        var service=new WhatsappAssistantService(jdbc,new ObjectMapper(),customers,tenants,loyalty,promotions,subscriptions,bookings,time,policy,interpreter,usage,mock(WhatsappDepositService.class),mock(WhatsappCustomerOnboarding.class),mock(WhatsappCustomerActions.class));
+        var service=new WhatsappAssistantService(jdbc,new ObjectMapper(),customers,tenants,loyalty,promotions,subscriptions,bookings,time,policy,interpreter,usage,mock(WhatsappDepositService.class),mock(WhatsappCustomerOnboarding.class),mock(WhatsappCustomerActions.class),mock(WhatsappBusinessSenderService.class));
         ReflectionTestUtils.setField(service,"enabled",true);
         ReflectionTestUtils.setField(service,"tenantIds","1");
         ReflectionTestUtils.setField(service,"fromNumber","+15005550006");
@@ -125,5 +125,13 @@ class WhatsappAssistantUsageDatabaseTest {
         assertNull(service.reply("whatsapp:+51999999999","whatsapp:+15005550006","si","SM"+String.format("%032x",6)));
         verify(bookings,times(1)).createAppointment(eq(1L),eq(7L),any());
         verify(interpreter,never()).interpret(anyString(),anyString());
+    }
+    @Test void businessSenderMigrationCanBeAppliedTwiceWithoutDepositsEnabled() throws Exception {
+        try (var connection=context.getBean(DataSource.class).getConnection()) {
+            ScriptUtils.executeSqlScript(connection,new ClassPathResource("db/manual/20261103_whatsapp_business_sender.sql"));
+            ScriptUtils.executeSqlScript(connection,new ClassPathResource("db/manual/20261103_whatsapp_business_sender.sql"));
+        }
+        jdbc.update("insert into whatsapp_assistant_session(phone,destination_phone) values (?,?)","+51999999999","+51911111111");
+        assertEquals("+51911111111",jdbc.queryForObject("select destination_phone from whatsapp_assistant_session where phone=?",String.class,"+51999999999"));
     }
 }

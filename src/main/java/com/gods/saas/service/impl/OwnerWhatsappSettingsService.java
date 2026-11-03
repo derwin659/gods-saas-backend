@@ -40,6 +40,7 @@ public class OwnerWhatsappSettingsService {
 
     private final TenantSettingsRepository tenantSettingsRepository;
     private final CentralWhatsappSenderService centralWhatsappSenderService;
+    private final WhatsappBusinessSenderService businessSenders;
 
     @Value("${whatsapp.twilio.enabled:false}")
     private boolean twilioEnabled;
@@ -62,7 +63,13 @@ public class OwnerWhatsappSettingsService {
             senderPhone = safeText(twilioFromNumber);
         }
 
+        var sender = businessSenders.selection(tenantId, config);
         return WhatsappSettingsResponse.builder()
+                .senderMode(sender.senderMode())
+                .businessPhone(sender.businessPhone())
+                .businessConnectionStatus(sender.businessConnectionStatus())
+                .effectiveSenderMode(sender.effectiveSenderMode())
+                .effectiveSenderPhone(sender.effectiveSenderPhone())
                 .postSaleMessageEnabled(readBoolean(config, POST_SALE_MESSAGE_ENABLED_KEY, true))
                 .includeAppDownloadLink(readBoolean(config, INCLUDE_APP_DOWNLOAD_LINK_KEY, true))
                 .includeBookingLink(readBoolean(config, INCLUDE_BOOKING_LINK_KEY, true))
@@ -95,6 +102,23 @@ public class OwnerWhatsappSettingsService {
         Map<String, Object> config = settings.getScheduleConfig() == null
                 ? new HashMap<>()
                 : new HashMap<>(settings.getScheduleConfig());
+
+        if (request.getSenderMode() != null) {
+            String mode=request.getSenderMode().trim().toUpperCase(java.util.Locale.ROOT);
+            if (!java.util.Set.of("SHARED","BUSINESS").contains(mode))
+                throw new IllegalArgumentException("Selecciona el numero de SuperGods o el numero propio del negocio.");
+            config.put(WhatsappBusinessSenderService.MODE_KEY,mode);
+        }
+        if (request.getBusinessPhone() != null) {
+            String raw=request.getBusinessPhone().trim();
+            String phone=WhatsappBusinessSenderService.normalizePhone(raw);
+            if (!raw.isEmpty() && phone==null)
+                throw new IllegalArgumentException("Ingresa el numero propio con codigo de pais, por ejemplo +51987654321.");
+            config.put(WhatsappBusinessSenderService.PHONE_KEY,phone==null ? "" : phone);
+        }
+        if ("BUSINESS".equals(config.get(WhatsappBusinessSenderService.MODE_KEY))
+                && WhatsappBusinessSenderService.normalizePhone(java.util.Objects.toString(config.get(WhatsappBusinessSenderService.PHONE_KEY),""))==null)
+            throw new IllegalArgumentException("Ingresa el WhatsApp del negocio para solicitar la conexion.");
 
         putBoolean(config, POST_SALE_MESSAGE_ENABLED_KEY, request.getPostSaleMessageEnabled());
         putBoolean(config, INCLUDE_APP_DOWNLOAD_LINK_KEY, request.getIncludeAppDownloadLink());

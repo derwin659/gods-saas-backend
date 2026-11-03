@@ -72,6 +72,7 @@ public class WhatsappDepositService {
         if (start.isBefore(deadline)) deadline=start;
         jdbc.update("insert into whatsapp_assistant_deposit(appointment_id,tenant_id,customer_id,phone,state,expires_at,last_inbound_at,requires_reference,instructions) values (?,?,?,?,'AWAITING_EVIDENCE',?,?,?,?)",
                 appointment.getId(),tenantId,customerId,phone,Timestamp.from(deadline),Timestamp.from(Instant.now()),Boolean.TRUE.equals(method.getRequiresOperationCode()),offer.details());
+        jdbc.update("update whatsapp_assistant_deposit set sender_phone=(select destination_phone from whatsapp_assistant_session where phone=?) where appointment_id=?",phone,appointment.getId());
         return "Horario apartado para la reserva #"+appointment.getId()+" hasta "+deadline.atZone(time.getZone(tenantId)).toLocalTime().withSecond(0).withNano(0)
                 +". Aun no esta confirmada.\n"+offer.details()
                 +(Boolean.TRUE.equals(method.getRequiresOperationCode())
@@ -93,6 +94,12 @@ public class WhatsappDepositService {
         if (rows.isEmpty()) return hasMedia?"Primero elige y confirma el resumen de una reserva con adelanto. No puedo vincular esta imagen a una cita.":null;
         var row=rows.get(0);Long tenantId=id(row,"tenant_id"),customerId=id(row,"customer_id"),appointmentId=id(row,"appointment_id");
         if (!allowedTenants.contains(tenantId) || verifiedCustomer(tenantId,customerId,phone)==null) return "No puedo vincular el comprobante a tu cuenta verificada. Contacta al negocio.";
+        String origin=Objects.toString(row.get("sender_phone"),"");
+        if (!origin.isBlank()) {
+            var channels=jdbc.queryForList("select destination_phone from whatsapp_assistant_session where phone=?",phone);
+            String current=channels.isEmpty()?"":Objects.toString(channels.get(0).get("destination_phone"),"");
+            if (!origin.equals(current)) return "Continua el adelanto en el mismo chat donde apartaste la reserva. No vuelvas a pagar.";
+        }
         jdbc.update("update whatsapp_assistant_deposit set last_inbound_at=? where appointment_id=?",Timestamp.from(Instant.now()),appointmentId);
         String state=row.get("state").toString();
         if (!hasMedia && !status && Set.of("PAID","EXPIRED").contains(state) && !explicitReference(clean)) return null;
@@ -109,7 +116,7 @@ public class WhatsappDepositService {
         }
         if (hasMedia) {
             String type=media.get("MediaContentType0"),url=media.get("MediaUrl0");
-            if (!Set.of("image/jpeg","image/png","image/webp").contains(Objects.toString(type,"")) || !downloader.validSource(url,sid)) return "Envia el comprobante como una foto JPG, PNG o WEBP, de hasta 5 MB.";
+            if (!Set.of("image/jpeg","image/png","image/webp").contains(Objects.toString(type,"")) || !(origin.isBlank() ? downloader.validSource(url,sid) : downloader.validSource(url,sid,tenantId,origin))) return "Envia el comprobante como una foto JPG, PNG o WEBP, de hasta 5 MB.";
             Integer pending=jdbc.queryForObject("select count(*) from whatsapp_assistant_deposit_media where appointment_id=? and state in ('PENDING','PROCESSING')",Integer.class,appointmentId);
             if (pending!=null && pending>0) return "Tu captura anterior todavia se esta procesando. Espera la confirmacion antes de enviar otra.";
             jdbc.update("insert into whatsapp_assistant_deposit_media(message_sid,appointment_id,media_url,content_type) values (?,?,?,?) on conflict do nothing",sid,appointmentId,url,type);
