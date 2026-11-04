@@ -20,6 +20,7 @@ public class WhatsappBusinessConnection {
     @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(columnDefinition="jsonb")
     private java.util.Map<String,String> saleReceiptContentSids;
+    @Column(name="reminder60_content_sid")
     private String reminder60ContentSid;
     private Instant updatedAt=Instant.now();
     @Version private Long version;
