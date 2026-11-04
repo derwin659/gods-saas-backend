@@ -11,6 +11,7 @@ public interface NotificationDeliveryRepository extends JpaRepository<Notificati
 
     boolean existsByNotification_IdAndChannel(Long notificationId, NotificationChannel channel);
 
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
     List<NotificationDelivery> findTop100ByChannelAndStatusOrderByCreatedAtAsc(
             NotificationChannel channel,
             NotificationDeliveryStatus status

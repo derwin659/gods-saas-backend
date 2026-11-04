@@ -50,6 +50,7 @@ public class WhatsappNotificationSenderTwilioImpl {
     private final WhatsappBusinessSenderService businessSenders;
     private final WhatsappRecipientResolver recipientResolver;
     private final OwnerBookingWhatsappPayloadFactory ownerBookingPayloadFactory;
+    private final CustomerWhatsappTemplateFactory customerTemplateFactory;
 
     public String send(Notification notification) {
         if (!enabled) {
@@ -105,6 +106,8 @@ public class WhatsappNotificationSenderTwilioImpl {
                 .from(notification)
                 .orElse(null);
 
+        var customerPayload = customerTemplateFactory.from(notification, own).orElse(null);
+
         if (accountSid == null) {
             throw new RuntimeException("Falta configurar TWILIO_ACCOUNT_SID");
         }
@@ -121,7 +124,10 @@ public class WhatsappNotificationSenderTwilioImpl {
             String url = "https://api.twilio.com/2010-04-01/Accounts/" + urlEncode(accountSid) + "/Messages.json";
             StringBuilder body = new StringBuilder();
             appendForm(body, "To", "whatsapp:" + to);
-            if (ownerBookingPayload != null) {
+            if (customerPayload != null) {
+                appendForm(body, "ContentSid", customerPayload.contentSid());
+                appendForm(body, "ContentVariables", customerPayload.variables());
+            } else if (ownerBookingPayload != null) {
                 if (ownerBookingContentSid == null) {
                     throw new RuntimeException(
                             "Falta configurar TWILIO_OWNER_BOOKING_CONTENT_SID para avisos de reserva"
@@ -146,12 +152,13 @@ public class WhatsappNotificationSenderTwilioImpl {
 
             HttpRequest request = HttpRequest.newBuilder()
                     .uri(URI.create(url))
+                    .timeout(java.time.Duration.ofSeconds(20))
                     .header("Authorization", "Basic " + basicAuth(accountSid, authToken))
                     .header("Content-Type", "application/x-www-form-urlencoded")
                     .POST(HttpRequest.BodyPublishers.ofString(body.toString()))
                     .build();
 
-            HttpResponse<String> response = HttpClient.newHttpClient().send(
+            HttpResponse<String> response = HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(10)).build().send(
                     request,
                     HttpResponse.BodyHandlers.ofString()
             );

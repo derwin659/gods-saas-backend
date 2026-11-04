@@ -1,0 +1,14 @@
+{
+  "name": "supergods_postventa_points_v2",
+  "language": "es",
+  "category": "UTILITY",
+  "variant": "points",
+  "body": "Hola {{1}}, gracias por tu visita a {{2}}.\n\nPuntos antes de esta compra: {{3}}.\nGanaste +{{4}} puntos por tu compra.\nAhora tienes {{5}} puntos disponibles.\n\nTe esperamos pronto.",
+  "variables": {
+    "1": "Ana",
+    "2": "Barberia Gods",
+    "3": "270",
+    "4": "150",
+    "5": "420"
+  }
+}

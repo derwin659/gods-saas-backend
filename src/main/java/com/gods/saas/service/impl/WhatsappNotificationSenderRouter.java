@@ -49,6 +49,9 @@ public class WhatsappNotificationSenderRouter implements WhatsappNotificationSen
         if (businessSenders.selection(notification.getTenant().getId(),config).businessConnected()) {
             return twilioSender.send(notification);
         }
+        if ("BUSINESS".equals(config.get(WhatsappBusinessSenderService.MODE_KEY))) {
+            throw new IllegalStateException("El numero del negocio no esta conectado; no se cambia de remitente para este envio.");
+        }
         if ("MANUAL".equals(provider)) {
             throw new RuntimeException("WhatsApp está en modo MANUAL. No se envía automáticamente.");
         }

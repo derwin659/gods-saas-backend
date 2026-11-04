@@ -15,6 +15,10 @@ import java.util.Optional;
 
 @Repository
 public interface SaleRepository extends JpaRepository<Sale, Long> {
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("select s from Sale s where s.id=:saleId and s.tenant.id=:tenantId and s.branch.id=:branchId")
+    Optional<Sale> findForPaymentApproval(@Param("saleId") Long saleId, @Param("tenantId") Long tenantId, @Param("branchId") Long branchId);
+
 
     @Query(value = """
         select distinct s.sale_id

@@ -1,0 +1,13 @@
+Hola {{1}}, gracias por tu visita a {{2}}.
+
+Puntos antes de esta compra: {{3}}.
+Ganaste +{{4}} puntos por tu compra.
+Ahora tienes {{5}} puntos disponibles.
+
+Tambien puedes reservar tu proxima cita desde la app o por este link y seguir ganando puntos:
+{{6}}
+
+Tambien puedes reservar por WhatsApp con nuestro asistente. Abre este enlace y envia: {{7}}
+{{8}}
+
+Te esperamos pronto.

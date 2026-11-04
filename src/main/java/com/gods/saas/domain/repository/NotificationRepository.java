@@ -10,6 +10,9 @@ import java.util.Optional;
 
 @Repository
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
+    boolean existsByTenant_IdAndCustomer_IdAndTypeAndReferenceTypeAndReferenceIdAndAppointmentStart(
+        Long tenantId, Long customerId, NotificationType type, String referenceType, Long referenceId, java.time.LocalDateTime appointmentStart);
+
 
     List<Notification> findByTenant_IdAndCustomer_IdOrderByCreatedAtDesc(Long tenantId, Long customerId);
 

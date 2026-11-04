@@ -12,7 +12,6 @@ import com.gods.saas.service.impl.impl.LoyaltyService;
 import com.gods.saas.service.impl.impl.SaleService;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import com.gods.saas.service.impl.impl.NotificationService;
@@ -42,18 +41,10 @@ public class CashSaleServiceImpl implements CashSaleService {
     private static final BigDecimal DEFAULT_POINTS_PER_CURRENCY_UNIT = BigDecimal.valueOf(5);
     private static final String POINTS_PER_CURRENCY_UNIT_KEY = "loyaltyPointsPerCurrencyUnit";
     private static final String WHATSAPP_POST_SALE_MESSAGE_ENABLED_KEY = "whatsappPostSaleMessageEnabled";
-    private static final String WHATSAPP_INCLUDE_APP_DOWNLOAD_LINK_KEY = "whatsappIncludeAppDownloadLink";
-    private static final String WHATSAPP_INCLUDE_BOOKING_LINK_KEY = "whatsappIncludeBookingLink";
-    private static final String WHATSAPP_APP_DOWNLOAD_URL_KEY = "whatsappAppDownloadUrl";
     private static final PhoneNumberUtil PHONE_NUMBER_UTIL = PhoneNumberUtil.getInstance();
     private final NotificationService notificationService;
-    private final PostSaleWhatsappAssistantInvitation assistantInvitation;
-
-    @Value("${app.mobile.download-url:https://play.google.com/store/apps/details?id=com.gods.barberia}")
-    private String mobileAppDownloadUrl;
-
-    @Value("${app.public.base-url:https://www.supergodsapp.com}")
-    private String publicBaseUrl;
+    private final PostSaleWhatsappMessageFactory postSaleMessages;
+    private final WhatsappBusinessSenderService businessSenders;
 
     private final SaleRepository saleRepository;
     private final CashRegisterRepository cashRegisterRepository;
@@ -162,7 +153,7 @@ public class CashSaleServiceImpl implements CashSaleService {
         }
 
         if (!"PENDING_VALIDATION".equals(resolveValidationStatus(savedSale))) {
-            String whatsappMessage = buildPostSaleWhatsappMessage(
+            String whatsappMessage = capturePostSaleWhatsappMessage(
                     savedSale,
                     response.getPuntosGanados() == null ? 0 : response.getPuntosGanados()
             );
@@ -171,7 +162,7 @@ public class CashSaleServiceImpl implements CashSaleService {
                 notificationService.notifySaleReceipt(
                         savedSale,
                         whatsappMessage,
-                        shouldNotifyOwnersPendingWhatsapp(savedSale)
+                        shouldExposeManualWhatsappUrl(savedSale) && shouldNotifyOwnersPendingWhatsapp(savedSale)
                 );
             }
         }
@@ -259,7 +250,7 @@ public class CashSaleServiceImpl implements CashSaleService {
     public SaleResponse approveSalePayment(Long tenantId, Long branchId, Long userId, Long saleId) {
         adminPermissionService.checkPermission("CASH_APPROVE_SALES");
 
-        Sale sale = saleRepository.findByIdAndTenant_IdAndBranch_Id(saleId, tenantId, branchId)
+        Sale sale = saleRepository.findForPaymentApproval(saleId, tenantId, branchId)
                 .orElseThrow(() -> new RuntimeException("Venta no encontrada"));
 
         if (!"PENDING_VALIDATION".equals(resolveValidationStatus(sale))) {
@@ -277,6 +268,11 @@ public class CashSaleServiceImpl implements CashSaleService {
         Sale saved = saleRepository.save(sale);
 
         int puntosGanados = grantPointsAfterApproval(saved, validator);
+        String message = capturePostSaleWhatsappMessage(saved, puntosGanados);
+        if (message != null && !message.isBlank()) {
+            notificationService.notifySaleReceipt(saved, message,
+                    shouldExposeManualWhatsappUrl(saved) && shouldNotifyOwnersPendingWhatsapp(saved));
+        }
 
         return mapResponse(saved, puntosGanados);
     }
@@ -752,6 +748,7 @@ public class CashSaleServiceImpl implements CashSaleService {
         String customerWhatsappMessage = pendingValidation
                 ? null
                 : buildPostSaleWhatsappMessage(sale, pointsValue);
+        boolean automaticWhatsapp = sale.getTenant() != null && businessSenders.selection(sale.getTenant().getId(), resolveWhatsappConfig(sale.getTenant())).businessConnected();
         String customerWhatsappUrl = shouldExposeManualWhatsappUrl(sale)
                 ? buildCustomerWhatsappUrl(sale, customerWhatsappMessage)
                 : null;
@@ -762,7 +759,8 @@ public class CashSaleServiceImpl implements CashSaleService {
                 .customerId(sale.getCustomer() != null ? sale.getCustomer().getId() : null)
                 .customerName(buildCustomerFullName(sale.getCustomer()))
                 .customerPhone(resolveCustomerPhone(sale.getCustomer()))
-                .customerWhatsappMessage(customerWhatsappMessage)
+                .customerWhatsappMessage(automaticWhatsapp ? null : customerWhatsappMessage)
+                .customerWhatsappAutomatic(automaticWhatsapp)
                 .customerWhatsappUrl(customerWhatsappUrl)
                 .appointmentId(sale.getAppointment() != null ? sale.getAppointment().getId() : null)
                 .metodoPago(sale.getMetodoPago())
@@ -828,75 +826,17 @@ public class CashSaleServiceImpl implements CashSaleService {
 
 
     private String buildPostSaleWhatsappMessage(Sale sale, int pointsEarned) {
-        if (sale == null || sale.getCustomer() == null) {
-            return null;
-        }
+        if (sale == null || sale.getCustomer() == null || sale.getTenant() == null) return null;
+        if (!readBooleanConfig(resolveWhatsappConfig(sale.getTenant()), WHATSAPP_POST_SALE_MESSAGE_ENABLED_KEY, true)) return null;
+        return postSaleMessages.forSale(sale, pointsEarned).message();
+    }
 
-        Map<String, Object> whatsappConfig = resolveWhatsappConfig(sale.getTenant());
-        if (!readBooleanConfig(whatsappConfig, WHATSAPP_POST_SALE_MESSAGE_ENABLED_KEY, true)) {
-            return null;
-        }
-
-        String tenantName = sale.getTenant() != null ? cleanText(sale.getTenant().getNombre()) : null;
-        if (tenantName == null) {
-            tenantName = "Super Gods";
-        }
-
-        String customerName = buildCustomerFirstName(sale.getCustomer());
-        int balance = resolveCustomerPointsBalance(sale);
-        String tenantCode = sale.getTenant() == null ? null : cleanText(sale.getTenant().getCodigo());
-        String bookingUrl = buildBookingUrl(sale);
-        boolean includeAppLink = readBooleanConfig(whatsappConfig, WHATSAPP_INCLUDE_APP_DOWNLOAD_LINK_KEY, true);
-        boolean includeBookingLink = readBooleanConfig(whatsappConfig, WHATSAPP_INCLUDE_BOOKING_LINK_KEY, true);
-
-        StringBuilder message = new StringBuilder();
-        message.append("Hola ");
-        message.append(customerName == null ? "cliente" : customerName);
-        message.append(", gracias por tu visita a ");
-        message.append(tenantName);
-        message.append(".");
-
-        if (pointsEarned > 0) {
-            message.append("\n\nGanaste +");
-            message.append(pointsEarned);
-            message.append(" puntos por tu compra.");
-        }
-
-        if (balance > 0) {
-            message.append("\nAhora tienes ");
-            message.append(balance);
-            message.append(" puntos disponibles.");
-        }
-
-        if (includeAppLink) {
-            message.append("\n\nDescarga la app movil de Super Gods para ver tus puntos, premios y reservas:");
-            message.append("\n");
-            message.append(resolveMobileAppDownloadUrl(whatsappConfig));
-
-            if (tenantCode != null) {
-                message.append("\n\nPara ver tus puntos en la app:");
-                message.append("\n1. Ingresa como cliente.");
-                message.append("\n2. Coloca el codigo del negocio: ");
-                message.append(tenantCode);
-                message.append("\n3. Revisa tus puntos, premios y proximas reservas.");
-            }
-        }
-
-        if (includeBookingLink && bookingUrl != null) {
-            message.append("\n\nTambien puedes reservar tu proxima cita desde la app o por este link y seguir ganando puntos:");
-            message.append("\n");
-            message.append(bookingUrl);
-        }
-
-        if (includeBookingLink && sale.getTenant()!=null) {
-            try {
-                message.append(assistantInvitation.build(sale.getTenant().getId()));
-            } catch (RuntimeException unavailable) {
-                // Booking assistance is optional; keep the receipt and sale available.
-            }
-        }
-        message.append("\n\nTe esperamos pronto.");
-        return message.toString();
+    private String capturePostSaleWhatsappMessage(Sale sale, int earned) {
+        if (sale == null || sale.getCustomer() == null || sale.getTenant() == null) return null;
+        var snapshot = postSaleMessages.forSale(sale, earned);
+        sale.setWhatsappReceiptSnapshot(snapshot.stored());
+        saleRepository.save(sale);
+        return readBooleanConfig(resolveWhatsappConfig(sale.getTenant()), WHATSAPP_POST_SALE_MESSAGE_ENABLED_KEY, true) ? snapshot.message() : null;
     }
 
     private String buildCustomerWhatsappUrl(Sale sale, String message) {
@@ -915,6 +855,7 @@ public class CashSaleServiceImpl implements CashSaleService {
 
     private boolean shouldExposeManualWhatsappUrl(Sale sale) {
         Map<String, Object> whatsappConfig = resolveWhatsappConfig(sale != null ? sale.getTenant() : null);
+        if (sale != null && sale.getTenant() != null && businessSenders.selection(sale.getTenant().getId(), whatsappConfig).businessConnected()) return false;
         String provider = readStringConfig(whatsappConfig, OwnerWhatsappSettingsService.PROVIDER_KEY, "MANUAL")
                 .trim()
                 .toUpperCase(Locale.ROOT);
@@ -1231,19 +1172,6 @@ public class CashSaleServiceImpl implements CashSaleService {
         return false;
     }
 
-    private String buildBookingUrl(Sale sale) {
-        if (sale == null || sale.getTenant() == null) {
-            return null;
-        }
-
-        String code = cleanText(sale.getTenant().getCodigo());
-        if (code == null) {
-            return null;
-        }
-
-        return resolvePublicBaseUrl() + "/reservar/" + code;
-    }
-
     private Map<String, Object> resolveWhatsappConfig(Tenant tenant) {
         if (tenant == null || tenant.getId() == null) {
             return Map.of();
@@ -1285,37 +1213,8 @@ public class CashSaleServiceImpl implements CashSaleService {
         return value == null ? fallback : value;
     }
 
-    private String resolveMobileAppDownloadUrl(Map<String, Object> config) {
-        String url = cleanText(readStringConfig(config, WHATSAPP_APP_DOWNLOAD_URL_KEY));
-        if (url == null) {
-            url = cleanText(mobileAppDownloadUrl);
-        }
-        return url == null ? "https://play.google.com/store/apps/details?id=com.gods.barberia" : url;
-    }
-
-    private String resolvePublicBaseUrl() {
-        String url = cleanText(publicBaseUrl);
-        if (url == null) {
-            return "https://www.supergodsapp.com";
-        }
-        while (url.endsWith("/")) {
-            url = url.substring(0, url.length() - 1);
-        }
-        return url;
-    }
-
     private String resolveCustomerPhone(Customer customer) {
         return customer == null ? null : cleanText(customer.getTelefono());
-    }
-
-    private String buildCustomerFirstName(Customer customer) {
-        String fullName = buildCustomerFullName(customer);
-        if (fullName == null) {
-            return null;
-        }
-
-        String[] parts = fullName.split("\\s+");
-        return parts.length == 0 ? fullName : parts[0];
     }
 
     private String cleanText(String value) {

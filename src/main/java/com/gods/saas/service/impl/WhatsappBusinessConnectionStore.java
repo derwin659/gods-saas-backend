@@ -12,7 +12,7 @@ public class WhatsappBusinessConnectionStore {
         for (var row:repository.findByState("ONLINE")) {
             try {
                 result.add(new WhatsappBusinessSenderService.Connection(row.getTenantId(),row.getPhone(),row.getAccountSid(),
-                    cipher.decrypt(row.getTenantId(),row.getAccountSid(),row.getEncryptedAuthToken()),row.getBookingContentSid(),row.getDepositContentSid()));
+                    cipher.decrypt(row.getTenantId(),row.getAccountSid(),row.getEncryptedAuthToken()),row.getBookingContentSid(),row.getDepositContentSid(),row.getSaleReceiptContentSid(),row.getReminder60ContentSid(),row.getSaleReceiptContentSids()));
             } catch (IllegalStateException invalid) { /* A failed decryption never selects another business. */ }
         }
         return result;

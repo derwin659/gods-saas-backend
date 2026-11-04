@@ -15,6 +15,10 @@ import java.time.LocalDateTime;
 @Builder
 public class Notification {
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private java.util.Map<String,Object> whatsappTemplateSnapshot;
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "notification_id")
@@ -57,6 +61,9 @@ public class Notification {
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
+
+    @Column(name = "appointment_start")
+    private LocalDateTime appointmentStart;
 
     @PrePersist
     void prePersist() {

@@ -28,6 +28,7 @@ public class NotificationDispatchServiceImpl implements NotificationDispatchServ
 
     private final NotificationDeliveryRepository notificationDeliveryRepository;
     private final SubscriptionRepository subscriptionRepository;
+    private final TransactionalWhatsappPolicy transactionalWhatsappPolicy;
     private final PushNotificationSender pushNotificationSender;
     private final WhatsappNotificationSender whatsappNotificationSender;
 
@@ -99,6 +100,12 @@ public class NotificationDispatchServiceImpl implements NotificationDispatchServ
             return;
         }
 
+        if (!transactionalWhatsappPolicy.current(notification, false)) {
+            delivery.setStatus(NotificationDeliveryStatus.SKIPPED);
+            delivery.setErrorMessage("Evento cancelado, reprogramado o fuera de plazo");
+            notificationDeliveryRepository.save(delivery);
+            return;
+        }
         Long tenantId = notification.getTenant().getId();
         String type = notification.getType() != null ? notification.getType().name() : "";
 
@@ -142,9 +149,16 @@ public class NotificationDispatchServiceImpl implements NotificationDispatchServ
             return;
         }
 
+        if (!transactionalWhatsappPolicy.current(notification, true)) {
+            delivery.setStatus(NotificationDeliveryStatus.SKIPPED);
+            delivery.setErrorMessage("Evento cancelado, reprogramado, desactivado o fuera de plazo");
+            notificationDeliveryRepository.save(delivery);
+            return;
+        }
         boolean marketingMessage = isMarketingWhatsapp(notification);
         if (notification.getCustomer() != null
                 && (notification.getCustomer().getWhatsappOptedOutAt() != null
+                || (notification.getType() == com.gods.saas.domain.enums.NotificationType.SALE_RECEIPT && !Boolean.TRUE.equals(notification.getCustomer().getWhatsappTransactionalEnabled()))
                 || (marketingMessage
                     ? !Boolean.TRUE.equals(notification.getCustomer().getWhatsappMarketingEnabled())
                     : !Boolean.TRUE.equals(notification.getCustomer().getWhatsappTransactionalEnabled())))) {
@@ -190,6 +204,7 @@ public class NotificationDispatchServiceImpl implements NotificationDispatchServ
 
     private boolean isMarketingWhatsapp(Notification notification) {
         if (notification == null || notification.getType() == null) return false;
+        if (notification.getType() == com.gods.saas.domain.enums.NotificationType.SALE_RECEIPT) return PostSaleWhatsappMessageFactory.marketing(notification);
         return switch (notification.getType()) {
             case PROMOTION_CREATED, REWARD_CREATED, CAMPAIGN_INACTIVE_15, CAMPAIGN_INACTIVE_30 -> true;
             default -> false;

@@ -11,6 +11,7 @@ import java.util.List;
 
 @Repository
 public interface LoyaltyMovementRepository extends JpaRepository<LoyaltyMovement, Long> {
+    java.util.Optional<LoyaltyMovement> findFirstByTenantIdAndCustomerIdAndOrigenAndReferenciaIdAndTipoOrderByIdAsc(Long tenantId, Long customerId, String origen, Long referenciaId, String tipo);
     List<LoyaltyMovement> findTop10ByTenantIdAndCustomerIdOrderByFechaCreacionDesc(Long tenantId, Long customerId);
 
     @Query(value = """

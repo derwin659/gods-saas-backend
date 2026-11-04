@@ -25,7 +25,16 @@ public class WhatsappBusinessSenderService {
     @Value("${whatsapp.twilio.validate-inbound-signature:true}") private boolean validateSignature=true;
 
     public record Connection(Long tenantId,String phone,String accountSid,String authToken,
-                             String bookingContentSid,String depositContentSid) {
+                             String bookingContentSid,String depositContentSid,String saleReceiptContentSid,String reminder60ContentSid,Map<String,String> saleReceiptContentSids) {
+        public Connection {
+            saleReceiptContentSids = saleReceiptContentSids == null ? Map.of() : Map.copyOf(saleReceiptContentSids);
+        }
+        public Connection(Long tenantId,String phone,String accountSid,String authToken,String bookingContentSid,String depositContentSid,String saleReceiptContentSid,String reminder60ContentSid) {
+            this(tenantId,phone,accountSid,authToken,bookingContentSid,depositContentSid,saleReceiptContentSid,reminder60ContentSid,Map.of());
+        }
+        public Connection(Long tenantId,String phone,String accountSid,String authToken,String bookingContentSid,String depositContentSid) {
+            this(tenantId,phone,accountSid,authToken,bookingContentSid,depositContentSid,null,null,Map.of());
+        }
         @Override public String toString() { return "WhatsApp connection [redacted]"; }
     }
     public record Selection(String senderMode,String businessPhone,String businessConnectionStatus,
@@ -95,10 +104,18 @@ public class WhatsappBusinessSenderService {
                 if (!"CONNECTED".equals(node.path("status").asText())) continue;
                 Long tenant=Long.valueOf(entry.getKey());
                 result.put(tenant,new Connection(tenant,phone,account,token,
-                        node.path("bookingContentSid").asText(),node.path("depositContentSid").asText()));
+                        node.path("bookingContentSid").asText(),node.path("depositContentSid").asText(),
+                        node.path("saleReceiptContentSid").asText(),node.path("reminder60ContentSid").asText(),
+                        templateVariants(node.path("saleReceiptContentSids"))));
             }
             return result;
         } catch (Exception invalid) { return Map.of(); }
+    }
+    private Map<String,String> templateVariants(com.fasterxml.jackson.databind.JsonNode node) {
+        if (!node.isObject()) return Map.of();
+        var variants = new LinkedHashMap<String,String>();
+        node.fields().forEachRemaining(e -> { if (e.getKey().matches("points(?:_app)?(?:_code)?(?:_booking)?(?:_assistant)?") && e.getValue().asText().matches("HX[0-9a-fA-F]{32}")) variants.put(e.getKey(),e.getValue().asText()); });
+        return variants;
     }
     private String text(Map<String,Object> config,String key) {
         return config==null ? "" : Objects.toString(config.get(key),"").trim();

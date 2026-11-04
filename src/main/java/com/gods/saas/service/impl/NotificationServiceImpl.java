@@ -28,6 +28,8 @@ import java.util.Set;
 public class NotificationServiceImpl implements NotificationService {
 
     private final NotificationRepository notificationRepository;
+    private final com.gods.saas.domain.repository.AppointmentRepository appointmentRepository;
+    private final TenantTimeService tenantTimeService;
     private final NotificationDeliveryRepository notificationDeliveryRepository;
     private final UserTenantRoleRepository userTenantRoleRepository;
     private final CustomerRepository customerRepository;
@@ -143,10 +145,20 @@ public class NotificationServiceImpl implements NotificationService {
 
     @Override
     public void notifyBookingReminder(Appointment appointment, NotificationType reminderType) {
-        if (appointment.getCustomer() == null) return;
-
-        if (notificationRepository.existsByTypeAndReferenceTypeAndReferenceId(
-                reminderType, "APPOINTMENT", appointment.getId()
+        if (appointment == null || appointment.getTenant() == null || appointment.getCustomer() == null) return;
+        appointment = appointmentRepository.findForReminder(appointment.getId(), appointment.getTenant().getId()).orElse(null);
+        if (!BookingReminderPolicy.isCandidate(appointment)) return;
+        var start = java.time.LocalDateTime.of(appointment.getFecha(), appointment.getHoraInicio());
+        var now = tenantTimeService.now(appointment.getTenant().getId());
+        if (reminderType == NotificationType.BOOKING_REMINDER_24H) {
+            if (!appointment.getFecha().equals(now.toLocalDate().plusDays(1))) return;
+        } else {
+            int minutes = reminderType == NotificationType.BOOKING_REMINDER_60 ? 60 : 30;
+            var remaining = java.time.Duration.between(now, start);
+            if (remaining.compareTo(java.time.Duration.ofMinutes(minutes)) > 0 || remaining.compareTo(java.time.Duration.ofMinutes(minutes - 5)) < 0) return;
+        }
+        if (notificationRepository.existsByTenant_IdAndCustomer_IdAndTypeAndReferenceTypeAndReferenceIdAndAppointmentStart(
+                appointment.getTenant().getId(), appointment.getCustomer().getId(), reminderType, "APPOINTMENT", appointment.getId(), start
         )) {
             return;
         }
@@ -180,6 +192,8 @@ public class NotificationServiceImpl implements NotificationService {
                 appointment.getId()
         );
 
+        n.setAppointmentStart(start);
+        notificationRepository.save(n);
         registerDefaultChannels(n, shouldIncludeWhatsappForBookingReminder(appointment, reminderType));
     }
 
@@ -595,6 +609,7 @@ public class NotificationServiceImpl implements NotificationService {
             return true;
         }
 
+        if (reminderType == NotificationType.BOOKING_REMINDER_30) return false;
         String key = reminderType == NotificationType.BOOKING_REMINDER_24H
                 ? OwnerWhatsappSettingsService.REMINDER_24H_ENABLED_KEY
                 : OwnerWhatsappSettingsService.REMINDER_60_ENABLED_KEY;
@@ -759,17 +774,22 @@ public class NotificationServiceImpl implements NotificationService {
             return;
         }
 
+        if (!"APPROVED".equalsIgnoreCase(sale.getPaymentValidationStatus())
+                || notificationRepository.existsByTenant_IdAndCustomer_IdAndTypeAndReferenceTypeAndReferenceIdAndAppointmentStart(
+                    sale.getTenant().getId(), sale.getCustomer().getId(), NotificationType.SALE_RECEIPT, "SALE", sale.getId(), null)) return;
         Notification n = saveCustomerNotification(
                 sale.getTenant(),
                 sale.getBranch(),
                 sale.getCustomer(),
                 NotificationType.SALE_RECEIPT,
                 "Comprobante de venta",
-                message,
+                message.length() > 500 ? message.substring(0, 500) : message,
                 "SALE",
                 sale.getId()
         );
 
+        n.setWhatsappTemplateSnapshot(sale.getWhatsappReceiptSnapshot());
+        notificationRepository.save(n);
         registerDefaultChannels(n, true);
         if (notifyOwnersPendingWhatsapp) {
             notifyOwnersSaleReceiptPending(sale);

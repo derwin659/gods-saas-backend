@@ -16,6 +16,11 @@ public class WhatsappBusinessConnection {
     @Column(length=64) private String errorCode;
     private String bookingContentSid;
     private String depositContentSid;
+    private String saleReceiptContentSid;
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
+    @Column(columnDefinition="jsonb")
+    private java.util.Map<String,String> saleReceiptContentSids;
+    private String reminder60ContentSid;
     private Instant updatedAt=Instant.now();
     @Version private Long version;
 }

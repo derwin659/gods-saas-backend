@@ -1,0 +1,16 @@
+{
+  "name": "supergods_postventa_points_assistant_v2",
+  "language": "es",
+  "category": "MARKETING",
+  "variant": "points_assistant",
+  "body": "Hola {{1}}, gracias por tu visita a {{2}}.\n\nPuntos antes de esta compra: {{3}}.\nGanaste +{{4}} puntos por tu compra.\nAhora tienes {{5}} puntos disponibles.\n\nTambien puedes reservar por WhatsApp con nuestro asistente. Abre este enlace y envia: {{6}}\n{{7}}\n\nTe esperamos pronto.",
+  "variables": {
+    "1": "Ana",
+    "2": "Barberia Gods",
+    "3": "270",
+    "4": "150",
+    "5": "420",
+    "6": "RESERVAR",
+    "7": "https://wa.me/51958062847?text=RESERVAR"
+  }
+}

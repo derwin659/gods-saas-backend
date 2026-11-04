@@ -1,0 +1,18 @@
+Hola {{1}}, gracias por tu visita a {{2}}.
+
+Puntos antes de esta compra: {{3}}.
+Ganaste +{{4}} puntos por tu compra.
+Ahora tienes {{5}} puntos disponibles.
+
+Descarga la app movil de Super Gods para ver tus puntos, premios y reservas:
+{{6}}
+
+Para ver tus puntos en la app:
+1. Ingresa como cliente.
+2. Coloca el codigo del negocio: {{7}}
+3. Revisa tus puntos, premios y proximas reservas.
+
+Tambien puedes reservar tu proxima cita desde la app o por este link y seguir ganando puntos:
+{{8}}
+
+Te esperamos pronto.

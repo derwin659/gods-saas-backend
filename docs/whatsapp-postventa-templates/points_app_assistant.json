@@ -1,0 +1,17 @@
+{
+  "name": "supergods_postventa_points_app_assistant_v2",
+  "language": "es",
+  "category": "MARKETING",
+  "variant": "points_app_assistant",
+  "body": "Hola {{1}}, gracias por tu visita a {{2}}.\n\nPuntos antes de esta compra: {{3}}.\nGanaste +{{4}} puntos por tu compra.\nAhora tienes {{5}} puntos disponibles.\n\nDescarga la app movil de Super Gods para ver tus puntos, premios y reservas:\n{{6}}\n\nTambien puedes reservar por WhatsApp con nuestro asistente. Abre este enlace y envia: {{7}}\n{{8}}\n\nTe esperamos pronto.",
+  "variables": {
+    "1": "Ana",
+    "2": "Barberia Gods",
+    "3": "270",
+    "4": "150",
+    "5": "420",
+    "6": "https://play.google.com/store/apps/details?id=com.gods.barberia",
+    "7": "RESERVAR",
+    "8": "https://wa.me/51958062847?text=RESERVAR"
+  }
+}

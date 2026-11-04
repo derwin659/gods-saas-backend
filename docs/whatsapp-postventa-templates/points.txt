@@ -1,0 +1,7 @@
+Hola {{1}}, gracias por tu visita a {{2}}.
+
+Puntos antes de esta compra: {{3}}.
+Ganaste +{{4}} puntos por tu compra.
+Ahora tienes {{5}} puntos disponibles.
+
+Te esperamos pronto.
