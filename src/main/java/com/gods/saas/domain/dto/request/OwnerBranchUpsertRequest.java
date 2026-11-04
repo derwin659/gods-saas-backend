@@ -44,6 +44,10 @@ public record OwnerBranchUpsertRequest(
         Integer walkInEstimatedWaitMinutes,
 
         @Size(max = 200, message = "El mensaje sin reserva no puede exceder 200 caracteres")
-        String walkInMessage
+        String walkInMessage,
+
+        @Size(max = 1000, message = "El enlace de Google no puede superar 1000 caracteres")
+        String googleReviewUrl,
+        Boolean googleReviewWhatsappEnabled
 ) {
 }

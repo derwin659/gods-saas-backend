@@ -77,6 +77,7 @@ public class OwnerBranchService {
                 .fechaCreacion(LocalDateTime.now())
                 .build();
 
+        updateGoogleReviewSettings(branch, request.googleReviewUrl(), request.googleReviewWhatsappEnabled());
         Branch saved = branchRepository.save(branch);
         return toResponse(saved);
     }
@@ -105,6 +106,7 @@ public class OwnerBranchService {
         branch.setWalkInPaused(Boolean.TRUE.equals(request.walkInPaused()));
         branch.setWalkInEstimatedWaitMinutes(normalizeWalkInWait(request.walkInEstimatedWaitMinutes()));
         branch.setWalkInMessage(normalizeNullable(request.walkInMessage()));
+        updateGoogleReviewSettings(branch, request.googleReviewUrl(), request.googleReviewWhatsappEnabled());
 
         if (request.activo() != null) {
             branch.setActivo(request.activo());
@@ -187,8 +189,17 @@ public class OwnerBranchService {
                 discoveryEventRepository.countByTenant_IdAndBranch_IdAndEventType(branch.getTenant().getId(), branch.getId(), "ROUTE"),
                 discoveryEventRepository.countByTenant_IdAndBranch_IdAndEventType(branch.getTenant().getId(), branch.getId(), "BOOKING_INTENT"),
                 discoveryEventRepository.countByTenant_IdAndBranch_IdAndEventType(branch.getTenant().getId(), branch.getId(), "BOOKING_CONFIRMED"),
-                calculateBookingConversionRate(branch)
+                calculateBookingConversionRate(branch),
+                GoogleReviewLinks.safe(branch.getGoogleReviewUrl()),
+                Boolean.TRUE.equals(branch.getGoogleReviewWhatsappEnabled())
         );
+    }
+    private void updateGoogleReviewSettings(Branch branch,String url,Boolean enabled) {
+        // Older clients omit these fields: preserve them rather than clearing a configured link.
+        if (url != null) branch.setGoogleReviewUrl(GoogleReviewLinks.normalize(url));
+        if (enabled != null) branch.setGoogleReviewWhatsappEnabled(enabled);
+        if (Boolean.TRUE.equals(branch.getGoogleReviewWhatsappEnabled()) && GoogleReviewLinks.safe(branch.getGoogleReviewUrl())==null)
+            throw new BusinessException("Configura el enlace de reseñas de Google antes de activar la invitación por WhatsApp.");
     }
     private Double calculateBookingConversionRate(Branch branch) {
         long views = discoveryEventRepository.countByTenant_IdAndBranch_IdAndEventType(

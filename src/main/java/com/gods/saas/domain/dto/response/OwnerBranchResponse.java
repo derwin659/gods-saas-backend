@@ -22,6 +22,8 @@ public record OwnerBranchResponse(
         Long routeOpens,
         Long bookingIntents,
         Long confirmedBookings,
-        Double bookingConversionRate
+        Double bookingConversionRate,
+        String googleReviewUrl,
+        Boolean googleReviewWhatsappEnabled
 ) {
 }

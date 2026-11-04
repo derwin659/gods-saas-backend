@@ -863,6 +863,8 @@ public class CustomerService {
                         .appointmentId(v.getAppointmentId())
                         .saleId(v.getSaleId())
                         .reviewed(Boolean.TRUE.equals(v.getReviewed()))
+                        .branchId(v.getBranchId())
+                        .googleReviewUrl(GoogleReviewLinks.safe(v.getGoogleReviewUrl()))
                         .fecha(v.getFecha() != null ? v.getFecha().toString() : null)
                         .servicio(v.getServicio())
                         .puntos(v.getPuntos() != null ? v.getPuntos() : 0)

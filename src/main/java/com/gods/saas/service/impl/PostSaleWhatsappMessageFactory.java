@@ -45,11 +45,18 @@ public class PostSaleWhatsappMessageFactory {
             try { assistant = Objects.toString(invitation.build(sale.getTenant().getId()),""); }
             catch (RuntimeException unavailable) { /* Optional assistant cannot fail a sale. */ }
         }
+        var branch=sale.getBranch();
+        String google = branch != null && branch.getTenant() != null && Objects.equals(branch.getTenant().getId(),sale.getTenant().getId())
+            && Boolean.TRUE.equals(branch.getActivo()) && Boolean.TRUE.equals(branch.getGoogleReviewWhatsappEnabled())
+            ? Objects.toString(GoogleReviewLinks.safe(branch.getGoogleReviewUrl()),"") : "";
         return compose(customer,tenant,before,earned,after,
             app ? clean(Objects.toString(config == null ? null : config.get(OwnerWhatsappSettingsService.APP_DOWNLOAD_URL_KEY),null),clean(appUrl,"https://play.google.com/store/apps/details?id=com.gods.barberia")) : "",
-            app ? code : "", booking ? clean(baseUrl,"https://www.supergodsapp.com").replaceAll("/+$","")+"/reservar/"+code : "", assistant);
+            app ? code : "", booking ? clean(baseUrl,"https://www.supergodsapp.com").replaceAll("/+$","")+"/reservar/"+code : "", assistant, google);
     }
     public static Snapshot compose(String customer,String tenant,int before,int earned,int after,String app,String code,String booking,String assistant) {
+        return compose(customer,tenant,before,earned,after,app,code,booking,assistant,"");
+    }
+    public static Snapshot compose(String customer,String tenant,int before,int earned,int after,String app,String code,String booking,String assistant,String google) {
         var b = new Builder();
         b.fixed("Hola ").value(customer).fixed(", gracias por tu visita a ").value(tenant).fixed(".");
         b.fixed("\n\nPuntos antes de esta compra: ").value(String.valueOf(before)).fixed(".");
@@ -75,6 +82,12 @@ public class PostSaleWhatsappMessageFactory {
             variant+="_assistant";
             b.fixed("\n\nTambien puedes reservar por WhatsApp con nuestro asistente. Abre este enlace y envia: ").value(matcher.group(1))
              .fixed("\n").value(matcher.group(2));
+        }
+        String googleUrl=GoogleReviewLinks.safe(google);
+        if(googleUrl!=null) {
+            variant+="_google";
+            b.fixed("\n\nSi deseas compartir tu experiencia, puedes dejar una resena en Google:\n").value(googleUrl)
+             .fixed("\nTu opinion es voluntaria.");
         }
         b.fixed("\n\nTe esperamos pronto.");
         return new Snapshot(b.message.toString(),b.template.toString(),Map.copyOf(b.vars),variant,!variant.equals("points"));

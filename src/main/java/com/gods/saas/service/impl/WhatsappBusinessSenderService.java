@@ -114,7 +114,7 @@ public class WhatsappBusinessSenderService {
     private Map<String,String> templateVariants(com.fasterxml.jackson.databind.JsonNode node) {
         if (!node.isObject()) return Map.of();
         var variants = new LinkedHashMap<String,String>();
-        node.fields().forEachRemaining(e -> { if (e.getKey().matches("points(?:_app)?(?:_code)?(?:_booking)?(?:_assistant)?") && e.getValue().asText().matches("HX[0-9a-fA-F]{32}")) variants.put(e.getKey(),e.getValue().asText()); });
+        node.fields().forEachRemaining(e -> { if (e.getKey().matches("points(?:_app)?(?:_code)?(?:_booking)?(?:_assistant)?(?:_google)?") && e.getValue().asText().matches("HX[0-9a-fA-F]{32}")) variants.put(e.getKey(),e.getValue().asText()); });
         return variants;
     }
     private String text(Map<String,Object> config,String key) {

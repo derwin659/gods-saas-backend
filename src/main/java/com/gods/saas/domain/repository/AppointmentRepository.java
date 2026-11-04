@@ -223,6 +223,8 @@ public interface AppointmentRepository extends JpaRepository<Appointment, Long> 
 select
     s.appointment_id as appointmentId,
     s.sale_id as saleId,
+    max(b.branch_id) as branchId,
+    max(b.google_review_url) as googleReviewUrl,
     exists (
         select 1 from verified_business_review vr
         where vr.tenant_id = s.tenant_id
@@ -249,6 +251,7 @@ select
     coalesce(max(lm.points_earned), 0)::int as puntos,
     coalesce(sum(si.subtotal), 0) as total
 from sale s
+left join branch b on b.branch_id=s.branch_id and b.tenant_id=s.tenant_id and b.activo=true
 left join sale_item si
        on si.sale_id = s.sale_id
 left join service se
@@ -271,6 +274,7 @@ left join (
       and lm.referencia_id = s.sale_id
 where s.tenant_id = :tenantId
   and s.customer_id = :customerId
+  and upper(coalesce(s.payment_validation_status,'APPROVED')) = 'APPROVED'
 group by s.sale_id, s.appointment_id, s.fecha_creacion
 order by s.fecha_creacion desc
 limit :limit

@@ -5,6 +5,8 @@ import java.time.LocalDate;
 public interface LastVisitProjection {
     Long getAppointmentId();
     Long getSaleId();
+    Long getBranchId();
+    String getGoogleReviewUrl();
     Boolean getReviewed();
     LocalDate getFecha();
     String getServicio();

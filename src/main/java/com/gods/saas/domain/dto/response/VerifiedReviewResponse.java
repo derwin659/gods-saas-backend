@@ -4,5 +4,5 @@ import java.time.LocalDateTime;
 
 public record VerifiedReviewResponse(
         Long reviewId, Long appointmentId, Long saleId, Long branchId, Integer rating,
-        String comment, String customerName, LocalDateTime createdAt
+        String comment, String customerName, LocalDateTime createdAt, String googleReviewUrl
 ) {}

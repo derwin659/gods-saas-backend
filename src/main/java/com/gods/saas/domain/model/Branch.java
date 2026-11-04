@@ -45,6 +45,12 @@ public class Branch {
     @Column(name = "directory_enabled")
     private Boolean directoryEnabled;
 
+    @Column(name="google_review_url",length=1000)
+    private String googleReviewUrl;
+    @Builder.Default
+    @Column(name="google_review_whatsapp_enabled",nullable=false)
+    private Boolean googleReviewWhatsappEnabled=false;
+
     @Column(name = "public_description", length = 500)
     private String publicDescription;
 
@@ -74,6 +80,7 @@ public class Branch {
 
     @PrePersist
     void applyDefaults() {
+        if (googleReviewWhatsappEnabled == null) googleReviewWhatsappEnabled = false;
         if (publicVisible == null) publicVisible = false;
         if (directoryEnabled == null) directoryEnabled = false;
         if (walkInEnabled == null) walkInEnabled = false;

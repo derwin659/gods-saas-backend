@@ -1,0 +1,15 @@
+{
+  "name": "supergods_postventa_points_google_v3",
+  "language": "es",
+  "category": "MARKETING",
+  "variant": "points_google",
+  "body": "Hola {{1}}, gracias por tu visita a {{2}}.\n\nPuntos antes de esta compra: {{3}}.\nGanaste +{{4}} puntos por tu compra.\nAhora tienes {{5}} puntos disponibles.\n\nSi deseas compartir tu experiencia, puedes dejar una resena en Google:\n{{6}}\nTu opinion es voluntaria.\n\nTe esperamos pronto.",
+  "variables": {
+    "1": "Ana",
+    "2": "Barberia Gods",
+    "3": "270",
+    "4": "150",
+    "5": "420",
+    "6": "https://g.page/r/ABC123/review"
+  }
+}

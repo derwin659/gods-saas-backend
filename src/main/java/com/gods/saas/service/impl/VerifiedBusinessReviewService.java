@@ -99,7 +99,7 @@ public class VerifiedBusinessReviewService {
         return new VerifiedReviewResponse(item.getId(),
                 item.getAppointment() != null ? item.getAppointment().getId() : null,
                 item.getSale() != null ? item.getSale().getId() : null, item.getBranch().getId(),
-                item.getRating(), item.getComment(), name, item.getCreatedAt());
+                item.getRating(), item.getComment(), name, item.getCreatedAt(), GoogleReviewLinks.forBranch(item.getBranch()));
     }
 
     @Transactional(readOnly = true)
@@ -121,6 +121,7 @@ public class VerifiedBusinessReviewService {
     private java.util.Map<String,Object> clientRow(VerifiedBusinessReview item, boolean own) {
         var row = new java.util.LinkedHashMap<String,Object>();
         var professional = professional(item);
+        row.put("googleReviewUrl", GoogleReviewLinks.forBranch(item.getBranch()));
         row.put("reviewId", item.getId()); row.put("rating", item.getRating()); row.put("comment", item.getComment());
         row.put("customerDisplayName", own ? ownCustomerName(item.getCustomer().getNombres()) : publicName(item.getCustomer().getNombres()));
         row.put("createdAt", item.getCreatedAt()); row.put("branchId", item.getBranch().getId()); row.put("branchName", item.getBranch().getNombre());

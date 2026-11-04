@@ -84,6 +84,8 @@ public class ClientHomeResponse {
         private Long appointmentId;
         private Long saleId;
         private Boolean reviewed;
+        private Long branchId;
+        private String googleReviewUrl;
     }
 
     @Getter
