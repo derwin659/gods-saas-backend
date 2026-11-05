@@ -47,6 +47,18 @@ public class OwnerAppointmentDepositService {
         boolean approved = Boolean.TRUE.equals(request.getApproved());
 
         if (approved) {
+            if (request.getOperationCode() != null && !request.getOperationCode().isBlank()) {
+                appointment.setDepositOperationCode(request.getOperationCode().trim());
+            }
+            var method = appointment.getDepositPaymentMethod();
+            if (method != null && Boolean.TRUE.equals(method.getRequiresEvidence())
+                    && (appointment.getDepositEvidenceUrl() == null || appointment.getDepositEvidenceUrl().isBlank())) {
+                throw new IllegalStateException("Debes adjuntar el comprobante antes de aprobar el adelanto");
+            }
+            if (method != null && Boolean.TRUE.equals(method.getRequiresOperationCode())
+                    && (appointment.getDepositOperationCode() == null || appointment.getDepositOperationCode().isBlank())) {
+                throw new IllegalStateException("Registra el numero de operacion antes de aprobar el adelanto");
+            }
             appointment.setDepositStatus("PAID");
             appointment.setEstado("CONFIRMED");
         } else {

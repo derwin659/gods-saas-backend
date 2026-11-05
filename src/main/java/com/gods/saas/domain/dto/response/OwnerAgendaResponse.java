@@ -59,6 +59,7 @@ public class OwnerAgendaResponse {
     private String estadoPagoInicial;
     private String depositStatus;
     private Boolean requiereNumeroOperacion;
+    private Boolean requiereComprobante;
 
     private Boolean pagoInicialValidado;
 }

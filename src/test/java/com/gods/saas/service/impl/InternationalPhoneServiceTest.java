@@ -64,6 +64,14 @@ class InternationalPhoneServiceTest {
     }
 
     @Test
+    void acceptsPeruvianCustomerForVenezuelanBusiness() {
+        var result = service.normalize(tenant(4L, "VE"), "+51999888555");
+        assertEquals("+51999888555", result.e164());
+        assertEquals("PE", result.regionCode());
+        assertFalse(result.belongsToTenantRegion());
+    }
+
+    @Test
     void rejectsInvalidNumbers() {
         assertThrows(
                 ResponseStatusException.class,

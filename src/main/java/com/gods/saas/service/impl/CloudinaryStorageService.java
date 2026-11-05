@@ -54,15 +54,26 @@ public class CloudinaryStorageService {
         validateImage(file);
 
         try {
+            return uploadAppointmentDepositEvidenceBytes(tenantId, customerId, file.getBytes());
+        } catch (IOException e) {
+            throw new IllegalStateException("No se pudo leer el comprobante", e);
+        }
+    }
+
+    public UploadResult uploadAppointmentDepositEvidenceBytes(Long tenantId, Long customerId, byte[] bytes) {
+        if (bytes == null || bytes.length == 0 || bytes.length > MAX_FILE_SIZE_BYTES) {
+            throw new IllegalArgumentException("Comprobante vacio o demasiado grande");
+        }
+        try {
             String folder = "super-gods/tenants/" + tenantId + "/appointments/deposits";
 
             Map<?, ?> result = cloudinary.uploader().upload(
-                    file.getBytes(),
+                    bytes,
                     ObjectUtils.asMap(
                             "folder", folder,
                             "resource_type", "image",
-                            "public_id", "deposit_customer_" + customerId + "_" + System.currentTimeMillis(),
-                            "overwrite", true
+                            "public_id", "deposit_customer_" + customerId + "_" + UUID.randomUUID(),
+                            "overwrite", false
                     )
             );
 

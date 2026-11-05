@@ -56,6 +56,7 @@ public class ClientBookingService {
     private final BarberServiceAssignmentService barberServiceAssignmentService;
     private final TenantTimeService tenantTimeService;
     private final InternationalPhoneService internationalPhoneService;
+    private final BookingDepositEvidenceService bookingDepositEvidenceService;
 
     public BookingBootstrapResponse getBootstrap(Long tenantId) {
         Tenant tenant = tenantRepository.findById(tenantId)
@@ -458,6 +459,8 @@ public class ClientBookingService {
             depositMethodName = depositMethod.getDisplayName();
         }
 
+        String storedEvidence = bookingDepositEvidenceService.prepare(tenantId, customerId, req.getDepositEvidenceUrl());
+
         Appointment appointment = Appointment.builder()
                 .tenant(customer.getTenant())
                 .branch(branch)
@@ -486,7 +489,7 @@ public class ClientBookingService {
                 .depositMethodCode(depositMethodCode)
                 .depositMethodName(depositMethodName)
                 .depositOperationCode(trimToNull(req.getDepositOperationCode()))
-                .depositEvidenceUrl(trimToNull(req.getDepositEvidenceUrl()))
+                .depositEvidenceUrl(storedEvidence)
                 .depositNote(trimToNull(req.getDepositNote()))
                 .depositPaidAt(depositRequired && !awaitingEvidence ? tenantTimeService.now(tenantId) : null)
                 .build();

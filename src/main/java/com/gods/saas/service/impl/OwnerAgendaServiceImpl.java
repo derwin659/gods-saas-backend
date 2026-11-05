@@ -103,6 +103,7 @@ public class OwnerAgendaServiceImpl implements OwnerAgendaService {
                             .metodoPagoInicial(resolveDepositMethod(a))
                             .numeroOperacionPagoInicial("AWAITING_REFERENCE".equalsIgnoreCase(depositStatus)?null:a.getDepositOperationCode())
                             .comprobantePagoInicialUrl(a.getDepositEvidenceUrl())
+                .requiereComprobante(a.getDepositPaymentMethod() != null && Boolean.TRUE.equals(a.getDepositPaymentMethod().getRequiresEvidence()))
                             .estadoPagoInicial(estadoPagoInicial)
                 .depositStatus(depositStatus)
                 .requiereNumeroOperacion("AWAITING_REFERENCE".equalsIgnoreCase(depositStatus)

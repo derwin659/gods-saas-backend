@@ -670,6 +670,7 @@ public class OwnerAgendaAppointmentService {
                 .metodoPagoInicial(resolveDepositMethod(a))
                 .numeroOperacionPagoInicial("AWAITING_REFERENCE".equalsIgnoreCase(depositStatus)?null:a.getDepositOperationCode())
                 .comprobantePagoInicialUrl(a.getDepositEvidenceUrl())
+                .requiereComprobante(a.getDepositPaymentMethod() != null && Boolean.TRUE.equals(a.getDepositPaymentMethod().getRequiresEvidence()))
                 .build();
     }
 
