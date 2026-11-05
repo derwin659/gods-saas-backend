@@ -18,10 +18,11 @@ public class IaAnaliticaUxMapper {
                 .confianza(ia.getFormaRostro().getConfianza())
                 .build();
 
-        // 2️⃣ Cortes recomendados (TOP 3, score >= 0.75)
+        // Keep supported preview alternatives even if they rank below the top advice.
         List<CorteUx> cortes = ia.getRecomendaciones().getCortes().stream()
-                .filter(c -> c.getScore() >= 0.75)
-                .limit(3)
+                .filter(c -> Boolean.TRUE.equals(c.getVistaGenerativaDisponible())
+                        || (c.getScore() != null && c.getScore() >= 0.75))
+                .limit(8)
                 .map(c -> CorteUx.builder()
                         .nombre(c.getNombre())
                         .nombreVisible(c.getNombreVisible())
