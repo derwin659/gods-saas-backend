@@ -16,7 +16,7 @@ class WhatsappReminderAutomationTest {
  final SaleRepository sales=mock(SaleRepository.class);
  final TenantSettingsRepository settings=mock(TenantSettingsRepository.class);
  final TenantTimeService time=mock(TenantTimeService.class);
- final TransactionalWhatsappPolicy policy=new TransactionalWhatsappPolicy(appointments,sales,settings,time);
+ final TransactionalWhatsappPolicy policy=new TransactionalWhatsappPolicy(appointments,sales,settings,time,org.mockito.Mockito.mock(com.gods.saas.domain.repository.BookingWaitlistRepository.class));
  Appointment a; Notification n;
  @BeforeEach void setup() {
    var tenant=new Tenant(1L); tenant.setNombre("Salon");

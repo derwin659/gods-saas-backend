@@ -33,6 +33,7 @@ public class NotificationDispatchServiceImpl implements NotificationDispatchServ
     private final WhatsappNotificationSender whatsappNotificationSender;
 
     private static final Set<String> BASIC_PUSH_TYPES = Set.of(
+            "WAITLIST_AVAILABLE",
             "BOOKING_CREATED",
             "BOOKING_REMINDER_24H",
             "BOOKING_REMINDER_60",

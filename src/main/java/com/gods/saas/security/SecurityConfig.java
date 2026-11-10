@@ -162,6 +162,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/sales/**").hasAnyRole("OWNER", "ADMIN", "BARBER")
                         .requestMatchers("/api/sales").hasAnyRole("OWNER", "ADMIN", "BARBER")
 
+                        .requestMatchers("/api/clients/booking/waitlist", "/api/clients/booking/waitlist/**", "/api/clients/booking/rebook/**").hasRole("CLIENT")
+                        .requestMatchers("/api/owner/booking-waitlist").hasAnyRole("OWNER", "ADMIN", "CASHIER")
                         .anyRequest().authenticated()
                 )
                 .authenticationProvider(authenticationProvider())

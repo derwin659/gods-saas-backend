@@ -14,6 +14,9 @@ public class TransactionalWhatsappPolicy {
     private final SaleRepository sales;
     private final TenantSettingsRepository settings;
     private final TenantTimeService time;
+    private final BookingWaitlistRepository waitlist;
+    @org.springframework.beans.factory.annotation.Value("${booking.waitlist.enabled:false}")
+    private boolean waitlistEnabled;
 
     public static boolean isReminder(Notification n) {
         return n != null && Set.of(NotificationType.BOOKING_REMINDER_60, NotificationType.BOOKING_REMINDER_30,
@@ -22,6 +25,12 @@ public class TransactionalWhatsappPolicy {
     public boolean current(Notification n, boolean whatsapp) {
         if (n == null || n.getTenant() == null) return false;
         Long tenant = n.getTenant().getId();
+        if (n.getType() == NotificationType.WAITLIST_AVAILABLE) {
+            if (whatsapp || !waitlistEnabled || n.getReferenceId() == null || n.getCustomer() == null) return false;
+            return waitlist.findById(n.getReferenceId()).filter(e ->
+                Objects.equals(e.getTenantId(), tenant) && Objects.equals(e.getCustomerId(), n.getCustomer().getId())
+                && "AVAILABLE".equals(e.getStatus()) && e.getOfferExpiresAt() != null && e.getOfferExpiresAt().isAfter(Instant.now())).isPresent();
+        }
         var config = settings.findByTenant_Id(tenant).map(s -> s.getScheduleConfig()).orElse(Map.of());
         if (n.getType() == NotificationType.SALE_RECEIPT && n.getCustomer() != null) {
             if (!enabled(config, OwnerWhatsappSettingsService.POST_SALE_MESSAGE_ENABLED_KEY, true)) return false;
